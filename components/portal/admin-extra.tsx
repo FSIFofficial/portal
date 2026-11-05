@@ -2,10 +2,10 @@
 
 // 管理画面の追加機能：ヘルプ編集・利用状況・アカウント一括登録・バックアップ・Driveへのアップロード
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, DatabaseBackup, ExternalLink, LoaderCircle, Plus, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, BellRing, CheckCircle2, Circle, DatabaseBackup, ExternalLink, LoaderCircle, Plus, Trash2, Upload } from 'lucide-react'
 import { api, fileToBase64 } from '@/lib/api'
 import { DEMO_MODE } from '@/lib/config'
-import type { AdminData, BackupStatus, BulkAddResult, HelpContent, UploadResult, UsageStats } from '@/lib/types'
+import type { AckStatus, AdminData, Announcement, BackupStatus, ErrorDigestStatus, BulkAddResult, HelpContent, UploadResult, UsageStats } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { SectionHeader, Table, fmt, type Mutate } from './admin-shared'
 import { useAuth } from './auth-provider'
@@ -331,3 +331,87 @@ export function UploadButton({ purpose, onUploaded, label }: { purpose: 'documen
   )
 }
 
+
+// ---------------------------------------------------------------------------
+// お知らせの確認状況
+// ---------------------------------------------------------------------------
+
+export function AckStatusModal({ announcement, onClose }: { announcement: Announcement; onClose: () => void }) {
+  const { run } = useAuth()
+  const toast = useToast()
+  const [status, setStatus] = useState<AckStatus | null>(null)
+  // 親が描画し直すたびに読み込み直さないよう、閉じる処理は ref で持つ
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+  useEffect(() => {
+    run((t) => api.announcementAcks(t, announcement.id)).then(setStatus).catch((e: Error) => {
+      toast(e.message, 'error')
+      closeRef.current()
+    })
+  }, [run, toast, announcement.id])
+  const total = status ? status.acked.length + status.pending.length : 0
+  return (
+    <Modal wide title={`確認状況：${announcement.title}`} onClose={onClose} footer={<Button variant="secondary" onClick={onClose}>閉じる</Button>}>
+      {!status ? (
+        <div className="flex items-center justify-center gap-2 p-10 text-[13px] text-[#718096]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
+      ) : (
+        <>
+          <div className="mb-4">
+            <p className="text-[13px] font-bold text-[#1b304b]">{status.acked.length} / {total}人が確認済み</p>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#eef1f5]"><div className="h-full rounded-full bg-[#1c7a43]" style={{ width: `${total ? (status.acked.length / total) * 100 : 0}%` }} /></div>
+            <p className="mt-1 text-[11px] text-[#8a99a9]">対象：このお知らせを見られる有効なアカウント</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="mb-2 text-[12px] font-bold text-[#b42318]">未確認（{status.pending.length}人）</p>
+              <ul className="flex flex-col gap-1 text-[12px]">
+                {status.pending.map((u) => <li key={u.email} className="flex items-center gap-2"><Circle size={12} className="shrink-0 text-[#c2ccd6]" /><span className="font-semibold">{u.name}</span><span className="truncate text-[#8a99a9]">{u.email}</span></li>)}
+                {!status.pending.length && <li className="text-[#8a99a9]">全員が確認しました</li>}
+              </ul>
+            </div>
+            <div>
+              <p className="mb-2 text-[12px] font-bold text-[#1c7a43]">確認済み（{status.acked.length}人）</p>
+              <ul className="flex flex-col gap-1 text-[12px]">
+                {status.acked.map((u) => <li key={u.email} className="flex items-center gap-2"><CheckCircle2 size={12} className="shrink-0 text-[#1c7a43]" /><span className="font-semibold">{u.name}</span><span className="text-[#8a99a9]">{fmt(u.ackAt)}</span></li>)}
+                {!status.acked.length && <li className="text-[#8a99a9]">まだいません</li>}
+              </ul>
+            </div>
+          </div>
+        </>
+      )}
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// エラー通知メール（設定画面の中に表示）
+// ---------------------------------------------------------------------------
+
+export function ErrorDigestPanel({ initial }: { initial?: ErrorDigestStatus }) {
+  const { run } = useAuth()
+  const toast = useToast()
+  const [status, setStatus] = useState<ErrorDigestStatus | undefined>(initial)
+  const [busy, setBusy] = useState(false)
+  const toggle = async () => {
+    setBusy(true)
+    try {
+      const s = await run((t) => api.setErrorDigest(t, !status?.enabled))
+      setStatus(s)
+      toast(s.enabled ? 'エラー通知メールをオンにしました' : 'エラー通知メールをオフにしました')
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mt-8 rounded-xl border border-[#edf0f3] p-4">
+      <h3 className="flex items-center gap-2 text-[14px] font-bold"><BellRing size={16} className="text-[#4285b8]" />エラー通知メール</h3>
+      <p className="mt-1 text-[12px] leading-5 text-[#8a99a9]">毎朝8時ごろ、直近24時間に想定外のエラー（GASの不具合・Driveの共有失敗・バックアップ失敗など）があったときだけ、全権管理者（{status?.recipients ?? 0}人）にメールでまとめて知らせます。エラーがなければ送りません。</p>
+      <div className="mt-3 text-[12px] leading-6 text-[#38536f]">
+        <p>通知：<b>{status?.enabled ? '毎朝' : 'オフ'}</b>{status?.lastSentAt && <span className="ml-3 text-[#8a99a9]">最後に送った日時：{fmt(status.lastSentAt)}</span>}</p>
+      </div>
+      <Button variant="secondary" className="mt-3" disabled={busy} onClick={() => void toggle()}>{status?.enabled ? 'エラー通知をオフにする' : 'エラー通知をオンにする'}</Button>
+    </div>
+  )
+}

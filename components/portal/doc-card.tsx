@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import { Download, ExternalLink, FileText, FolderOpen, Pin } from 'lucide-react'
 import { downloadLabel, downloadUrl, driveKindLabel, parseDriveUrl, thumbnailUrl, viewUrl } from '@/lib/drive'
-import type { PortalDocument } from '@/lib/types'
+import { isNew, type PortalDocument } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { useTrack } from './auth-provider'
+import { useAuth, useTrack } from './auth-provider'
+import { NewBadge } from './ui'
 
 export function DocThumb({ doc, className }: { doc: PortalDocument; className?: string }) {
   const [failed, setFailed] = useState(false)
@@ -47,13 +48,15 @@ export function DocActions({ doc, compact }: { doc: PortalDocument; compact?: bo
 }
 
 export function DocCard({ doc, restricted }: { doc: PortalDocument; restricted?: boolean }) {
+  const { data } = useAuth()
   return (
     <article className="flex flex-col overflow-hidden rounded-2xl border border-[#e4e9f0] bg-white shadow-[0_2px_10px_rgba(25,50,80,0.03)] transition hover:border-[#bdd4e7] hover:shadow-md">
       <DocThumb doc={doc} className="h-36 w-full border-b border-[#eef1f4]" />
       <div className="flex flex-1 flex-col p-4">
         <div className="flex items-start gap-2">
           {doc.pinned && <Pin size={14} className="mt-0.5 shrink-0 text-[#c2410c]" aria-label="ピン留め" />}
-          <h3 className="text-[14px] font-bold leading-6 text-[#1b304b]">{doc.title}</h3>
+          <h3 className="flex-1 text-[14px] font-bold leading-6 text-[#1b304b]">{doc.title}</h3>
+          {isNew(doc, data?.me) && <span className="mt-1"><NewBadge /></span>}
         </div>
         <p className="mt-1 text-[11px] text-[#8593a2]">{doc.date} · {doc.type}{doc.tool && doc.tool !== '共通' ? ` · ${doc.tool}` : ''}</p>
         <div className="mt-2 flex flex-wrap gap-1">

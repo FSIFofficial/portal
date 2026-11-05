@@ -4,7 +4,7 @@
 import { DEMO_MODE, EXPECTED_GAS_VERSION, GAS_URL } from './config'
 import { createDemoDb, type DemoDb } from './demo-data'
 import type {
-  AdminData, Announcement, BackupStatus, BootstrapData, BulkAddResult, HelpContent, LogEntry, Me, Permission, PortalDocument, Role,
+  AckStatus, AdminData, Announcement, BackupStatus, ErrorDigestStatus, BootstrapData, BulkAddResult, HelpContent, LogEntry, Me, Permission, PortalDocument, Role,
   Settings, SystemCheck, Tool, UploadResult, UsageStats, User,
 } from './types'
 
@@ -47,6 +47,9 @@ export const api = {
   bootstrap: (token: string) => call<BootstrapData>('bootstrap', token),
   setFavorites: (token: string, ids: string[]) => call<{ favorites: string[] }>('setFavorites', token, { ids }),
   track: (token: string, kind: 'tool' | 'doc', id: string) => call('track', token, { kind, id }),
+  ackAnnouncement: (token: string, id: string) => call('ackAnnouncement', token, { id }),
+  announcementAcks: (token: string, id: string) => call<AckStatus>('announcementAcks', token, { id }),
+  setErrorDigest: (token: string, enabled: boolean) => call<ErrorDigestStatus>('setErrorDigest', token, { enabled }),
   adminData: (token: string) => call<AdminData>('adminData', token),
   // isNew=false のときは item.updatedAt（編集開始時点の値）で同時編集の衝突を検出する
   saveTool: (token: string, item: Partial<Tool>, isNew: boolean) => call<Tool>('saveTool', token, { item, isNew }),
@@ -89,7 +92,7 @@ export function fileToBase64(file: File): Promise<string> {
 // デモバックエンド（localStorage に保存）
 // ---------------------------------------------------------------------------
 
-const DEMO_KEY = 'fsif-portal-demo-db-v3'
+const DEMO_KEY = 'fsif-portal-demo-db-v4'
 const SUPER = 'superadmin'
 
 function loadDb(): DemoDb {
@@ -200,6 +203,8 @@ function upsert<T>(rows: T[], key: keyof T, record: T) {
 
 function demoCall(action: string, token: string, p: Payload): unknown {
   const db = loadDb()
+  db.acks ??= []
+  db.errorDigest ??= { enabled: false, lastSentAt: '', recipients: 1 }
   // デモではメールアドレスをそのままセッションとして使う
   if (action === 'login') {
     const data = demoCall('bootstrap', String(p.idToken ?? ''), {}) as BootstrapData
@@ -216,10 +221,16 @@ function demoCall(action: string, token: string, p: Payload): unknown {
   switch (action) {
     case 'bootstrap': {
       const user = db.users.find((u) => u.email === me.email)
-      if (user) user.lastLoginAt = now()
+      let newSince = user?.prevLoginAt ?? ''
+      if (user && (user.lastLoginAt ?? '').slice(0, 10) !== now().slice(0, 10)) {
+        newSince = user.lastLoginAt
+        user.prevLoginAt = user.lastLoginAt
+        user.lastLoginAt = now()
+      }
+      if (!newSince) newSince = new Date(Date.now() - 7 * 86400000).toISOString()
       const d = today()
       return commit<BootstrapData>({
-        me,
+        me: { ...me, newSince, acks: db.acks.filter((a) => a.email === me.email).map((a) => a.announcementId) },
         tools: db.tools.filter((x) => canSee(me, x)).sort((a, b) => a.order - b.order),
         documents: db.documents.filter((x) => canSee(me, x)),
         announcements: db.announcements.filter((a) => a.active && canSee(me, a) && (!a.startDate || a.startDate <= d) && (!a.endDate || a.endDate >= d)),
@@ -231,6 +242,28 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     }
     case 'logout':
       return {}
+    case 'ackAnnouncement': {
+      const a = db.announcements.find((x) => x.id === p.id)
+      if (!a || !canSee(me, a)) fail('NOT_FOUND', 'お知らせが見つかりません')
+      if (!db.acks.some((x) => x.announcementId === a.id && x.email === me.email)) db.acks.push({ announcementId: a.id, email: me.email, ackAt: now() })
+      return commit({ id: a.id })
+    }
+    case 'announcementAcks': {
+      requirePerm(me, 'announcements.manage')
+      const a = db.announcements.find((x) => x.id === p.id)
+      if (!a) fail('NOT_FOUND', 'お知らせが見つかりません')
+      const targets = db.users.filter((u) => u.active && (u.roles.includes(SUPER) || !a.visibleRoles.length || a.visibleRoles.some((r) => u.roles.includes(r))))
+      const acked = new Map(db.acks.filter((x) => x.announcementId === a.id).map((x) => [x.email, x.ackAt]))
+      return commit<AckStatus>({
+        acked: targets.filter((u) => acked.has(u.email)).map((u) => ({ email: u.email, name: u.name, ackAt: acked.get(u.email)! })),
+        pending: targets.filter((u) => !acked.has(u.email)).map((u) => ({ email: u.email, name: u.name })),
+      })
+    }
+    case 'setErrorDigest': {
+      requirePerm(me, '*')
+      db.errorDigest = { ...db.errorDigest, enabled: !!p.enabled }
+      return commit(db.errorDigest)
+    }
     case 'setFavorites': {
       const visible = db.tools.filter((x) => canSee(me, x)).map((x) => x.id)
       const ids = list(p.ids).filter((id) => visible.includes(id)).slice(0, 50)
@@ -319,10 +352,12 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         roles: db.roles,
       }
       data.help = db.help
+      data.ackCounts = db.acks.reduce<Record<string, number>>((m, a) => ({ ...m, [a.announcementId]: (m[a.announcementId] ?? 0) + 1 }), {})
       if (me.isSuper) {
         data.users = db.users
         data.settings = db.settings
         data.backup = db.backup
+        data.errorDigest = db.errorDigest
         data.uploadFolderUrl = ''
       }
       return commit(data)
@@ -416,6 +451,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         endDate: String(item.endDate ?? ''),
         visibleRoles: validRoles(db, item.visibleRoles),
         updatedAt: now(),
+        requireAck: !!item.requireAck,
       }
       upsert(db.announcements, 'id', record)
       log(existing ? 'Announcements.update' : 'Announcements.create', record.id, record.title)
@@ -424,6 +460,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     case 'deleteAnnouncement': {
       requirePerm(me, 'announcements.manage')
       db.announcements = db.announcements.filter((x) => x.id !== p.id)
+      db.acks = db.acks.filter((a) => a.announcementId !== p.id)
       log('Announcements.delete', String(p.id))
       return commit({ id: p.id })
     }
@@ -498,8 +535,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     }
     case 'systemCheck': {
       requirePerm(me, 'any-manager')
-      const sheets = ['Users', 'Roles', 'Tools', 'Documents', 'Announcements', 'Settings', 'Logs'].map((name) => ({ name, ok: true, missing: [], extra: [] }))
-      return commit<SystemCheck>({ version: EXPECTED_GAS_VERSION, sheets, clientIdSet: true, superAdminCount: 1, checkedAt: now() })
+      const sheets = ['Users', 'Roles', 'Tools', 'Documents', 'Announcements', 'Settings', 'Logs', 'Stats', 'Acks'].map((name) => ({ name, ok: true, missing: [], extra: [] }))
+      return commit<SystemCheck>({ version: EXPECTED_GAS_VERSION, sheets, clientIdSet: true, superAdminCount: 1, recentErrors: [], checkedAt: now() })
     }
     case 'listLogs': {
       requirePerm(me, 'logs.view')

@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useAuth } from './auth-provider'
 import { ModalFooter, RowActions, SectionHeader, Table, confirmDelete, fmt, useEditor, type Mutate } from './admin-shared'
-import { BackupPanel, BulkImportModal, HelpAdmin, UploadButton, UsageAdmin } from './admin-extra'
+import { AckStatusModal, BackupPanel, BulkImportModal, ErrorDigestPanel, HelpAdmin, UploadButton, UsageAdmin } from './admin-extra'
 import type { Navigate } from './router'
 import {
   Button, Checkbox, EmptyState, Field, Modal, RoleBadges, RolePicker, Select, StatusBadge, TONES, TOOL_ICONS, TextArea, TextInput,
@@ -335,6 +335,7 @@ const emptyAnnouncement: Announcement = { id: '', title: '', body: '', level: 'i
 
 function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate; header: (action: ReactNode) => ReactNode }) {
   const ed = useEditor<Announcement>()
+  const [ackOf, setAckOf] = useState<Announcement | null>(null)
   const save = async () => {
     if (!ed.draft) return
     ed.setSaving(true)
@@ -345,7 +346,8 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
   return (
     <>
       {header(<Button onClick={() => ed.open({ ...emptyAnnouncement }, true)}><Plus size={15} />新規追加</Button>)}
-      <Table head={['タイトル', '種別', '表示', '期間', '公開範囲', '']} empty={!data.announcements.length}>
+      {ackOf && <AckStatusModal announcement={ackOf} onClose={() => setAckOf(null)} />}
+      <Table head={['タイトル', '種別', '表示', '期間', '公開範囲', '確認状況', '']} empty={!data.announcements.length}>
         {data.announcements.map((a) => (
           <tr key={a.id} className="border-t border-[#edf0f3]">
             <td className="px-5 py-3 font-semibold text-[#38536f]">{a.title}<span className="block text-[11px] font-normal text-[#8a99a9]">{a.body}</span></td>
@@ -353,6 +355,11 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
             <td className="px-5 py-3 text-[#718296]">{a.active ? '表示中' : '非表示'}</td>
             <td className="whitespace-nowrap px-5 py-3 text-[#718296]">{a.startDate || a.endDate ? `${a.startDate || '…'} 〜 ${a.endDate || '…'}` : '常時'}</td>
             <td className="px-5 py-3"><RoleBadges ids={a.visibleRoles} roles={data.roles} /></td>
+            <td className="whitespace-nowrap px-5 py-3">
+              {a.requireAck ? (
+                <button onClick={() => setAckOf(a)} className="font-semibold text-[#1e6db8] hover:underline">{data.ackCounts?.[a.id] ?? 0}人が確認 ›</button>
+              ) : <span className="text-[11px] text-[#9aa7b5]">不要</span>}
+            </td>
             <td className="px-5 py-3"><RowActions label={a.title} onEdit={() => ed.open({ ...a })} onDelete={() => confirmDelete(a.title) && void mutate((t) => api.deleteAnnouncement(t, a.id), 'お知らせを削除しました')} /></td>
           </tr>
         ))}
@@ -371,6 +378,7 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
             <Field label="表示終了日"><TextInput type="date" value={ed.draft.endDate} onChange={(e) => ed.set('endDate', e.target.value)} /></Field>
           </div>
           <Checkbox checked={ed.draft.active} onChange={(v) => ed.set('active', v)} label="表示する" />
+          <Checkbox checked={!!ed.draft.requireAck} onChange={(v) => ed.set('requireAck', v)} label={<><b>確認を求める</b><span className="block text-[11px] leading-5 text-[#8a99a9]">「確認しました」ボタンを表示し、押すまでお知らせが消えなくなります。誰が確認したかを一覧で見られます。</span></>} />
           <div className="mt-3">
             <Field group label="公開範囲"><RolePicker roles={data.roles} value={ed.draft.visibleRoles} onChange={(v) => ed.set('visibleRoles', v)} exclude={['superadmin']} emptyLabel="未選択：ログインできる全員に表示" /></Field>
           </div>
@@ -540,6 +548,7 @@ function SettingsAdmin({ data, mutate, header }: { data: AdminData; mutate: Muta
           </div>
         )}
         <div className="mt-6"><Button onClick={save} disabled={saving}>{saving ? '保存中…' : '設定を保存'}</Button></div>
+        <ErrorDigestPanel initial={data.errorDigest} />
         <BackupPanel initial={data.backup} uploadFolderUrl={data.uploadFolderUrl} />
       </div>
     </>
@@ -675,6 +684,17 @@ function SystemAdmin({ section }: { section: (typeof SECTIONS)[number] }) {
                 />
                 <CheckRow ok={info.clientIdSet} label="GoogleログインのクライアントID" detail={info.clientIdSet ? 'スクリプトプロパティ GOOGLE_CLIENT_ID が設定されています' : 'スクリプトプロパティ GOOGLE_CLIENT_ID が未設定です'} />
                 <CheckRow ok={info.superAdminCount > 0} label="全権管理者（固定）" detail={info.superAdminCount > 0 ? `SUPER_ADMIN_EMAILS に ${info.superAdminCount} 件登録されています` : 'スクリプトプロパティ SUPER_ADMIN_EMAILS が未設定です（ロックアウト防止のため設定を推奨）'} />
+                {info.recentErrors && (
+                  <CheckRow
+                    ok={!info.recentErrors.length}
+                    label="直近7日間のエラー"
+                    detail={info.recentErrors.length ? (
+                      <ul className="list-disc pl-4">
+                        {info.recentErrors.map((e, i) => <li key={i}><span className="text-[#8a99a9]">{fmt(e.timestamp)}</span> [{e.code}] {e.message}</li>)}
+                      </ul>
+                    ) : 'エラーは記録されていません'}
+                  />
+                )}
               </>
             )}
           </div>

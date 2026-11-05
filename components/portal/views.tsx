@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowRight, ArrowUp, BookOpen, ChevronRight, FileText, Filter, GripVertical, Search, X } from 'lucide-react'
 import { ApiError, api } from '@/lib/api'
-import { can, type BootstrapData, type PortalDocument, type Tool } from '@/lib/types'
+import { can, isNew, type BootstrapData, type PortalDocument, type Tool } from '@/lib/types'
 import { useAuth } from './auth-provider'
 import { DocActions, DocCard, DocThumb } from './doc-card'
 import type { Navigate } from './router'
@@ -268,22 +268,25 @@ export function LibraryView({ data, navigate, params }: { data: BootstrapData; n
   const [type, setType] = useState(params.get('type') ?? '')
   const [tool, setTool] = useState(params.get('tool') ?? '')
   const [sort, setSort] = useState<'date' | 'title' | 'popular'>('date')
+  const [onlyNew, setOnlyNew] = useState(params.get('new') === '1')
+  const newCount = data.documents.filter((d) => isNew(d, data.me)).length
   const pop = (d: PortalDocument) => data.popularity?.[`doc:${d.id}`] ?? 0
 
   useEffect(() => {
     setQuery(params.get('q') ?? '')
     setType(params.get('type') ?? '')
     setTool(params.get('tool') ?? '')
+    setOnlyNew(params.get('new') === '1')
   }, [params])
 
   const types = useMemo(() => [...new Set(data.documents.map((d) => d.type).filter(Boolean))], [data.documents])
   const toolNames = useMemo(() => [...new Set(data.documents.map((d) => d.tool).filter(Boolean))], [data.documents])
   const filtered = data.documents
-    .filter((d) => match(docText(d), query) && (!type || d.type === type) && (!tool || d.tool === tool))
+    .filter((d) => match(docText(d), query) && (!type || d.type === type) && (!tool || d.tool === tool) && (!onlyNew || isNew(d, data.me)))
     .sort(sort === 'date' ? byDateDesc : sort === 'popular' ? (a, b) => pop(b) - pop(a) || byDateDesc(a, b) : (a, b) => a.title.localeCompare(b.title, 'ja'))
   const pinned = !query && !type && !tool ? filtered.filter((d) => d.pinned).slice(0, 1)[0] : undefined
   const list = pinned ? filtered.filter((d) => d.id !== pinned.id) : filtered
-  const hasFilter = query || type || tool
+  const hasFilter = query || type || tool || onlyNew
 
   return (
     <>
@@ -316,7 +319,12 @@ export function LibraryView({ data, navigate, params }: { data: BootstrapData; n
             <option value="title">名称順</option>
             <option value="popular">よく見られている順</option>
           </Select>
-          {hasFilter && <Button variant="secondary" onClick={() => navigate('/library')}>リセット</Button>}
+          {newCount > 0 && (
+            <button onClick={() => setOnlyNew(!onlyNew)} aria-pressed={onlyNew} className={`h-10 whitespace-nowrap rounded-lg border px-3 text-[12px] font-bold ${onlyNew ? 'border-[#e5484d] bg-[#e5484d] text-white' : 'border-[#f3c4c4] bg-white text-[#c0373c]'}`}>
+              新着のみ（{newCount}）
+            </button>
+          )}
+          {hasFilter && <Button variant="secondary" onClick={() => { setOnlyNew(false); navigate('/library') }}>リセット</Button>}
         </div>
       </div>
       <p className="mb-4 text-[12px] font-bold text-[#38536f]">資料一覧 <span className="font-semibold text-[#1e6db8]">{filtered.length}件</span></p>

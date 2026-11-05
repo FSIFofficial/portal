@@ -1,15 +1,17 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, BookOpen, ChevronDown, ChevronRight, LayoutDashboard, LifeBuoy, LoaderCircle, LogOut, Menu, Search, Settings2, Sparkles, X, Zap } from 'lucide-react'
+import { AlertTriangle, BookOpen, CheckCircle2, Smartphone, ChevronDown, ChevronRight, LayoutDashboard, LifeBuoy, LoaderCircle, LogOut, Menu, Search, Settings2, Sparkles, X, Zap } from 'lucide-react'
 import { DEMO_MODE, EXPECTED_GAS_VERSION, asset } from '@/lib/config'
-import { isAnyManager, type BootstrapData } from '@/lib/types'
+import { isAnyManager, isNew, type BootstrapData } from '@/lib/types'
+import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { AdminView } from './admin-view'
 import { AuthProvider, useAuth } from './auth-provider'
 import { LoginScreen } from './login-screen'
 import { useHashRoute, type Navigate } from './router'
-import { ToastProvider } from './ui'
+import { InstallGuide } from './install'
+import { ToastProvider, useToast } from './ui'
 import { HelpView } from './help-view'
 import { HomeView, LibraryView, SearchView, ToolsView } from './views'
 
@@ -64,6 +66,29 @@ function Portal({ data }: { data: BootstrapData }) {
 
   useEffect(() => setDismissed(readDismissed()), [])
 
+  const { run, patchData } = useAuth()
+  const toast = useToast()
+  const [acking, setAcking] = useState('')
+  const acks = me.acks ?? []
+  // 「確認しました」を記録する。画面にはすぐ反映する
+  const ack = async (id: string) => {
+    setAcking(id)
+    try {
+      await run((t) => api.ackAnnouncement(t, id))
+      patchData((d) => ({ ...d, me: { ...d.me, acks: [...(d.me.acks ?? []), id] } }))
+      toast('確認済みにしました')
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setAcking('')
+    }
+  }
+  // 前回ログイン以降に追加・更新されたツール・資料の数
+  const newCounts: Record<string, number> = {
+    '/tools': data.tools.filter((t) => isNew(t, me)).length,
+    '/library': data.documents.filter((d) => isNew(d, me)).length,
+  }
+
   const dismiss = (key: string) => {
     const next = [...dismissed, key]
     setDismissed(next)
@@ -77,7 +102,8 @@ function Portal({ data }: { data: BootstrapData }) {
   const segments = route.path.split('/').filter(Boolean)
   const tab = segments[0] ?? 'home'
   const activePath = tab === 'home' ? '/' : `/${tab}`
-  const announcements = data.announcements.filter((a) => !dismissed.includes(`${a.id}:${a.updatedAt}`))
+  // 確認が必要なお知らせは、確認するまで閉じられない
+  const announcements = data.announcements.filter((a) => (a.requireAck ? !acks.includes(a.id) : !dismissed.includes(`${a.id}:${a.updatedAt}`)))
   const firstName = me.name.split(/\s+/)[0]
 
   const meta: Record<string, { title: string; description: string }> = {
@@ -107,8 +133,14 @@ function Portal({ data }: { data: BootstrapData }) {
           <div className="mx-auto flex max-w-[1320px] items-center gap-2 text-[12px]">
             <span className={cn('shrink-0 rounded px-1.5 py-0.5 font-bold', a.level === 'important' ? 'bg-[#f7d8d6]' : 'bg-[#dcecf8]')}>お知らせ</span>
             <span className="font-semibold">{a.title}</span>
-            <span className="hidden truncate opacity-80 sm:inline">{a.body}</span>
-            <button onClick={() => dismiss(`${a.id}:${a.updatedAt}`)} aria-label="お知らせを閉じる" className="ml-auto shrink-0 rounded p-1 hover:bg-black/5"><X size={15} /></button>
+            <span className={cn('truncate opacity-80', a.requireAck ? 'hidden md:inline' : 'hidden sm:inline')}>{a.body}</span>
+            {a.requireAck ? (
+              <button onClick={() => void ack(a.id)} disabled={acking === a.id} className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 font-bold text-[#1b304b] shadow-sm ring-1 ring-black/10 hover:bg-[#f7f9fb] disabled:opacity-60">
+                <CheckCircle2 size={14} />{acking === a.id ? '送信中…' : '確認しました'}
+              </button>
+            ) : (
+              <button onClick={() => dismiss(`${a.id}:${a.updatedAt}`)} aria-label="お知らせを閉じる" className="ml-auto shrink-0 rounded p-1 hover:bg-black/5"><X size={15} /></button>
+            )}
           </div>
         </div>
       ))}
@@ -124,7 +156,7 @@ function Portal({ data }: { data: BootstrapData }) {
           </button>
           <nav className="hidden items-center gap-1 md:flex">
             {NAV.map((n) => (
-              <button key={n.path} onClick={() => navigate(n.path)} className={cn('rounded-lg px-4 py-2 text-[13px] font-semibold transition', activePath === n.path ? 'bg-[#edf5fc] text-[#1e6db8]' : 'text-[#718096] hover:bg-[#f5f7fa] hover:text-[#1b304b]')}>{n.label}</button>
+              <button key={n.path} onClick={() => navigate(n.path)} className={cn('rounded-lg px-4 py-2 text-[13px] font-semibold transition', activePath === n.path ? 'bg-[#edf5fc] text-[#1e6db8]' : 'text-[#718096] hover:bg-[#f5f7fa] hover:text-[#1b304b]')}>{n.label}<NewCount n={newCounts[n.path]} /></button>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-3">
@@ -164,7 +196,7 @@ function Portal({ data }: { data: BootstrapData }) {
                 const Icon = n.icon
                 return (
                   <button key={n.path} onClick={() => navigate(n.path)} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', activePath === n.path ? 'bg-[#eaf3fb] text-[#1e6db8]' : 'text-[#647589] hover:bg-white')}>
-                    <Icon size={17} />{n.label}
+                    <Icon size={17} /><span className="flex-1">{n.label}</span><NewCount n={newCounts[n.path]} />
                   </button>
                 )
               })}
@@ -222,6 +254,7 @@ function Content({ tab, segments, params, data, navigate }: { tab: string; segme
 
 function UserMenu({ data }: { data: BootstrapData }) {
   const { signOut } = useAuth()
+  const [install, setInstall] = useState(false)
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const me = data.me
@@ -236,6 +269,7 @@ function UserMenu({ data }: { data: BootstrapData }) {
 
   return (
     <div ref={ref} className="relative">
+      {install && <InstallGuide onClose={() => setInstall(false)} />}
       <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-2 rounded-xl border border-[#e1e7ee] px-2.5 py-1.5 hover:bg-[#f7f9fb]">
         {me.picture ? (
           <img src={me.picture} alt="" referrerPolicy="no-referrer" className="size-8 rounded-full" />
@@ -257,6 +291,9 @@ function UserMenu({ data }: { data: BootstrapData }) {
               {roleNames.map((r) => <span key={r} className="rounded bg-[#edf5fc] px-1.5 py-0.5 text-[10px] font-semibold text-[#1e6db8]">{r}</span>)}
             </div>
           </div>
+          <button onClick={() => { setOpen(false); setInstall(true) }} className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[12px] font-semibold text-[#55708b] hover:bg-[#f6f8fa]">
+            <Smartphone size={15} />ホーム画面に追加
+          </button>
           <button onClick={signOut} className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[12px] font-semibold text-[#55708b] hover:bg-[#f6f8fa]">
             <LogOut size={15} />{DEMO_MODE ? 'ログアウト（別のデモユーザーに切り替え）' : 'ログアウト'}
           </button>
@@ -264,4 +301,10 @@ function UserMenu({ data }: { data: BootstrapData }) {
       )}
     </div>
   )
+}
+
+/** ナビゲーションの「NEW」件数 */
+function NewCount({ n }: { n?: number }) {
+  if (!n) return null
+  return <span className="ml-1.5 rounded-full bg-[#e5484d] px-1.5 py-0.5 text-[10px] font-bold leading-none text-white" aria-label={`新着${n}件`}>{n}</span>
 }

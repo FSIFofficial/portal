@@ -207,6 +207,11 @@ export function EmptyState({ title, message }: { title: string; message?: string
   )
 }
 
+/** 前回ログイン以降に追加・更新されたものに付ける印 */
+export function NewBadge() {
+  return <span className="shrink-0 rounded bg-[#e5484d] px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">NEW</span>
+}
+
 export function StatusBadge({ status }: { status: string }) {
   const style = status === '稼働中' ? 'bg-[#eaf7ef] text-[#1c7a43]' : status === '停止中' ? 'bg-[#fff1f0] text-[#b42318]' : 'bg-[#f1f3f5] text-[#6b7785]'
   return <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-semibold', style)}>{status}</span>
