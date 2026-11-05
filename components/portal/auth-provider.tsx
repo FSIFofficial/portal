@@ -13,31 +13,42 @@ interface AuthContextValue {
   token: string
   data: BootstrapData | null
   error: string
-  signIn: (token: string) => Promise<void>
+  /** Googleログインで得た IDトークン（デモではメールアドレス）でログインする */
+  signIn: (credential: string) => Promise<void>
   signOut: () => void
   refresh: () => Promise<void>
+  /** 画面上のデータだけを書き換える（お気に入りの即時反映など） */
+  patchData: (fn: (data: BootstrapData) => BootstrapData) => void
   /** API呼び出しのラッパー。認証切れなら自動でログアウトする */
   run: <T>(fn: (token: string) => Promise<T>) => Promise<T>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
-const TOKEN_KEY = 'fsif-portal-token'
 
-function readStoredToken(): string {
+// セッションは localStorage に保存して、別のタブでもログインしたままにする
+const SESSION_KEY = 'fsif-portal-session'
+
+interface StoredSession {
+  token: string
+  expiresAt: number
+}
+
+function readSession(): StoredSession | null {
   try {
-    const token = window.sessionStorage.getItem(TOKEN_KEY) ?? ''
-    if (!token) return ''
-    if (!DEMO_MODE && tokenExpiry(token) < Date.now() + 60_000) return ''
-    return token
+    const s = JSON.parse(window.localStorage.getItem(SESSION_KEY) ?? 'null') as StoredSession | null
+    if (!s?.token || s.expiresAt < Date.now() + 60_000) return null
+    return s
   } catch {
-    return ''
+    return null
   }
 }
 
-function storeToken(token: string) {
+function storeSession(s: StoredSession | null) {
   try {
-    if (token) window.sessionStorage.setItem(TOKEN_KEY, token)
-    else window.sessionStorage.removeItem(TOKEN_KEY)
+    if (s) window.localStorage.setItem(SESSION_KEY, JSON.stringify(s))
+    else window.localStorage.removeItem(SESSION_KEY)
+    // 以前の版で使っていたキーを片付ける
+    window.sessionStorage.removeItem('fsif-portal-token')
   } catch {
     // ストレージが使えない場合はページを開いている間だけ有効
   }
@@ -46,54 +57,84 @@ function storeToken(token: string) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('loading')
   const [token, setToken] = useState('')
+  const [expiresAt, setExpiresAt] = useState(0)
   const [data, setData] = useState<BootstrapData | null>(null)
   const [error, setError] = useState('')
   const tokenRef = useRef('')
 
-  const signOut = useCallback(() => {
-    storeToken('')
+  const clear = useCallback(() => {
+    storeSession(null)
     tokenRef.current = ''
     setToken('')
+    setExpiresAt(0)
     setData(null)
     setStatus('signedOut')
+  }, [])
+
+  const signOut = useCallback(() => {
+    const current = tokenRef.current
+    if (current && !DEMO_MODE) void api.logout(current).catch(() => {})
+    clear()
     if (!DEMO_MODE) disableGoogleAutoSelect()
+  }, [clear])
+
+  const accept = useCallback((session: StoredSession, result: BootstrapData) => {
+    tokenRef.current = session.token
+    storeSession(session)
+    setToken(session.token)
+    setExpiresAt(session.expiresAt)
+    setData(result)
+    setError('')
+    setStatus('signedIn')
   }, [])
 
-  const load = useCallback(async (next: string) => {
-    try {
-      const result = await api.bootstrap(next)
-      tokenRef.current = next
-      storeToken(next)
-      setToken(next)
-      setData(result)
-      setError('')
-      setStatus('signedIn')
-    } catch (err) {
-      storeToken('')
-      tokenRef.current = ''
-      setToken('')
-      setData(null)
+  const fail = useCallback((err: unknown) => {
+    clear()
+    setError(err instanceof Error ? err.message : String(err))
+  }, [clear])
+
+  // 保存済みのセッションで再開する
+  useEffect(() => {
+    const stored = readSession()
+    if (!stored) {
       setStatus('signedOut')
-      setError(err instanceof Error ? err.message : String(err))
+      return
     }
-  }, [])
+    api.bootstrap(stored.token).then((result) => accept(stored, result)).catch(fail)
+  }, [accept, fail])
 
+  // セッションの期限が切れたらログイン画面に戻す
   useEffect(() => {
-    const stored = readStoredToken()
-    if (stored) void load(stored)
-    else setStatus('signedOut')
-  }, [load])
-
-  // IDトークンの期限が切れたらログイン画面に戻す
-  useEffect(() => {
-    if (DEMO_MODE || !token) return
-    const ms = tokenExpiry(token) - Date.now()
+    if (!token || !expiresAt) return
     const timer = window.setTimeout(() => {
       setError('ログインの有効期限が切れました。再度ログインしてください')
-      signOut()
-    }, Math.max(ms, 0))
+      clear()
+    }, Math.min(Math.max(expiresAt - Date.now(), 0), 2_000_000_000))
     return () => window.clearTimeout(timer)
-  }, [token, signOut])
+  }, [token, expiresAt, clear])
+
+  const signIn = useCallback(async (credential: string) => {
+    setStatus('loading')
+    try {
+      const result = await api.login(credential)
+      const session = result.session ?? credential
+      const exp = result.sessionExpiresAt ? Date.parse(result.sessionExpiresAt) : Date.now() + 3600_000
+      accept({ token: session, expiresAt: exp }, result)
+    } catch (err) {
+      // 古いGAS（login に未対応）の場合は、IDトークンをそのまま使う以前の方式で続ける
+      if (err instanceof ApiError && err.code === 'BAD_REQUEST' && !DEMO_MODE) {
+        try {
+          const result = await api.bootstrap(credential)
+          accept({ token: credential, expiresAt: tokenExpiry(credential) || Date.now() + 3600_000 }, result)
+          return
+        } catch (legacyErr) {
+          fail(legacyErr)
+          return
+        }
+      }
+      fail(err)
+    }
+  }, [accept, fail])
 
   const run = useCallback(async <T,>(fn: (token: string) => Promise<T>) => {
     try {
@@ -101,25 +142,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       if (err instanceof ApiError && (err.code === 'UNAUTHENTICATED' || err.code === 'NOT_REGISTERED')) {
         setError(err.message)
-        signOut()
+        clear()
       }
       throw err
     }
-  }, [signOut])
+  }, [clear])
 
   const refresh = useCallback(async () => {
     const result = await run((t) => api.bootstrap(t))
     setData(result)
   }, [run])
 
-  const signIn = useCallback(async (next: string) => {
-    setStatus('loading')
-    await load(next)
-  }, [load])
+  const patchData = useCallback((fn: (data: BootstrapData) => BootstrapData) => {
+    setData((d) => (d ? fn(d) : d))
+  }, [])
 
   const value = useMemo(
-    () => ({ status, token, data, error, signIn, signOut, refresh, run }),
-    [status, token, data, error, signIn, signOut, refresh, run],
+    () => ({ status, token, data, error, signIn, signOut, refresh, patchData, run }),
+    [status, token, data, error, signIn, signOut, refresh, patchData, run],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
@@ -128,4 +168,12 @@ export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be used inside AuthProvider')
   return ctx
+}
+
+/** 利用状況の記録（失敗しても画面には影響させない） */
+export function useTrack() {
+  const { run } = useAuth()
+  return useCallback((kind: 'tool' | 'doc', id: string) => {
+    void run((t) => api.track(t, kind, id)).catch(() => {})
+  }, [run])
 }

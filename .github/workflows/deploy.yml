@@ -26,6 +26,21 @@ jobs:
           cache: pnpm
       - id: pages
         uses: actions/configure-pages@v5
+      # GAS_URL などが未設定のまま公開すると、本番サイトがデモモード（サンプルデータ）になってしまうので止める。
+      # わざとデモとして公開したい場合だけ、Variables に ALLOW_DEMO=true を追加する。
+      - name: Check required variables
+        if: ${{ vars.ALLOW_DEMO != 'true' }}
+        env:
+          GAS_URL: ${{ vars.GAS_URL }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+        run: |
+          missing=""
+          [ -z "$GAS_URL" ] && missing="$missing GAS_URL"
+          [ -z "$GOOGLE_CLIENT_ID" ] && missing="$missing GOOGLE_CLIENT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::リポジトリの Variables に$missing が設定されていません（Secrets ではなく Variables タブに登録してください）。デモとして公開する場合は Variables に ALLOW_DEMO=true を追加してください。"
+            exit 1
+          fi
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm build

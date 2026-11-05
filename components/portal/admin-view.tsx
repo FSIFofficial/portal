@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AlertTriangle, Bell, CheckCircle2, ChevronRight, FileText, History, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Settings2, ShieldCheck, Trash2, UserCog, Wrench, XCircle } from 'lucide-react'
+import { AlertTriangle, Bell, ChartColumn, CheckCircle2, ChevronRight, FileText, History, KeyRound, LifeBuoy, Link2Off, LoaderCircle, Plus, RefreshCcw, Settings2, ShieldCheck, UserCog, Users, Wrench, XCircle } from 'lucide-react'
 import { DEMO_MODE, EXPECTED_GAS_VERSION } from '@/lib/config'
 import { ApiError, api } from '@/lib/api'
 import { downloadUrl, driveKindLabel, parseDriveUrl } from '@/lib/drive'
@@ -11,21 +11,25 @@ import {
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from './auth-provider'
+import { ModalFooter, RowActions, SectionHeader, Table, confirmDelete, fmt, useEditor, type Mutate } from './admin-shared'
+import { BackupPanel, BulkImportModal, HelpAdmin, UploadButton, UsageAdmin } from './admin-extra'
 import type { Navigate } from './router'
 import {
   Button, Checkbox, EmptyState, Field, Modal, RoleBadges, RolePicker, Select, StatusBadge, TONES, TOOL_ICONS, TextArea, TextInput,
   ToolIcon, useToast,
 } from './ui'
 
-type Section = 'tools' | 'documents' | 'announcements' | 'users' | 'roles' | 'settings' | 'logs' | 'system'
+type Section = 'tools' | 'documents' | 'announcements' | 'help' | 'users' | 'roles' | 'settings' | 'stats' | 'logs' | 'system'
 
 const SECTIONS: { id: Section; label: string; icon: typeof Wrench; allowed: (me: Me) => boolean; description: string }[] = [
   { id: 'tools', label: 'ツール管理', icon: Wrench, allowed: (me) => can(me, 'tools.manage'), description: 'ポータルに掲載するツールと接続先URL・公開範囲を管理します。' },
   { id: 'documents', label: '資料管理', icon: FileText, allowed: (me) => can(me, 'documents.manage'), description: '資料館に掲載するGoogle Driveの資料と公開範囲を管理します。' },
   { id: 'announcements', label: 'お知らせ', icon: Bell, allowed: (me) => can(me, 'announcements.manage'), description: 'ページ上部に表示するお知らせを管理します。' },
+  { id: 'help', label: 'ヘルプ編集', icon: LifeBuoy, allowed: (me) => can(me, 'announcements.manage'), description: 'ヘルプ・問い合わせページの内容（問い合わせ先・よくある質問）を編集します。' },
   { id: 'users', label: 'アカウント', icon: UserCog, allowed: (me) => me.isSuper, description: 'ログインできるGoogleアカウントと、割り当てるロールを管理します。' },
   { id: 'roles', label: 'ロールと権限', icon: KeyRound, allowed: (me) => me.isSuper, description: 'ロール（権限のまとまり）を作成し、できる操作を設定します。' },
   { id: 'settings', label: '設定', icon: Settings2, allowed: (me) => me.isSuper, description: '未登録アカウントの扱いなど、ポータル全体の設定です。' },
+  { id: 'stats', label: '利用状況', icon: ChartColumn, allowed: (me) => can(me, 'logs.view'), description: 'ツールと資料がどれくらい使われているかを月ごとに集計しています。' },
   { id: 'logs', label: '変更履歴', icon: History, allowed: (me) => can(me, 'logs.view'), description: '画面から行われた変更の履歴です（新しい順・最大300件）。' },
   { id: 'system', label: 'バージョン確認', icon: ShieldCheck, allowed: () => true, description: '画面とGASの版名・シート構成・初期設定が合っているかを確認します。' },
 ]
@@ -97,6 +101,8 @@ export function AdminView({ me, section, navigate }: { me: Me; section: string; 
             {current.id === 'users' && <UsersAdmin me={me} data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'roles' && <RolesAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'settings' && <SettingsAdmin data={data} mutate={mutate} header={<SectionHeader section={current} loading={loading} onReload={reload} />} />}
+            {current.id === 'help' && <HelpAdmin section={current} data={data} mutate={mutate} loading={loading} onReload={reload} />}
+            {current.id === 'stats' && <UsageAdmin section={current} data={data} />}
             {current.id === 'logs' && <LogsAdmin section={current} />}
             {current.id === 'system' && <SystemAdmin section={current} />}
           </>
@@ -105,70 +111,6 @@ export function AdminView({ me, section, navigate }: { me: Me; section: string; 
     </div>
   )
 }
-
-type Mutate = (fn: (token: string) => Promise<unknown>, message: string) => Promise<boolean>
-
-function SectionHeader({ section, action, loading, onReload }: { section: (typeof SECTIONS)[number]; action?: ReactNode; loading: boolean; onReload: () => void }) {
-  return (
-    <div className="flex flex-col gap-3 border-b border-[#edf0f3] p-5 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h2 className="text-[16px] font-bold">{section.label}</h2>
-        <p className="mt-1 text-[12px] text-[#8998a8]">{section.description}</p>
-      </div>
-      <div className="flex shrink-0 gap-2">
-        <Button variant="ghost" onClick={onReload} aria-label="再読み込み" disabled={loading}><RefreshCw size={15} className={loading ? 'animate-spin' : undefined} /></Button>
-        {action}
-      </div>
-    </div>
-  )
-}
-
-function Table({ head, children, empty }: { head: ReactNode[]; children: ReactNode; empty?: boolean }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[680px] text-left text-[12px]">
-        <thead className="bg-[#fafbfd] text-[#8998a8]">
-          <tr>{head.map((h, i) => <th key={i} className="px-5 py-3 font-semibold">{h}</th>)}</tr>
-        </thead>
-        <tbody>{children}</tbody>
-      </table>
-      {empty && <p className="p-10 text-center text-[12px] text-[#8a99a9]">まだ登録がありません。</p>}
-    </div>
-  )
-}
-
-function RowActions({ onEdit, onDelete, label }: { onEdit: () => void; onDelete?: () => void; label: string }) {
-  return (
-    <div className="flex justify-end gap-1">
-      <button onClick={onEdit} aria-label={`${label}を編集`} className="rounded-lg p-2 text-[#7890a5] hover:bg-[#f1f5f8]"><Pencil size={15} /></button>
-      {onDelete && <button onClick={onDelete} aria-label={`${label}を削除`} className="rounded-lg p-2 text-[#b42318] hover:bg-[#fff5f4]"><Trash2 size={15} /></button>}
-    </div>
-  )
-}
-
-/** 編集モーダルの共通状態 */
-function useEditor<T>() {
-  const [draft, setDraft] = useState<T | null>(null)
-  const [isNew, setIsNew] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const open = (value: T, fresh = false) => {
-    setDraft(value)
-    setIsNew(fresh)
-  }
-  const set = <K extends keyof T>(key: K, value: T[K]) => setDraft((d) => (d ? { ...d, [key]: value } : d))
-  return { draft, isNew, saving, setSaving, open, close: () => setDraft(null), set }
-}
-
-function ModalFooter({ onCancel, onSave, saving }: { onCancel: () => void; onSave: () => void; saving: boolean }) {
-  return (
-    <>
-      <Button variant="secondary" onClick={onCancel} disabled={saving}>キャンセル</Button>
-      <Button onClick={onSave} disabled={saving}>{saving ? '保存中…' : '保存'}</Button>
-    </>
-  )
-}
-
-const confirmDelete = (name: string) => window.confirm(`「${name}」を削除します。よろしいですか？\nこの操作は取り消せません。`)
 
 // ---------------------------------------------------------------------------
 // ツール
@@ -219,12 +161,13 @@ function ToolsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate;
             </Field>
           </div>
           <Field label="接続先URL" hint="「開く」ボタンで新しいタブに開くURLです。"><TextInput type="url" placeholder="https://" value={ed.draft.url} onChange={(e) => ed.set('url', e.target.value)} /></Field>
-          <Field label="アイコン画像URL" hint="画像を設定するとアイコンの代わりに表示されます。Google Driveに置いた画像の共有リンクも使えます（閲覧者がDriveで見られる共有設定が必要）。正方形の画像がおすすめです。空欄なら下のアイコンと色で表示します。">
+          <Field group label="アイコン画像" hint="画像を設定するとアイコンの代わりに表示されます。「画像をアップロード」を使うとDriveに保存して自動で設定します（誰でも表示できるリンク共有になります）。Driveの共有リンクや画像のURLを貼ることもできます。正方形の画像がおすすめです。">
             <div className="flex items-center gap-3">
               <ToolIcon name={ed.draft.icon} tone={ed.draft.tone} src={ed.draft.iconUrl} />
-              <TextInput type="url" placeholder="https://drive.google.com/file/d/... または画像のURL" value={ed.draft.iconUrl} onChange={(e) => ed.set('iconUrl', e.target.value)} />
+              <TextInput type="url" aria-label="アイコン画像のURL" placeholder="https://drive.google.com/file/d/... または画像のURL" value={ed.draft.iconUrl} onChange={(e) => ed.set('iconUrl', e.target.value)} />
               {ed.draft.iconUrl && <Button variant="ghost" onClick={() => ed.set('iconUrl', '')}>クリア</Button>}
             </div>
+            <div className="mt-2"><UploadButton purpose="icon" label="画像をアップロード" onUploaded={(res) => ed.set('iconUrl', res.url)} /></div>
           </Field>
           <Field group label={ed.draft.iconUrl ? 'アイコン（画像が表示できないときの代わり）' : 'アイコン'}>
             <div className="flex flex-wrap gap-2">
@@ -255,6 +198,14 @@ function ToolsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate;
 // 資料
 // ---------------------------------------------------------------------------
 
+/** Drive共有の同期結果の表示 */
+function SyncBadge({ status, block }: { status: string; block?: boolean }) {
+  const tone = status.startsWith('エラー') ? 'text-[#b42318]' : status.startsWith('警告') ? 'text-[#92400e]' : 'text-[#1c7a43]'
+  const short = status.startsWith('エラー') ? '共有エラー' : status.startsWith('警告') ? 'リンク共有オン' : status ? '共有を同期中' : '未同期'
+  if (block) return <p className={cn('font-semibold', tone)}>{status}</p>
+  return <span title={status} className={cn('mt-0.5 block text-[10px] font-semibold', tone)}>{short}</span>
+}
+
 const emptyDoc = (): PortalDocument => ({
   id: '', title: '', type: 'マニュアル', tool: '共通', description: '', keywords: '', tags: [], driveUrl: '', downloadUrl: '', thumbnailUrl: '',
   date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }), pinned: false, visibleRoles: [], updatedAt: '',
@@ -276,12 +227,23 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
     ed.setSaving(false)
     if (ok) ed.close()
   }
+  const syncCount = data.documents.filter((d) => d.driveSync).length
+  const restrict = async (doc: PortalDocument) => {
+    if (!window.confirm(`「${doc.title}」のDriveのリンク共有をオフにします。\nリンクを知っているだけの人は開けなくなり、ポータルで閲覧できる人だけに共有し直します。よろしいですか？`)) return
+    const ok = await mutate((t) => api.restrictLinkSharing(t, doc.id), 'リンク共有をオフにしました')
+    if (ok) ed.close()
+  }
   const drive = ed.draft ? parseDriveUrl(ed.draft.driveUrl) : null
   const autoDownload = ed.draft ? downloadUrl({ driveUrl: ed.draft.driveUrl, downloadUrl: '' }) : ''
 
   return (
     <>
-      {header(<Button onClick={() => ed.open(emptyDoc(), true)}><Plus size={15} />新規追加</Button>)}
+      {header(
+        <>
+          {syncCount > 0 && <Button variant="secondary" onClick={() => void mutate((t) => api.syncDrive(t), 'Driveの共有を同期しました')} title="共有を同期する資料すべてを、今の公開範囲に合わせ直します"><RefreshCcw size={15} />共有を同期</Button>}
+          <Button onClick={() => ed.open(emptyDoc(), true)}><Plus size={15} />新規追加</Button>
+        </>,
+      )}
       <div className="border-b border-[#edf0f3] px-5 py-3"><TextInput placeholder="資料名・種類・ツールで絞り込み" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
       <Table head={['資料名', '種類', '関連ツール', 'リンク', '公開範囲', '日付', '']} empty={!docs.length}>
         {docs.map((doc) => (
@@ -289,7 +251,10 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
             <td className="px-5 py-3 font-semibold text-[#38536f]">{doc.pinned && <span className="mr-1 text-[#c2410c]">📌</span>}{doc.title}</td>
             <td className="px-5 py-3 text-[#718296]">{doc.type}</td>
             <td className="px-5 py-3 text-[#718296]">{doc.tool}</td>
-            <td className="px-5 py-3 text-[#9aa7b5]">{doc.driveUrl ? <a href={doc.driveUrl} target="_blank" rel="noopener noreferrer" className="text-[#1e6db8] hover:underline">{driveKindLabel(doc.driveUrl)}</a> : '未設定'}</td>
+            <td className="px-5 py-3 text-[#9aa7b5]">
+              {doc.driveUrl ? <a href={doc.driveUrl} target="_blank" rel="noopener noreferrer" className="text-[#1e6db8] hover:underline">{driveKindLabel(doc.driveUrl)}</a> : '未設定'}
+              {doc.driveSync && <SyncBadge status={doc.driveSyncStatus ?? ''} />}
+            </td>
             <td className="px-5 py-3"><RoleBadges ids={doc.visibleRoles} roles={data.roles} /></td>
             <td className="whitespace-nowrap px-5 py-3 text-[#718296]">{doc.date}</td>
             <td className="px-5 py-3"><RowActions label={doc.title} onEdit={() => ed.open({ ...doc, tagsText: doc.tags.join(', ') })} onDelete={() => confirmDelete(doc.title) && void mutate((t) => api.deleteDocument(t, doc.id), '資料を削除しました')} /></td>
@@ -299,8 +264,15 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
       {ed.draft && (
         <Modal wide title={ed.isNew ? '資料を追加' : '資料を編集'} onClose={ed.close} footer={<ModalFooter onCancel={ed.close} onSave={save} saving={ed.saving} />}>
           <Field label="資料名" required><TextInput value={ed.draft.title} onChange={(e) => ed.set('title', e.target.value)} /></Field>
-          <Field label="Google Drive のリンク" hint="Driveで「リンクをコピー」したURLを貼り付けてください（ファイル・ドキュメント・スプレッドシート・スライド・フォルダに対応）。閲覧者にDrive側でも閲覧権限が必要です。">
-            <TextInput type="url" placeholder="https://drive.google.com/file/d/..." value={ed.draft.driveUrl} onChange={(e) => ed.set('driveUrl', e.target.value)} />
+          <Field group label="Google Drive のリンク" hint="ファイルをアップロードするか、Driveで「リンクをコピー」したURLを貼り付けてください（ファイル・ドキュメント・スプレッドシート・スライド・フォルダに対応）。">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <TextInput type="url" aria-label="Google Drive のリンク" placeholder="https://drive.google.com/file/d/..." value={ed.draft.driveUrl} onChange={(e) => ed.set('driveUrl', e.target.value)} />
+              <UploadButton purpose="document" label="ファイルをアップロード" onUploaded={(res) => {
+                ed.set('driveUrl', res.url)
+                if (!ed.draft?.title) ed.set('title', res.name.replace(/\.[^.]+$/, ''))
+                ed.set('driveSync', true)
+              }} />
+            </div>
             {ed.draft.driveUrl && (
               <span className="mt-2 block rounded-lg bg-[#f5f8fc] px-3 py-2 text-[11px] leading-5 text-[#55708b]">
                 判定：<b>{driveKindLabel(ed.draft.driveUrl)}</b>
@@ -330,6 +302,17 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
             <Field group label="公開範囲" hint="選んだロールを持つアカウントだけに表示されます。">
               <RolePicker roles={data.roles} value={ed.draft.visibleRoles} onChange={(v) => ed.set('visibleRoles', v)} exclude={['superadmin']} emptyLabel="未選択：ログインできる全員に表示" />
             </Field>
+          </div>
+          <div className="mb-4 rounded-xl border border-[#d9e8f3] bg-[#f7fafd] p-3">
+            <Checkbox checked={!!ed.draft.driveSync} onChange={(v) => ed.set('driveSync', v)} label={<><b>Driveの共有を公開範囲に合わせる</b><span className="block text-[11px] leading-5 text-[#8a99a9]">オンにすると、この資料を見られるアカウントをDriveの閲覧者に自動で追加し、見られなくなった人は外します（ポータルが追加した人だけ。手動で共有した相手には触れません）。アカウントやロールを変更したときも自動で合わせ直します。</span></>} />
+            {ed.draft.driveSyncStatus && (
+              <div className="mt-2 border-t border-[#e4eef7] pt-2 text-[12px] leading-5">
+                <SyncBadge status={ed.draft.driveSyncStatus} block />
+                {ed.draft.driveSyncStatus.startsWith('警告') && !ed.isNew && (
+                  <Button variant="danger" className="mt-2" onClick={() => void restrict(ed.draft!)}><Link2Off size={14} />リンク共有をオフにする</Button>
+                )}
+              </div>
+            )}
           </div>
           <details className="rounded-lg border border-[#edf0f3] px-3 py-2">
             <summary className="cursor-pointer text-[12px] font-bold text-[#55708b]">詳細設定（通常は空欄のままでOK）</summary>
@@ -402,12 +385,12 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
 // ---------------------------------------------------------------------------
 
 const emptyUser: User = { email: '', name: '', roles: ['member'], active: true, note: '', createdAt: '', updatedAt: '', lastLoginAt: '' }
-const fmt = (iso: string) => (iso ? iso.replace('T', ' ').slice(0, 16) : '—')
 
 function UsersAdmin({ me, data, mutate, header }: { me: Me; data: AdminData; mutate: Mutate; header: (action: ReactNode) => ReactNode }) {
   const ed = useEditor<User>()
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
+  const [bulk, setBulk] = useState(false)
   const users = (data.users ?? []).filter((u) => `${u.email} ${u.name} ${u.note}`.toLowerCase().includes(query.toLowerCase()) && (!roleFilter || u.roles.includes(roleFilter)))
   const save = async () => {
     if (!ed.draft) return
@@ -418,7 +401,13 @@ function UsersAdmin({ me, data, mutate, header }: { me: Me; data: AdminData; mut
   }
   return (
     <>
-      {header(<Button onClick={() => ed.open({ ...emptyUser }, true)}><Plus size={15} />アカウント追加</Button>)}
+      {header(
+        <>
+          <Button variant="secondary" onClick={() => setBulk(true)}><Users size={15} />一括登録</Button>
+          <Button onClick={() => ed.open({ ...emptyUser }, true)}><Plus size={15} />アカウント追加</Button>
+        </>,
+      )}
+      {bulk && <BulkImportModal data={data} mutate={mutate} onClose={() => setBulk(false)} />}
       <div className="flex flex-col gap-2 border-b border-[#edf0f3] px-5 py-3 sm:flex-row">
         <TextInput placeholder="名前・メールアドレス・メモで絞り込み" value={query} onChange={(e) => setQuery(e.target.value)} />
         <Select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="sm:w-[200px]" aria-label="ロールで絞り込み">
@@ -551,6 +540,7 @@ function SettingsAdmin({ data, mutate, header }: { data: AdminData; mutate: Muta
           </div>
         )}
         <div className="mt-6"><Button onClick={save} disabled={saving}>{saving ? '保存中…' : '設定を保存'}</Button></div>
+        <BackupPanel initial={data.backup} uploadFolderUrl={data.uploadFolderUrl} />
       </div>
     </>
   )

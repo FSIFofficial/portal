@@ -62,6 +62,12 @@ export function HomeView({ data, navigate }: { data: BootstrapData; navigate: Na
   const counts = useDocCounts(data)
   const recent = useMemo(() => [...data.documents].sort(byDateDesc).slice(0, 4), [data.documents])
   const guide = data.documents.find((d) => d.pinned) ?? data.documents.find((d) => d.type === 'オンボーディング')
+  // お気に入りを先頭に（選んだ順）、残りは管理者が決めた並び順で6件まで
+  const favorites = data.me.favorites ?? []
+  const homeTools = useMemo(() => {
+    const favs = favorites.map((id) => data.tools.find((t) => t.id === id)).filter((t): t is Tool => !!t)
+    return [...favs, ...data.tools.filter((t) => !favorites.includes(t.id))].slice(0, Math.max(6, favs.length))
+  }, [data.tools, favorites])
   return (
     <>
       <div className="mb-8">
@@ -70,7 +76,7 @@ export function HomeView({ data, navigate }: { data: BootstrapData; navigate: Na
       <div className="mb-5 flex items-center justify-between">
         <div>
           <h2 className="text-[17px] font-bold">よく使うツール</h2>
-          <p className="mt-1 text-[12px] text-[#8998a8]">すぐに使えるツールをピックアップしています</p>
+          <p className="mt-1 text-[12px] text-[#8998a8]">{favorites.length ? '☆を付けたお気に入りのツールが先頭に表示されます' : 'ツールの☆を押すと、お気に入りとしてここに固定できます'}</p>
         </div>
         <button onClick={() => navigate('/tools')} className="flex items-center gap-1 text-[12px] font-bold text-[#1e6db8]">すべてのツール <ArrowRight size={14} /></button>
       </div>
@@ -78,7 +84,7 @@ export function HomeView({ data, navigate }: { data: BootstrapData; navigate: Na
         <EmptyState title="表示できるツールがありません" message="閲覧権限のあるツールが登録されるとここに表示されます。" />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {data.tools.slice(0, 6).map((tool) => (
+          {homeTools.map((tool) => (
             <ToolCard key={tool.id} tool={tool} docCount={counts[tool.name] ?? 0} restricted={tool.visibleRoles.length > 0} onDocs={() => navigate('/library', { tool: tool.name })} onMissingUrl={() => toast('このツールの接続先はまだ設定されていません')} />
           ))}
         </div>
@@ -261,7 +267,8 @@ export function LibraryView({ data, navigate, params }: { data: BootstrapData; n
   const [query, setQuery] = useState(params.get('q') ?? '')
   const [type, setType] = useState(params.get('type') ?? '')
   const [tool, setTool] = useState(params.get('tool') ?? '')
-  const [sort, setSort] = useState<'date' | 'title'>('date')
+  const [sort, setSort] = useState<'date' | 'title' | 'popular'>('date')
+  const pop = (d: PortalDocument) => data.popularity?.[`doc:${d.id}`] ?? 0
 
   useEffect(() => {
     setQuery(params.get('q') ?? '')
@@ -273,7 +280,7 @@ export function LibraryView({ data, navigate, params }: { data: BootstrapData; n
   const toolNames = useMemo(() => [...new Set(data.documents.map((d) => d.tool).filter(Boolean))], [data.documents])
   const filtered = data.documents
     .filter((d) => match(docText(d), query) && (!type || d.type === type) && (!tool || d.tool === tool))
-    .sort(sort === 'date' ? byDateDesc : (a, b) => a.title.localeCompare(b.title, 'ja'))
+    .sort(sort === 'date' ? byDateDesc : sort === 'popular' ? (a, b) => pop(b) - pop(a) || byDateDesc(a, b) : (a, b) => a.title.localeCompare(b.title, 'ja'))
   const pinned = !query && !type && !tool ? filtered.filter((d) => d.pinned).slice(0, 1)[0] : undefined
   const list = pinned ? filtered.filter((d) => d.id !== pinned.id) : filtered
   const hasFilter = query || type || tool
@@ -304,9 +311,10 @@ export function LibraryView({ data, navigate, params }: { data: BootstrapData; n
             <option value="">すべてのツール</option>
             {toolNames.map((t) => <option key={t} value={t}>{t}</option>)}
           </Select>
-          <Select value={sort} onChange={(e) => setSort(e.target.value as 'date' | 'title')} aria-label="並び順" className="sm:w-[150px]">
+          <Select value={sort} onChange={(e) => setSort(e.target.value as 'date' | 'title' | 'popular')} aria-label="並び順" className="sm:w-[150px]">
             <option value="date">更新日が新しい順</option>
             <option value="title">名称順</option>
+            <option value="popular">よく見られている順</option>
           </Select>
           {hasFilter && <Button variant="secondary" onClick={() => navigate('/library')}>リセット</Button>}
         </div>
