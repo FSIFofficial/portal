@@ -1,15 +1,16 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, ChevronDown, ChevronRight, LayoutDashboard, LifeBuoy, LoaderCircle, LogOut, Menu, Search, Settings2, Sparkles, X, Zap } from 'lucide-react'
-import { DEMO_MODE, asset } from '@/lib/config'
+import { AlertTriangle, BookOpen, ChevronDown, ChevronRight, LayoutDashboard, LifeBuoy, LoaderCircle, LogOut, Menu, Search, Settings2, Sparkles, X, Zap } from 'lucide-react'
+import { DEMO_MODE, EXPECTED_GAS_VERSION, asset } from '@/lib/config'
 import { isAnyManager, type BootstrapData } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { AdminView } from './admin-view'
 import { AuthProvider, useAuth } from './auth-provider'
 import { LoginScreen } from './login-screen'
 import { useHashRoute, type Navigate } from './router'
-import { ToastProvider, useToast } from './ui'
+import { ToastProvider } from './ui'
+import { HelpView } from './help-view'
 import { HomeView, LibraryView, SearchView, ToolsView } from './views'
 
 export function PortalApp() {
@@ -53,12 +54,13 @@ function readDismissed(): string[] {
 
 function Portal({ data }: { data: BootstrapData }) {
   const { route, navigate } = useHashRoute()
-  const toast = useToast()
   const [mobileMenu, setMobileMenu] = useState(false)
   const [dismissed, setDismissed] = useState<string[]>([])
   const [headerQuery, setHeaderQuery] = useState('')
   const me = data.me
   const manager = isAnyManager(me)
+  // 管理者には、画面とGASの版がずれていたら常に知らせる
+  const versionMismatch = !DEMO_MODE && data.gasVersion !== EXPECTED_GAS_VERSION
 
   useEffect(() => setDismissed(readDismissed()), [])
 
@@ -84,11 +86,22 @@ function Portal({ data }: { data: BootstrapData }) {
     library: { title: '資料館', description: 'マニュアルやオンボーディング資料を探せます。資料はGoogle Driveで開く・ダウンロードできます。' },
     search: { title: '検索結果', description: `「${route.params.get('q') ?? ''}」の検索結果` },
     admin: { title: '管理画面', description: 'ポータルの掲載情報・アカウント・権限を管理します。' },
+    help: { title: 'ヘルプ・問い合わせ', description: '使い方で困ったときの問い合わせ先と、よくある質問です。' },
   }
   const page = meta[tab] ?? meta.home
 
   return (
     <main className="min-h-screen bg-[#f6f8fb] text-[#1b304b]">
+      {manager && versionMismatch && (
+        <div role="alert" className="border-b border-[#f1b8b2] bg-[#b42318] px-4 py-2.5 text-white">
+          <div className="mx-auto flex max-w-[1320px] flex-wrap items-center gap-2 text-[12px]">
+            <AlertTriangle size={15} className="shrink-0" />
+            <span className="font-bold">GASの版が画面と一致していません</span>
+            <span className="opacity-90">（画面：{EXPECTED_GAS_VERSION} ／ GAS：{data.gasVersion || '不明（古い版）'}）一部の操作が失敗する可能性があります。</span>
+            <button onClick={() => navigate('/admin/system')} className="ml-auto rounded-lg bg-white/15 px-2.5 py-1 font-bold hover:bg-white/25">確認する</button>
+          </div>
+        </div>
+      )}
       {announcements.map((a) => (
         <div key={a.id} className={cn('border-b px-4 py-2.5', a.level === 'important' ? 'border-[#e9caca] bg-[#fff5f4] text-[#a13b3b]' : 'border-[#d4e4f2] bg-[#f2f8fd] text-[#285b82]')}>
           <div className="mx-auto flex max-w-[1320px] items-center gap-2 text-[12px]">
@@ -134,6 +147,7 @@ function Portal({ data }: { data: BootstrapData }) {
             {NAV.map((n) => (
               <button key={n.path} onClick={() => { navigate(n.path); setMobileMenu(false) }} className={cn('flex-1 rounded-lg py-2 text-[13px] font-semibold', activePath === n.path ? 'bg-[#edf5fc] text-[#1e6db8]' : 'text-[#718096]')}>{n.label}</button>
             ))}
+            <button onClick={() => { navigate('/help'); setMobileMenu(false) }} className={cn('flex-1 rounded-lg py-2 text-[13px] font-semibold', tab === 'help' ? 'bg-[#edf5fc] text-[#1e6db8]' : 'text-[#718096]')}>ヘルプ</button>
             {manager && (
               <button onClick={() => { navigate('/admin'); setMobileMenu(false) }} className={cn('flex-1 rounded-lg py-2 text-[13px] font-semibold', tab === 'admin' ? 'bg-[#edf5fc] text-[#1e6db8]' : 'text-[#718096]')}>管理</button>
             )}
@@ -160,7 +174,7 @@ function Portal({ data }: { data: BootstrapData }) {
                   <Settings2 size={17} />管理画面
                 </button>
               )}
-              <button onClick={() => toast('お問い合わせ先は管理者にご確認ください')} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold text-[#647589] hover:bg-white">
+              <button onClick={() => navigate('/help')} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', tab === 'help' ? 'bg-[#eaf3fb] text-[#1e6db8]' : 'text-[#647589] hover:bg-white')}>
                 <LifeBuoy size={17} />ヘルプ・問い合わせ
               </button>
             </div>
@@ -195,6 +209,8 @@ function Content({ tab, segments, params, data, navigate }: { tab: string; segme
       return <ToolsView data={data} navigate={navigate} initialQuery={params.get('q') ?? ''} />
     case 'library':
       return <LibraryView data={data} navigate={navigate} params={params} />
+    case 'help':
+      return <HelpView data={data} navigate={navigate} />
     case 'search':
       return <SearchView data={data} navigate={navigate} query={params.get('q') ?? ''} />
     case 'admin':

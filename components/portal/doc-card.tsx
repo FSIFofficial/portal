@@ -5,6 +5,7 @@ import { Download, ExternalLink, FileText, FolderOpen, Pin } from 'lucide-react'
 import { downloadLabel, downloadUrl, driveKindLabel, parseDriveUrl, thumbnailUrl, viewUrl } from '@/lib/drive'
 import type { PortalDocument } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { useTrack } from './auth-provider'
 
 export function DocThumb({ doc, className }: { doc: PortalDocument; className?: string }) {
   const [failed, setFailed] = useState(false)
@@ -23,20 +24,21 @@ export function DocThumb({ doc, className }: { doc: PortalDocument; className?: 
 }
 
 export function DocActions({ doc, compact }: { doc: PortalDocument; compact?: boolean }) {
+  const track = useTrack()
   const open = viewUrl(doc)
   const dl = downloadUrl(doc)
   const size = compact ? 'px-2.5 py-1.5 text-[11px]' : 'px-3 py-2 text-[12px]'
   return (
     <div className="flex flex-wrap gap-2">
       {open ? (
-        <a href={open} target="_blank" rel="noopener noreferrer" className={cn('inline-flex items-center gap-1.5 rounded-lg bg-[#1f6fba] font-bold text-white hover:bg-[#185c9d]', size)}>
+        <a href={open} target="_blank" rel="noopener noreferrer" onClick={() => track('doc', doc.id)} className={cn('inline-flex items-center gap-1.5 rounded-lg bg-[#1f6fba] font-bold text-white hover:bg-[#185c9d]', size)}>
           資料を開く<ExternalLink size={12} />
         </a>
       ) : (
         <span className={cn('inline-flex items-center rounded-lg bg-[#eef1f5] font-bold text-[#6b7785]', size)}>リンク未設定</span>
       )}
       {dl && (
-        <a href={dl} target="_blank" rel="noopener noreferrer" className={cn('inline-flex items-center gap-1.5 rounded-lg border border-[#cfdeeb] bg-white font-bold text-[#285b82] hover:bg-[#f2f7fc]', size)}>
+        <a href={dl} target="_blank" rel="noopener noreferrer" onClick={() => track('doc', doc.id)} className={cn('inline-flex items-center gap-1.5 rounded-lg border border-[#cfdeeb] bg-white font-bold text-[#285b82] hover:bg-[#f2f7fc]', size)}>
           <Download size={12} />{downloadLabel(doc)}
         </a>
       )}

@@ -1,8 +1,46 @@
 'use client'
 
-import { ExternalLink, GripVertical } from 'lucide-react'
+import { ExternalLink, GripVertical, Star } from 'lucide-react'
+import { api } from '@/lib/api'
 import type { Tool } from '@/lib/types'
-import { StatusBadge, ToolIcon } from './ui'
+import { cn } from '@/lib/utils'
+import { useAuth, useTrack } from './auth-provider'
+import { StatusBadge, ToolIcon, useToast } from './ui'
+
+/** お気に入りの切り替え。画面にはすぐ反映し、保存に失敗したら元に戻す */
+export function useFavorites() {
+  const { data, patchData, run } = useAuth()
+  const toast = useToast()
+  const favorites = data?.me.favorites ?? []
+  const toggle = async (id: string) => {
+    const before = favorites
+    const next = before.includes(id) ? before.filter((x) => x !== id) : [...before, id]
+    patchData((d) => ({ ...d, me: { ...d.me, favorites: next } }))
+    try {
+      await run((t) => api.setFavorites(t, next))
+    } catch (e) {
+      patchData((d) => ({ ...d, me: { ...d.me, favorites: before } }))
+      toast((e as Error).message, 'error')
+    }
+  }
+  return { favorites, toggle }
+}
+
+function FavoriteButton({ tool }: { tool: Tool }) {
+  const { favorites, toggle } = useFavorites()
+  const on = favorites.includes(tool.id)
+  return (
+    <button
+      onClick={() => void toggle(tool.id)}
+      aria-pressed={on}
+      aria-label={on ? `${tool.name}をお気に入りから外す` : `${tool.name}をお気に入りに追加`}
+      title={on ? 'お気に入りから外す' : 'お気に入りに追加（ホームの先頭に表示されます）'}
+      className={cn('rounded-lg p-1.5 transition hover:bg-[#fff8e6]', on ? 'text-[#e5a00d]' : 'text-[#c2ccd6] hover:text-[#e5a00d]')}
+    >
+      <Star size={17} fill={on ? 'currentColor' : 'none'} />
+    </button>
+  )
+}
 
 export function ToolCard({ tool, docCount, onDocs, onMissingUrl, dragHandle, restricted }: {
   tool: Tool
@@ -12,6 +50,7 @@ export function ToolCard({ tool, docCount, onDocs, onMissingUrl, dragHandle, res
   dragHandle?: React.ReactNode
   restricted?: boolean
 }) {
+  const track = useTrack()
   const disabled = tool.status !== '稼働中'
   const openButtonClass = 'flex items-center gap-1.5 rounded-lg bg-[#1f6fba] px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-[#185c9d]'
   return (
@@ -20,7 +59,12 @@ export function ToolCard({ tool, docCount, onDocs, onMissingUrl, dragHandle, res
       <div className="flex items-start justify-between gap-2">
         <ToolIcon name={tool.icon} tone={tool.tone} src={tool.iconUrl} />
         <div className="flex flex-col items-end gap-1.5">
-          {!dragHandle && <StatusBadge status={tool.status} />}
+          {!dragHandle && (
+            <div className="flex items-center gap-1">
+              <FavoriteButton tool={tool} />
+              <StatusBadge status={tool.status} />
+            </div>
+          )}
           {restricted && <span className="rounded-full bg-[#fff5df] px-2 py-0.5 text-[10px] font-semibold text-[#92400e]">限定公開</span>}
         </div>
       </div>
@@ -35,7 +79,7 @@ export function ToolCard({ tool, docCount, onDocs, onMissingUrl, dragHandle, res
           {disabled ? (
             <span className="rounded-lg bg-[#dfe5eb] px-3 py-2 text-[12px] font-semibold text-[#6b7785]">{tool.status}</span>
           ) : tool.url ? (
-            <a href={tool.url} target="_blank" rel="noopener noreferrer" className={openButtonClass}>開く<ExternalLink size={13} /></a>
+            <a href={tool.url} target="_blank" rel="noopener noreferrer" onClick={() => track('tool', tool.id)} className={openButtonClass}>開く<ExternalLink size={13} /></a>
           ) : (
             <button onClick={onMissingUrl} className={openButtonClass}>開く<ExternalLink size={13} /></button>
           )}
