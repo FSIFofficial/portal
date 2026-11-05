@@ -4,7 +4,8 @@
 import { DEMO_MODE, EXPECTED_GAS_VERSION, GAS_URL } from './config'
 import { createDemoDb, type DemoDb } from './demo-data'
 import type {
-  AdminData, Announcement, BootstrapData, LogEntry, Me, Permission, PortalDocument, Role, Settings, SystemCheck, Tool, User,
+  AdminData, Announcement, BackupStatus, BootstrapData, BulkAddResult, HelpContent, LogEntry, Me, Permission, PortalDocument, Role,
+  Settings, SystemCheck, Tool, UploadResult, UsageStats, User,
 } from './types'
 
 export class ApiError extends Error {
@@ -40,7 +41,12 @@ export async function call<T>(action: string, token: string, payload: Payload = 
 }
 
 export const api = {
+  /** Googleの IDトークンを渡して、GASのセッションを受け取る（以降はセッションで認証） */
+  login: (idToken: string) => call<BootstrapData>('login', '', { idToken }),
+  logout: (token: string) => call('logout', token),
   bootstrap: (token: string) => call<BootstrapData>('bootstrap', token),
+  setFavorites: (token: string, ids: string[]) => call<{ favorites: string[] }>('setFavorites', token, { ids }),
+  track: (token: string, kind: 'tool' | 'doc', id: string) => call('track', token, { kind, id }),
   adminData: (token: string) => call<AdminData>('adminData', token),
   // isNew=false のときは item.updatedAt（編集開始時点の値）で同時編集の衝突を検出する
   saveTool: (token: string, item: Partial<Tool>, isNew: boolean) => call<Tool>('saveTool', token, { item, isNew }),
@@ -57,13 +63,33 @@ export const api = {
   saveSettings: (token: string, item: Settings) => call<Settings>('saveSettings', token, { item }),
   listLogs: (token: string) => call<LogEntry[]>('listLogs', token, { limit: 300 }),
   systemCheck: (token: string) => call<SystemCheck>('systemCheck', token),
+  saveHelp: (token: string, item: HelpContent) => call<HelpContent>('saveHelp', token, { item }),
+  usageStats: (token: string) => call<UsageStats>('usageStats', token),
+  uploadFile: (token: string, file: { name: string; mimeType: string; base64: string; purpose: 'document' | 'icon' }) =>
+    call<UploadResult>('uploadFile', token, file),
+  syncDrive: (token: string, id?: string) => call<{ count: number }>('syncDrive', token, { id }),
+  restrictLinkSharing: (token: string, id: string) => call('restrictLinkSharing', token, { id }),
+  bulkAddUsers: (token: string, users: { email: string; name: string }[], roles: string[]) =>
+    call<BulkAddResult>('bulkAddUsers', token, { users, roles }),
+  backupNow: (token: string) => call<BackupStatus>('backupNow', token),
+  setBackupSchedule: (token: string, enabled: boolean) => call<BackupStatus>('setBackupSchedule', token, { enabled }),
+}
+
+/** ファイルを base64 文字列に変換する（アップロード用） */
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ''))
+    reader.onerror = () => reject(new Error('ファイルを読み込めませんでした'))
+    reader.readAsDataURL(file)
+  })
 }
 
 // ---------------------------------------------------------------------------
 // デモバックエンド（localStorage に保存）
 // ---------------------------------------------------------------------------
 
-const DEMO_KEY = 'fsif-portal-demo-db-v2'
+const DEMO_KEY = 'fsif-portal-demo-db-v3'
 const SUPER = 'superadmin'
 
 function loadDb(): DemoDb {
@@ -114,7 +140,7 @@ function demoAuth(db: DemoDb, token: string): Me {
   const perms = new Set<Permission>()
   user.roles.forEach((id) => db.roles.find((r) => r.id === id)?.permissions.forEach((p) => perms.add(p)))
   const isSuper = user.roles.includes(SUPER) || perms.has('*')
-  return { email: user.email, name: user.name, picture: '', roles: user.roles, permissions: isSuper ? ['*'] : [...perms], isSuper }
+  return { email: user.email, name: user.name, picture: '', roles: user.roles, permissions: isSuper ? ['*'] : [...perms], isSuper, favorites: user.favorites ?? [] }
 }
 
 function requirePerm(me: Me, perm: Permission | 'any-manager') {
@@ -152,6 +178,20 @@ function checkConflict(existing: { updatedAt: string } | undefined, p: Payload, 
   if (existing.updatedAt !== (item.updatedAt ?? '')) fail('CONFLICT', `この${label}は他の人が先に更新しました。最新の内容を読み込んでから編集し直してください`)
 }
 
+function recentMonths(n: number) {
+  const d = new Date()
+  return Array.from({ length: n }, (_, i) => new Date(d.getFullYear(), d.getMonth() - i, 15).toISOString().slice(0, 7))
+}
+
+function demoPopularity(db: DemoDb) {
+  const months = recentMonths(3)
+  const map: Record<string, number> = {}
+  Object.values(db.stats).forEach((r) => {
+    if (months.includes(r.month)) map[`${r.kind}:${r.itemId}`] = (map[`${r.kind}:${r.itemId}`] ?? 0) + r.count
+  })
+  return map
+}
+
 function upsert<T>(rows: T[], key: keyof T, record: T) {
   const i = rows.findIndex((r) => r[key] === record[key])
   if (i >= 0) rows[i] = record
@@ -160,6 +200,11 @@ function upsert<T>(rows: T[], key: keyof T, record: T) {
 
 function demoCall(action: string, token: string, p: Payload): unknown {
   const db = loadDb()
+  // デモではメールアドレスをそのままセッションとして使う
+  if (action === 'login') {
+    const data = demoCall('bootstrap', String(p.idToken ?? ''), {}) as BootstrapData
+    return { ...data, session: String(p.idToken), sessionExpiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }
+  }
   const me = demoAuth(db, token)
   const log = (act: string, target: string, detail = '') => db.logs.push({ timestamp: now(), email: me.email, action: act, target, detail })
   const commit = <T>(value: T): T => {
@@ -179,7 +224,91 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         documents: db.documents.filter((x) => canSee(me, x)),
         announcements: db.announcements.filter((a) => a.active && canSee(me, a) && (!a.startDate || a.startDate <= d) && (!a.endDate || a.endDate >= d)),
         roles: db.roles.map((r) => ({ id: r.id, name: r.name })),
+        gasVersion: EXPECTED_GAS_VERSION,
+        help: db.help,
+        popularity: demoPopularity(db),
       })
+    }
+    case 'logout':
+      return {}
+    case 'setFavorites': {
+      const visible = db.tools.filter((x) => canSee(me, x)).map((x) => x.id)
+      const ids = list(p.ids).filter((id) => visible.includes(id)).slice(0, 50)
+      const user = db.users.find((u) => u.email === me.email)
+      if (user) user.favorites = ids
+      return commit({ favorites: ids })
+    }
+    case 'track': {
+      const kind = p.kind === 'doc' ? 'doc' : 'tool'
+      const target = (kind === 'doc' ? db.documents : db.tools).find((x) => x.id === p.id)
+      if (!target || !canSee(me, target)) return {}
+      const key = `${today().slice(0, 7)}|${kind}|${String(p.id)}`
+      const row = db.stats[key] ?? { month: today().slice(0, 7), kind, itemId: String(p.id), count: 0, lastAt: '' }
+      row.count += 1
+      row.lastAt = now()
+      db.stats[key] = row
+      return commit({})
+    }
+    case 'usageStats': {
+      requirePerm(me, 'logs.view')
+      const months = recentMonths(3)
+      const rows: Record<string, UsageStats['rows'][number]> = {}
+      Object.values(db.stats).forEach((r) => {
+        const k = `${r.kind}:${r.itemId}`
+        const row = (rows[k] ??= { kind: r.kind as 'tool' | 'doc', id: r.itemId, thisMonth: 0, lastMonth: 0, last3Months: 0, total: 0, lastAt: '' })
+        row.total += r.count
+        if (r.month === months[0]) row.thisMonth += r.count
+        if (r.month === months[1]) row.lastMonth += r.count
+        if (months.includes(r.month)) row.last3Months += r.count
+        if (r.lastAt > row.lastAt) row.lastAt = r.lastAt
+      })
+      return commit<UsageStats>({ months, rows: Object.values(rows) })
+    }
+    case 'saveHelp': {
+      requirePerm(me, 'announcements.manage')
+      const h = item as unknown as HelpContent
+      db.help = {
+        intro: String(h.intro ?? ''),
+        contacts: (h.contacts ?? []).map((c) => ({ label: String(c.label ?? '').trim(), value: String(c.value ?? '').trim() })).filter((c) => c.label || c.value),
+        faqs: (h.faqs ?? []).map((f) => ({ q: String(f.q ?? '').trim(), a: String(f.a ?? '').trim() })).filter((f) => f.q),
+      }
+      log('Help.update', '')
+      return commit(db.help)
+    }
+    case 'uploadFile':
+      fail('DEMO', 'デモモードではDriveへのアップロードはできません（GASに接続すると使えます）')
+    case 'syncDrive':
+    case 'restrictLinkSharing': {
+      requirePerm(me, 'documents.manage')
+      db.documents.forEach((d) => {
+        if (d.driveSync && (!p.id || d.id === p.id)) d.driveSyncStatus = 'デモモードのため、Driveの共有は変更していません'
+      })
+      return commit({ count: db.documents.filter((d) => d.driveSync).length })
+    }
+    case 'bulkAddUsers': {
+      requirePerm(me, '*')
+      const roles = validRoles(db, p.roles)
+      const added: string[] = []
+      const skipped: { email: string; reason: string }[] = []
+      ;((p.users ?? []) as { email: string; name: string }[]).forEach((e) => {
+        const email = String(e.email ?? '').trim().toLowerCase()
+        if (!/^[^@\s,]+@[^@\s,]+\.[^@\s,]+$/.test(email)) return skipped.push({ email: email || '(空欄)', reason: 'メールアドレスが正しくありません' })
+        if (db.users.some((u) => u.email === email)) return skipped.push({ email, reason: 'すでに登録されています' })
+        db.users.push({ email, name: String(e.name || email), roles, active: true, note: '一括登録', createdAt: now(), updatedAt: now(), lastLoginAt: '', favorites: [] })
+        added.push(email)
+      })
+      if (added.length) log('Users.bulkCreate', `${added.length}件`, added.join(','))
+      return commit({ added, skipped })
+    }
+    case 'backupNow': {
+      requirePerm(me, '*')
+      db.backup = { ...db.backup, lastAt: now(), lastUrl: '', lastError: 'デモモードのため、実際のバックアップは作成していません' }
+      return commit(db.backup)
+    }
+    case 'setBackupSchedule': {
+      requirePerm(me, '*')
+      db.backup = { ...db.backup, enabled: !!p.enabled }
+      return commit(db.backup)
     }
     case 'adminData': {
       requirePerm(me, 'any-manager')
@@ -189,9 +318,12 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         announcements: db.announcements,
         roles: db.roles,
       }
+      data.help = db.help
       if (me.isSuper) {
         data.users = db.users
         data.settings = db.settings
+        data.backup = db.backup
+        data.uploadFolderUrl = ''
       }
       return commit(data)
     }
@@ -256,6 +388,9 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         pinned: !!item.pinned,
         visibleRoles: validRoles(db, item.visibleRoles),
         updatedAt: now(),
+        driveSync: !!item.driveSync,
+        driveSyncedEmails: existing?.driveSyncedEmails ?? [],
+        driveSyncStatus: item.driveSync ? 'デモモードのため、Driveの共有は変更していません' : '',
       }
       upsert(db.documents, 'id', record)
       log(existing ? 'Documents.update' : 'Documents.create', record.id, record.title)

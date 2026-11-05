@@ -28,6 +28,8 @@ export interface User {
   createdAt: string
   updatedAt: string
   lastLoginAt: string
+  /** お気に入りツールのID（本人だけが変更する） */
+  favorites?: string[]
 }
 
 export type ToolStatus = '稼働中' | '準備中' | '停止中'
@@ -68,6 +70,12 @@ export interface PortalDocument {
   pinned: boolean
   visibleRoles: string[]
   updatedAt: string
+  /** Drive の共有をポータルの公開範囲に合わせるか */
+  driveSync?: boolean
+  /** ポータルが共有したアカウント（全権管理者にだけ返る） */
+  driveSyncedEmails?: string[]
+  /** 共有の同期結果（管理画面にだけ返る） */
+  driveSyncStatus?: string
 }
 
 export interface Announcement {
@@ -106,6 +114,7 @@ export interface Me {
   roles: string[]
   permissions: Permission[]
   isSuper: boolean
+  favorites?: string[]
 }
 
 export interface RoleSummary {
@@ -119,6 +128,14 @@ export interface BootstrapData {
   documents: PortalDocument[]
   announcements: Announcement[]
   roles: RoleSummary[]
+  /** 動いているGASの版名（古いGASでは無い） */
+  gasVersion?: string
+  help?: HelpContent
+  /** 直近3か月の利用回数（"tool:ID" / "doc:ID" → 回数） */
+  popularity?: Record<string, number>
+  /** login のときだけ返る */
+  session?: string
+  sessionExpiresAt?: string
 }
 
 export interface AdminData {
@@ -128,6 +145,51 @@ export interface AdminData {
   roles: Role[]
   users?: User[]
   settings?: Settings
+  help?: HelpContent
+  backup?: BackupStatus
+  uploadFolderUrl?: string
+}
+
+export interface HelpContent {
+  intro: string
+  contacts: { label: string; value: string }[]
+  faqs: { q: string; a: string }[]
+}
+
+export interface BackupStatus {
+  enabled: boolean
+  lastAt: string
+  lastUrl: string
+  lastError: string
+  keep: number
+  folderUrl: string
+}
+
+export interface UsageRow {
+  kind: 'tool' | 'doc'
+  id: string
+  thisMonth: number
+  lastMonth: number
+  last3Months: number
+  total: number
+  lastAt: string
+}
+
+export interface UsageStats {
+  months: string[]
+  rows: UsageRow[]
+}
+
+export interface UploadResult {
+  id: string
+  name: string
+  url: string
+  warning: string
+}
+
+export interface BulkAddResult {
+  added: string[]
+  skipped: { email: string; reason: string }[]
 }
 
 export interface SheetCheck {

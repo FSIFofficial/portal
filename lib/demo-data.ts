@@ -1,6 +1,6 @@
 // デモモード（GAS未接続）で使う架空のサンプルデータ。実際の組織データは含めないこと（このファイルはGitHubで公開される）。
 
-import type { Announcement, PortalDocument, Role, Settings, Tool, User } from './types'
+import type { Announcement, BackupStatus, HelpContent, PortalDocument, Role, Settings, Tool, User } from './types'
 
 export interface DemoDb {
   users: User[]
@@ -10,6 +10,9 @@ export interface DemoDb {
   announcements: Announcement[]
   settings: Settings
   logs: { timestamp: string; email: string; action: string; target: string; detail: string }[]
+  help: HelpContent
+  stats: Record<string, { month: string; kind: string; itemId: string; count: number; lastAt: string }>
+  backup: BackupStatus
 }
 
 const t = '2026-11-01T09:00:00+09:00'
@@ -57,5 +60,18 @@ export function createDemoDb(): DemoDb {
     ],
     settings: { allowUnregistered: false, defaultRoles: ['member'], allowedDomains: [] },
     logs: [],
+    help: {
+      intro: 'ポータルの使い方で困ったときは、まず資料館の「ポータルの使い方」をご覧ください。解決しない場合は下記までご連絡ください。',
+      contacts: [
+        { label: 'ポータル管理担当', value: 'portal-admin@example.com' },
+        { label: '問い合わせフォーム', value: 'https://example.com/form' },
+      ],
+      faqs: [
+        { q: 'ログインできません', a: '登録されたGoogleアカウントでログインしているか確認してください。未登録の場合は全権管理者に登録を依頼してください。' },
+        { q: '資料が開けません', a: '資料はGoogle Driveにあります。Drive側の共有設定が必要な場合があるので、管理者にお問い合わせください。' },
+      ],
+    },
+    stats: {},
+    backup: { enabled: false, lastAt: '', lastUrl: '', lastError: '', keep: 10, folderUrl: '' },
   }
 }
