@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowRight, ArrowUp, BookOpen, ChevronRight, FileText, Filter, GripVertical, Search, X } from 'lucide-react'
-import { api } from '@/lib/api'
+import { ApiError, api } from '@/lib/api'
 import { can, type BootstrapData, type PortalDocument, type Tool } from '@/lib/types'
 import { useAuth } from './auth-provider'
 import { DocActions, DocCard, DocThumb } from './doc-card'
@@ -165,12 +165,16 @@ export function ToolsView({ data, navigate, initialQuery }: { data: BootstrapDat
   const save = async () => {
     setSaving(true)
     try {
-      await run((t) => api.reorderTools(t, order.map((x) => x.id)))
+      await run((t) => api.reorderTools(t, order.map((x) => x.id), data.tools.map((x) => x.id)))
       await refresh()
       setEditing(false)
       toast('並び順を保存しました')
     } catch (e) {
       toast((e as Error).message, 'error')
+      if (e instanceof ApiError && e.code === 'CONFLICT') {
+        await refresh().catch(() => {})
+        setEditing(false)
+      }
     } finally {
       setSaving(false)
     }

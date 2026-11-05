@@ -45,6 +45,8 @@ export interface Tool {
   visibleRoles: string[]
   order: number
   updatedAt: string
+  /** アイコン画像のURL（Driveの共有リンクも可）。空ならアイコン＋色で表示 */
+  iconUrl: string
 }
 
 export interface PortalDocument {

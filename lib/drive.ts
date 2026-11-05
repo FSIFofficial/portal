@@ -64,6 +64,14 @@ export function thumbnailUrl(doc: Pick<PortalDocument, 'driveUrl' | 'thumbnailUr
   return `https://drive.google.com/thumbnail?id=${info.id}&sz=w800`
 }
 
+/** 画像として表示するURL。Driveの共有リンクならサムネイルURLに変換する */
+export function imageUrl(url: string, size = 200): string {
+  if (!url) return ''
+  const info = parseDriveUrl(url)
+  if (info && info.kind !== 'folder' && info.kind !== 'forms') return `https://drive.google.com/thumbnail?id=${info.id}&sz=w${size}`
+  return url
+}
+
 export function driveKindLabel(url: string): string {
   const info = parseDriveUrl(url)
   switch (info?.kind) {

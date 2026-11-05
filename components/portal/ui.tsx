@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { imageUrl } from '@/lib/drive'
 import {
   BookOpen, Briefcase, CalendarPlus, ChartBar, CircleHelp, ClipboardList, Database, FileText, Globe, GraduationCap,
   LayoutDashboard, Mail, Megaphone, MessageSquare, Rocket, Search, ShieldCheck, Sparkles, Users, Wrench, X, Zap,
@@ -29,8 +30,15 @@ export const TONES: Record<string, string> = {
   pink: 'bg-[#fff0f5] text-[#be185d]',
 }
 
-export function ToolIcon({ name, tone, size = 22, className }: { name: string; tone: string; size?: number; className?: string }) {
+export function ToolIcon({ name, tone, size = 22, className, src }: { name: string; tone: string; size?: number; className?: string; src?: string }) {
   const Icon = TOOL_ICONS[name] ?? Zap
+  const [failed, setFailed] = useState(false)
+  const url = imageUrl(src ?? '')
+  useEffect(() => setFailed(false), [url])
+  if (url && !failed) {
+    // 画像が読み込めない（Driveの共有設定など）場合はアイコン表示に戻す
+    return <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} className={cn('size-12 shrink-0 rounded-xl border border-[#eef1f4] bg-white object-cover', className)} />
+  }
   return (
     <div className={cn('grid size-12 shrink-0 place-items-center rounded-xl', TONES[tone] ?? TONES.blue, className)}>
       <Icon size={size} strokeWidth={1.8} />
