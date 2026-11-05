@@ -1,6 +1,6 @@
 // デモモード（GAS未接続）で使う架空のサンプルデータ。実際の組織データは含めないこと（このファイルはGitHubで公開される）。
 
-import type { Announcement, BackupStatus, HelpContent, PortalDocument, Role, Settings, Tool, User } from './types'
+import type { Announcement, BackupStatus, ErrorDigestStatus, HelpContent, PortalDocument, Role, Settings, Tool, User } from './types'
 
 export interface DemoDb {
   users: User[]
@@ -13,9 +13,13 @@ export interface DemoDb {
   help: HelpContent
   stats: Record<string, { month: string; kind: string; itemId: string; count: number; lastAt: string }>
   backup: BackupStatus
+  acks: { announcementId: string; email: string; ackAt: string }[]
+  errorDigest: ErrorDigestStatus
 }
 
-const t = '2026-11-01T09:00:00+09:00'
+// 日付は開いた日を基準にする（NEW表示が分かるよう、一部だけ最近更新したことにする）
+const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString()
+const t = daysAgo(30)
 
 export function createDemoDb(): DemoDb {
   const tool = (id: string, name: string, description: string, category: string, icon: string, tone: string, status: Tool['status'], order: number, visibleRoles: string[] = []): Tool => ({
@@ -42,7 +46,7 @@ export function createDemoDb(): DemoDb {
       tool('t2', 'サンプルツールB', '資料作成のサンプル', '資料作成', 'Sparkles', 'violet', '稼働中', 2),
       tool('t3', 'サンプルツールC', '学習・クイズのサンプル', '学習', 'CircleHelp', 'amber', '稼働中', 3),
       tool('t4', 'サンプルツールD', 'ダッシュボードのサンプル', '分析', 'LayoutDashboard', 'cyan', '稼働中', 4),
-      tool('t5', 'サンプルツールE', 'イベントページのサンプル', 'イベント', 'Zap', 'orange', '稼働中', 5),
+      { ...tool('t5', 'サンプルツールE', 'イベントページのサンプル', 'イベント', 'Zap', 'orange', '稼働中', 5), updatedAt: daysAgo(1) },
       tool('t6', '限定公開ツール（契約担当のみ）', '公開範囲の動作確認用', '契約管理', 'ShieldCheck', 'slate', '稼働中', 6, ['contract']),
       tool('t7', '準備中ツール', '準備中表示のサンプル', 'イベント', 'CalendarPlus', 'green', '準備中', 7),
     ],
@@ -52,11 +56,12 @@ export function createDemoDb(): DemoDb {
       doc('d3', 'ポータルの使い方（サンプル）', 'マニュアル', '共通', '2026-10-15', 'ツールの探し方、資料の見方、検索のコツ。', '検索 使い方', ['ポータル']),
       doc('d4', 'サンプルツールA マニュアル', 'マニュアル', 'サンプルツールA', '2026-10-12', 'ツールの「使い方」ボタンから表示される資料のサンプルです。', 'タスク', ['マニュアル']),
       doc('d5', 'サンプルツールB マニュアル', 'マニュアル', 'サンプルツールB', '2026-10-10', 'ツールに紐づく資料のサンプルです。', '資料作成', ['マニュアル']),
-      doc('d6', 'ニュースレター（サンプル）', 'ニュース', '共通', '2026-07-02', 'タグ付き資料のサンプルです。', 'ニュース', ['ニュース']),
+      doc('d6', 'ニュースレター（サンプル）', 'ニュース', '共通', '2026-07-02', 'タグ付き資料のサンプルです。', 'ニュース', ['ニュース'], { updatedAt: daysAgo(2) }),
       doc('d7', '契約担当向け資料（サンプル）', 'マニュアル', '限定公開ツール（契約担当のみ）', '2026-09-26', '契約担当ロールにだけ表示される資料のサンプルです。', '契約', ['限定'], { visibleRoles: ['contract'] }),
     ],
     announcements: [
-      { id: 'a1', title: 'デモ環境のお知らせ', body: 'これはサンプルのお知らせです。管理画面の「お知らせ」から編集できます。', level: 'important', active: true, startDate: '', endDate: '', visibleRoles: [], updatedAt: t },
+      { id: 'a1', title: 'デモ環境のお知らせ', body: 'これはサンプルのお知らせです。管理画面の「お知らせ」から編集できます。', level: 'info', active: true, startDate: '', endDate: '', visibleRoles: [], updatedAt: t },
+      { id: 'a2', title: '利用規約を確認してください（サンプル）', body: '「確認しました」を押すと、管理画面で誰が確認したかが分かります。', level: 'important', active: true, startDate: '', endDate: '', visibleRoles: [], updatedAt: t, requireAck: true },
     ],
     settings: { allowUnregistered: false, defaultRoles: ['member'], allowedDomains: [] },
     logs: [],
@@ -73,5 +78,7 @@ export function createDemoDb(): DemoDb {
     },
     stats: {},
     backup: { enabled: false, lastAt: '', lastUrl: '', lastError: '', keep: 10, folderUrl: '' },
+    acks: [],
+    errorDigest: { enabled: false, lastSentAt: '', recipients: 1 },
   }
 }

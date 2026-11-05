@@ -30,6 +30,7 @@ export interface User {
   lastLoginAt: string
   /** お気に入りツールのID（本人だけが変更する） */
   favorites?: string[]
+  prevLoginAt?: string
 }
 
 export type ToolStatus = '稼働中' | '準備中' | '停止中'
@@ -88,6 +89,8 @@ export interface Announcement {
   endDate: string
   visibleRoles: string[]
   updatedAt: string
+  /** 「確認しました」ボタンを出して、誰が確認したかを記録する */
+  requireAck?: boolean
 }
 
 export interface Settings {
@@ -115,6 +118,10 @@ export interface Me {
   permissions: Permission[]
   isSuper: boolean
   favorites?: string[]
+  /** この日時より後に追加・更新されたものを「NEW」と表示する（前回ログイン） */
+  newSince?: string
+  /** 確認済みのお知らせID */
+  acks?: string[]
 }
 
 export interface RoleSummary {
@@ -148,6 +155,9 @@ export interface AdminData {
   help?: HelpContent
   backup?: BackupStatus
   uploadFolderUrl?: string
+  errorDigest?: ErrorDigestStatus
+  /** お知らせID → 確認済み人数 */
+  ackCounts?: Record<string, number>
 }
 
 export interface HelpContent {
@@ -192,6 +202,22 @@ export interface BulkAddResult {
   skipped: { email: string; reason: string }[]
 }
 
+export interface ErrorDigestStatus {
+  enabled: boolean
+  lastSentAt: string
+  recipients: number
+}
+
+export interface AckStatus {
+  acked: { email: string; name: string; ackAt: string }[]
+  pending: { email: string; name: string }[]
+}
+
+/** 前回ログイン以降に追加・更新されたか */
+export function isNew(item: { updatedAt: string }, me: Me | null | undefined): boolean {
+  return !!me?.newSince && !!item.updatedAt && item.updatedAt > me.newSince
+}
+
 export interface SheetCheck {
   name: string
   ok: boolean
@@ -205,6 +231,7 @@ export interface SystemCheck {
   clientIdSet: boolean
   superAdminCount: number
   checkedAt: string
+  recentErrors?: { timestamp: string; code: string; message: string }[]
 }
 
 export function can(me: Me | null | undefined, perm: Permission): boolean {

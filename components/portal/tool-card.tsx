@@ -2,10 +2,10 @@
 
 import { ExternalLink, GripVertical, Star } from 'lucide-react'
 import { api } from '@/lib/api'
-import type { Tool } from '@/lib/types'
+import { isNew, type Tool } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth, useTrack } from './auth-provider'
-import { StatusBadge, ToolIcon, useToast } from './ui'
+import { NewBadge, StatusBadge, ToolIcon, useToast } from './ui'
 
 /** お気に入りの切り替え。画面にはすぐ反映し、保存に失敗したら元に戻す */
 export function useFavorites() {
@@ -51,6 +51,7 @@ export function ToolCard({ tool, docCount, onDocs, onMissingUrl, dragHandle, res
   restricted?: boolean
 }) {
   const track = useTrack()
+  const { data } = useAuth()
   const disabled = tool.status !== '稼働中'
   const openButtonClass = 'flex items-center gap-1.5 rounded-lg bg-[#1f6fba] px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-[#185c9d]'
   return (
@@ -68,7 +69,7 @@ export function ToolCard({ tool, docCount, onDocs, onMissingUrl, dragHandle, res
           {restricted && <span className="rounded-full bg-[#fff5df] px-2 py-0.5 text-[10px] font-semibold text-[#92400e]">限定公開</span>}
         </div>
       </div>
-      <h3 className="mt-4 text-[16px] font-bold text-[#1b304b]">{tool.name}</h3>
+      <h3 className="mt-4 flex items-center gap-2 text-[16px] font-bold text-[#1b304b]">{tool.name}{isNew(tool, data?.me) && <NewBadge />}</h3>
       <p className="mt-1 text-[13px] leading-6 text-[#718096]">{tool.description}</p>
       <div className="mt-auto flex items-center justify-between gap-2 pt-5">
         <span className="truncate rounded-md bg-[#f5f7fa] px-2 py-1 text-[11px] text-[#718096]">{tool.category || 'その他'}</span>
