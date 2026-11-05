@@ -42,16 +42,17 @@ export async function call<T>(action: string, token: string, payload: Payload = 
 export const api = {
   bootstrap: (token: string) => call<BootstrapData>('bootstrap', token),
   adminData: (token: string) => call<AdminData>('adminData', token),
-  saveTool: (token: string, item: Partial<Tool>) => call<Tool>('saveTool', token, { item }),
+  // isNew=false のときは item.updatedAt（編集開始時点の値）で同時編集の衝突を検出する
+  saveTool: (token: string, item: Partial<Tool>, isNew: boolean) => call<Tool>('saveTool', token, { item, isNew }),
   deleteTool: (token: string, id: string) => call('deleteTool', token, { id }),
-  reorderTools: (token: string, ids: string[]) => call<Tool[]>('reorderTools', token, { ids }),
-  saveDocument: (token: string, item: Partial<PortalDocument>) => call<PortalDocument>('saveDocument', token, { item }),
+  reorderTools: (token: string, ids: string[], baseIds: string[]) => call<Tool[]>('reorderTools', token, { ids, baseIds }),
+  saveDocument: (token: string, item: Partial<PortalDocument>, isNew: boolean) => call<PortalDocument>('saveDocument', token, { item, isNew }),
   deleteDocument: (token: string, id: string) => call('deleteDocument', token, { id }),
-  saveAnnouncement: (token: string, item: Partial<Announcement>) => call<Announcement>('saveAnnouncement', token, { item }),
+  saveAnnouncement: (token: string, item: Partial<Announcement>, isNew: boolean) => call<Announcement>('saveAnnouncement', token, { item, isNew }),
   deleteAnnouncement: (token: string, id: string) => call('deleteAnnouncement', token, { id }),
-  saveUser: (token: string, item: Partial<User>) => call<User>('saveUser', token, { item }),
+  saveUser: (token: string, item: Partial<User>, isNew: boolean) => call<User>('saveUser', token, { item, isNew }),
   deleteUser: (token: string, email: string) => call('deleteUser', token, { email }),
-  saveRole: (token: string, item: Partial<Role>) => call<Role>('saveRole', token, { item }),
+  saveRole: (token: string, item: Partial<Role>, isNew: boolean) => call<Role>('saveRole', token, { item, isNew }),
   deleteRole: (token: string, id: string) => call('deleteRole', token, { id }),
   saveSettings: (token: string, item: Settings) => call<Settings>('saveSettings', token, { item }),
   listLogs: (token: string) => call<LogEntry[]>('listLogs', token, { limit: 300 }),
@@ -62,7 +63,7 @@ export const api = {
 // デモバックエンド（localStorage に保存）
 // ---------------------------------------------------------------------------
 
-const DEMO_KEY = 'fsif-portal-demo-db-v1'
+const DEMO_KEY = 'fsif-portal-demo-db-v2'
 const SUPER = 'superadmin'
 
 function loadDb(): DemoDb {
@@ -141,6 +142,16 @@ function url(v: unknown) {
   return s
 }
 
+function checkConflict(existing: { updatedAt: string } | undefined, p: Payload, label: string) {
+  const item = (p.item ?? {}) as { updatedAt?: string }
+  if (p.isNew) {
+    if (existing) fail('CONFLICT', `同じ${label}がすでに登録されています。画面を再読み込みしてください`)
+    return
+  }
+  if (!existing) fail('CONFLICT', `この${label}は他の人が削除しました。画面を再読み込みしてください`)
+  if (existing.updatedAt !== (item.updatedAt ?? '')) fail('CONFLICT', `この${label}は他の人が先に更新しました。最新の内容を読み込んでから編集し直してください`)
+}
+
 function upsert<T>(rows: T[], key: keyof T, record: T) {
   const i = rows.findIndex((r) => r[key] === record[key])
   if (i >= 0) rows[i] = record
@@ -186,7 +197,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     }
     case 'saveTool': {
       requirePerm(me, 'tools.manage')
-      const existing = db.tools.find((x) => x.id === item.id)
+      const existing = p.isNew ? undefined : db.tools.find((x) => x.id === item.id)
+      checkConflict(existing, p, '項目')
       const record: Tool = {
         id: existing?.id ?? newId(),
         name: required(item.name, 'ツール名'),
@@ -196,6 +208,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         tone: String(item.tone || 'blue'),
         status: (['稼働中', '準備中', '停止中'].includes(String(item.status)) ? item.status : '準備中') as Tool['status'],
         url: url(item.url),
+        iconUrl: url(item.iconUrl),
         visibleRoles: validRoles(db, item.visibleRoles),
         order: existing?.order ?? Math.max(0, ...db.tools.map((x) => x.order)) + 1,
         updatedAt: now(),
@@ -213,6 +226,10 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     case 'reorderTools': {
       requirePerm(me, 'tools.manage')
       const ids = list(p.ids)
+      if (p.baseIds) {
+        const current = [...db.tools].sort((a, b) => a.order - b.order).filter((x) => canSee(me, x)).map((x) => x.id)
+        if (current.join(',') !== list(p.baseIds).join(',')) fail('CONFLICT', '並べ替えの間に他の人がツールを変更しました。最新の並び順を読み込んだので、もう一度並べ替えてください')
+      }
       db.tools.sort((a, b) => (ids.indexOf(a.id) + 1 || 999 + a.order) - (ids.indexOf(b.id) + 1 || 999 + b.order))
       db.tools.forEach((x, i) => (x.order = i + 1))
       log('Tools.reorder', '', ids.join(','))
@@ -220,7 +237,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     }
     case 'saveDocument': {
       requirePerm(me, 'documents.manage')
-      const existing = db.documents.find((x) => x.id === item.id)
+      const existing = p.isNew ? undefined : db.documents.find((x) => x.id === item.id)
+      checkConflict(existing, p, '項目')
       const date = String(item.date ?? '').replace(/\//g, '-')
       if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) fail('BAD_REQUEST', '日付は YYYY-MM-DD の形式で入力してください')
       const record: PortalDocument = {
@@ -251,7 +269,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     }
     case 'saveAnnouncement': {
       requirePerm(me, 'announcements.manage')
-      const existing = db.announcements.find((x) => x.id === item.id)
+      const existing = p.isNew ? undefined : db.announcements.find((x) => x.id === item.id)
+      checkConflict(existing, p, '項目')
       const record: Announcement = {
         id: existing?.id ?? newId(),
         title: required(item.title, 'タイトル'),
@@ -281,6 +300,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
       if (email === me.email && !roles.includes(SUPER)) fail('BAD_REQUEST', '自分自身から全権管理者ロールを外すことはできません')
       if (email === me.email && item.active === false) fail('BAD_REQUEST', '自分自身を無効化することはできません')
       const existing = db.users.find((u) => u.email === email)
+      checkConflict(existing, p, 'アカウント')
       const record: User = {
         email,
         name: String(item.name || existing?.name || email),
@@ -308,6 +328,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
       if (!/^[a-z0-9_-]{2,32}$/.test(id)) fail('BAD_REQUEST', 'ロールIDは半角英小文字・数字・-_ の2〜32文字にしてください')
       if (id === SUPER) fail('BAD_REQUEST', '全権管理者ロールは変更できません')
       const existing = db.roles.find((r) => r.id === id)
+      if (p.isNew && existing) fail('CONFLICT', `ロールID「${id}」はすでに使われています`)
       const record: Role = {
         id,
         name: required(item.name, 'ロール名'),

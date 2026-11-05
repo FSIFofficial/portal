@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { AlertTriangle, Bell, CheckCircle2, ChevronRight, FileText, History, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Settings2, ShieldCheck, Trash2, UserCog, Wrench, XCircle } from 'lucide-react'
 import { DEMO_MODE, EXPECTED_GAS_VERSION } from '@/lib/config'
-import { api } from '@/lib/api'
+import { ApiError, api } from '@/lib/api'
 import { downloadUrl, driveKindLabel, parseDriveUrl } from '@/lib/drive'
 import {
   PERMISSION_LABELS, can, type AdminData, type Announcement, type LogEntry, type Me, type Permission, type PortalDocument,
@@ -62,6 +62,8 @@ export function AdminView({ me, section, navigate }: { me: Me; section: string; 
       return true
     } catch (e) {
       toast((e as Error).message, 'error')
+      // 他の人が先に更新していた場合は、最新の内容を読み込み直す（編集中の入力はフォームに残す）
+      if (e instanceof ApiError && e.code === 'CONFLICT') await Promise.all([reload(), refresh()]).catch(() => {})
       return false
     }
   }, [run, toast, reload, refresh])
@@ -172,7 +174,7 @@ const confirmDelete = (name: string) => window.confirm(`「${name}」を削除�
 // ツール
 // ---------------------------------------------------------------------------
 
-const emptyTool: Tool = { id: '', name: '', description: '', category: '', icon: 'Zap', tone: 'blue', status: '準備中', url: '', visibleRoles: [], order: 0, updatedAt: '' }
+const emptyTool: Tool = { id: '', name: '', description: '', category: '', icon: 'Zap', tone: 'blue', status: '準備中', url: '', visibleRoles: [], order: 0, updatedAt: '', iconUrl: '' }
 
 function ToolsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate; header: (action: ReactNode) => ReactNode }) {
   const ed = useEditor<Tool>()
@@ -180,7 +182,7 @@ function ToolsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate;
   const save = async () => {
     if (!ed.draft) return
     ed.setSaving(true)
-    const ok = await mutate((t) => api.saveTool(t, ed.draft!), ed.isNew ? 'ツールを追加しました' : 'ツールを更新しました')
+    const ok = await mutate((t) => api.saveTool(t, ed.draft!, ed.isNew), ed.isNew ? 'ツールを追加しました' : 'ツールを更新しました')
     ed.setSaving(false)
     if (ok) ed.close()
   }
@@ -190,7 +192,7 @@ function ToolsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate;
       <Table head={['', 'ツール名', 'カテゴリ', '状態', '接続先', '公開範囲', '']} empty={!data.tools.length}>
         {data.tools.map((tool) => (
           <tr key={tool.id} className="border-t border-[#edf0f3]">
-            <td className="py-3 pl-5"><ToolIcon name={tool.icon} tone={tool.tone} size={16} className="size-9" /></td>
+            <td className="py-3 pl-5"><ToolIcon name={tool.icon} tone={tool.tone} src={tool.iconUrl} size={16} className="size-9" /></td>
             <td className="px-5 py-3 font-semibold text-[#38536f]">{tool.name}<span className="block text-[11px] font-normal text-[#8a99a9]">{tool.description}</span></td>
             <td className="px-5 py-3 text-[#718296]">{tool.category}</td>
             <td className="px-5 py-3"><StatusBadge status={tool.status} /></td>
@@ -217,7 +219,14 @@ function ToolsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate;
             </Field>
           </div>
           <Field label="接続先URL" hint="「開く」ボタンで新しいタブに開くURLです。"><TextInput type="url" placeholder="https://" value={ed.draft.url} onChange={(e) => ed.set('url', e.target.value)} /></Field>
-          <Field group label="アイコン">
+          <Field label="アイコン画像URL" hint="画像を設定するとアイコンの代わりに表示されます。Google Driveに置いた画像の共有リンクも使えます（閲覧者がDriveで見られる共有設定が必要）。正方形の画像がおすすめです。空欄なら下のアイコンと色で表示します。">
+            <div className="flex items-center gap-3">
+              <ToolIcon name={ed.draft.icon} tone={ed.draft.tone} src={ed.draft.iconUrl} />
+              <TextInput type="url" placeholder="https://drive.google.com/file/d/... または画像のURL" value={ed.draft.iconUrl} onChange={(e) => ed.set('iconUrl', e.target.value)} />
+              {ed.draft.iconUrl && <Button variant="ghost" onClick={() => ed.set('iconUrl', '')}>クリア</Button>}
+            </div>
+          </Field>
+          <Field group label={ed.draft.iconUrl ? 'アイコン（画像が表示できないときの代わり）' : 'アイコン'}>
             <div className="flex flex-wrap gap-2">
               {Object.keys(TOOL_ICONS).map((name) => (
                 <button type="button" key={name} onClick={() => ed.set('icon', name)} aria-label={name} aria-pressed={ed.draft!.icon === name} className={cn('rounded-xl p-0.5 ring-2', ed.draft!.icon === name ? 'ring-[#1f6fba]' : 'ring-transparent')}>
@@ -263,7 +272,7 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
     const { tagsText, ...item } = ed.draft
     const payload = { ...item, tags: (tagsText ?? item.tags.join(', ')).split(/[,、]/).map((s) => s.trim()).filter(Boolean) }
     ed.setSaving(true)
-    const ok = await mutate((t) => api.saveDocument(t, payload), ed.isNew ? '資料を追加しました' : '資料を更新しました')
+    const ok = await mutate((t) => api.saveDocument(t, payload, ed.isNew), ed.isNew ? '資料を追加しました' : '資料を更新しました')
     ed.setSaving(false)
     if (ok) ed.close()
   }
@@ -346,7 +355,7 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
   const save = async () => {
     if (!ed.draft) return
     ed.setSaving(true)
-    const ok = await mutate((t) => api.saveAnnouncement(t, ed.draft!), ed.isNew ? 'お知らせを追加しました' : 'お知らせを更新しました')
+    const ok = await mutate((t) => api.saveAnnouncement(t, ed.draft!, ed.isNew), ed.isNew ? 'お知らせを追加しました' : 'お知らせを更新しました')
     ed.setSaving(false)
     if (ok) ed.close()
   }
@@ -403,7 +412,7 @@ function UsersAdmin({ me, data, mutate, header }: { me: Me; data: AdminData; mut
   const save = async () => {
     if (!ed.draft) return
     ed.setSaving(true)
-    const ok = await mutate((t) => api.saveUser(t, ed.draft!), ed.isNew ? 'アカウントを追加しました' : 'アカウントを更新しました')
+    const ok = await mutate((t) => api.saveUser(t, ed.draft!, ed.isNew), ed.isNew ? 'アカウントを追加しました' : 'アカウントを更新しました')
     ed.setSaving(false)
     if (ok) ed.close()
   }
@@ -459,7 +468,7 @@ function RolesAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate;
   const save = async () => {
     if (!ed.draft) return
     ed.setSaving(true)
-    const ok = await mutate((t) => api.saveRole(t, ed.draft!), ed.isNew ? 'ロールを作成しました' : 'ロールを更新しました')
+    const ok = await mutate((t) => api.saveRole(t, ed.draft!, ed.isNew), ed.isNew ? 'ロールを作成しました' : 'ロールを更新しました')
     ed.setSaving(false)
     if (ok) ed.close()
   }

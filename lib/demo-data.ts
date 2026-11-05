@@ -16,7 +16,7 @@ const t = '2026-11-01T09:00:00+09:00'
 
 export function createDemoDb(): DemoDb {
   const tool = (id: string, name: string, description: string, category: string, icon: string, tone: string, status: Tool['status'], order: number, visibleRoles: string[] = []): Tool => ({
-    id, name, description, category, icon, tone, status, url: '', visibleRoles, order, updatedAt: t,
+    id, name, description, category, icon, tone, status, url: '', visibleRoles, order, updatedAt: t, iconUrl: '',
   })
   const doc = (id: string, title: string, type: string, toolName: string, date: string, description: string, keywords: string, tags: string[], extra: Partial<PortalDocument> = {}): PortalDocument => ({
     id, title, type, tool: toolName, description, keywords, tags, driveUrl: '', downloadUrl: '', thumbnailUrl: '', date, pinned: false, visibleRoles: [], updatedAt: t, ...extra,
