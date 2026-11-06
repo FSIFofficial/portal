@@ -1,6 +1,6 @@
 name: CI
 
-# プルリクエストの段階で、型チェックとビルドが通るかを確認する（公開はしない）
+# プルリクエストの段階で、型チェック・ビルド・画面の自動テストが通るかを確認する（公開はしない）
 on:
   pull_request:
   workflow_dispatch:
@@ -27,3 +27,14 @@ jobs:
       - run: pnpm build
         env:
           NEXT_PUBLIC_BASE_PATH: /portal
+      # 画面の自動テスト（デモモードで、ログイン・権限・お気に入り・お知らせの確認・ゴミ箱・同時編集などを確認）
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
