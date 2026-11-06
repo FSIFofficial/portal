@@ -19,6 +19,7 @@ export interface DemoDb {
   trash: { key: string; sheet: 'Tools' | 'Documents' | 'Announcements' | 'Links' | 'Users'; itemKey: string; title: string; data: unknown; deletedAt: string; deletedBy: string }[]
   branding: Branding
   links: PortalLink[]
+  securityAlerts: { enabled: boolean; recipients: number }
 }
 
 // 日付は開いた日を基準にする（NEW表示が分かるよう、一部だけ最近更新したことにする）
@@ -64,6 +65,7 @@ export function createDemoDb(): DemoDb {
       doc('d7', '契約担当向け資料（サンプル）', 'マニュアル', '限定公開ツール（契約担当のみ）', '2026-09-26', '契約担当ロールにだけ表示される資料のサンプルです。', '契約', ['限定'], { visibleRoles: ['contract'] }),
     ],
     announcements: [
+      { id: 'a0', title: '先月のお知らせ（掲載終了・サンプル）', body: 'お知らせ一覧では、掲載が終わったお知らせも読み返せます。', level: 'info', active: true, startDate: daysAgo(40).slice(0, 10), endDate: daysAgo(20).slice(0, 10), visibleRoles: [], updatedAt: daysAgo(40) },
       { id: 'a1', title: 'デモ環境のお知らせ', body: 'これはサンプルのお知らせです。管理画面の「お知らせ」から編集できます。', level: 'info', active: true, startDate: '', endDate: '', visibleRoles: [], updatedAt: t },
       { id: 'a2', title: '利用規約を確認してください（サンプル）', body: '「確認しました」を押すと、管理画面で誰が確認したかが分かります。', level: 'important', active: true, startDate: '', endDate: '', visibleRoles: [], updatedAt: t, requireAck: true },
     ],
@@ -85,6 +87,7 @@ export function createDemoDb(): DemoDb {
     acks: [],
     errorDigest: { enabled: false, lastSentAt: '', recipients: 1 },
     trash: [],
+    securityAlerts: { enabled: true, recipients: 1 },
     links: [
       { id: 'l1', title: '公式ウェブサイト（サンプル）', url: 'https://example.com/', description: '団体の公式サイト', category: '公式', visibleRoles: [], order: 1, updatedAt: t },
       { id: 'l2', title: '活動報告ブログ（サンプル）', url: 'https://example.org/blog', description: '活動の記録をまとめたブログ', category: '公式', visibleRoles: [], order: 2, updatedAt: daysAgo(1) },

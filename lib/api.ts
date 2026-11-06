@@ -58,6 +58,7 @@ export const api = {
     call<DiscordStatus>('saveDiscord', token, { item }),
   testDiscord: (token: string) => call('testDiscord', token),
   saveBranding: (token: string, item: Branding) => call<Branding>('saveBranding', token, { item }),
+  setSecurityAlerts: (token: string, enabled: boolean) => call<{ enabled: boolean; recipients: number }>('setSecurityAlerts', token, { enabled }),
   bulkSetActive: (token: string, emails: string[], active: boolean) =>
     call<{ changed: string[]; skipped: { email: string; reason: string }[] }>('bulkSetActive', token, { emails, active }),
   listTrash: (token: string) => call<TrashItem[]>('listTrash', token),
@@ -69,7 +70,9 @@ export const api = {
   deleteTool: (token: string, id: string) => call('deleteTool', token, { id }),
   reorderTools: (token: string, ids: string[], baseIds: string[]) => call<Tool[]>('reorderTools', token, { ids, baseIds }),
   // notify=false のときは、新規追加でも Discord に通知しない
-  saveDocument: (token: string, item: Partial<PortalDocument>, isNew: boolean, notify = true) => call<PortalDocument>('saveDocument', token, { item, isNew, notify }),
+  // notifyUpdate=true のときは、編集でも Discord に「更新」として通知する
+  saveDocument: (token: string, item: Partial<PortalDocument>, isNew: boolean, notify = true, notifyUpdate = false) =>
+    call<PortalDocument>('saveDocument', token, { item, isNew, notify, notifyUpdate }),
   deleteDocument: (token: string, id: string) => call('deleteDocument', token, { id }),
   saveAnnouncement: (token: string, item: Partial<Announcement>, isNew: boolean, notify = true) => call<Announcement>('saveAnnouncement', token, { item, isNew, notify }),
   deleteAnnouncement: (token: string, id: string) => call('deleteAnnouncement', token, { id }),
@@ -106,7 +109,7 @@ export function fileToBase64(file: File): Promise<string> {
 // デモバックエンド（localStorage に保存）
 // ---------------------------------------------------------------------------
 
-const DEMO_KEY = 'fsif-portal-demo-db-v6'
+const DEMO_KEY = 'fsif-portal-demo-db-v7'
 const SUPER = 'superadmin'
 
 function loadDb(): DemoDb {
@@ -236,6 +239,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
   db.errorDigest ??= { enabled: false, lastSentAt: '', recipients: 1 }
   db.trash ??= []
   db.links ??= []
+  db.securityAlerts ??= { enabled: true, recipients: 1 }
   db.branding ??= { ...DEFAULT_BRANDING }
   db.discord ??= { configured: false, webhookHint: '', notifyDocuments: true, notifyAnnouncements: true, portalUrl: 'https://fsifofficial.github.io/portal/' }
   // デモではメールアドレスをそのままセッションとして使う
@@ -268,6 +272,9 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         links: db.links.filter((x) => canSee(me, x)).sort((a, b) => a.order - b.order),
         documents: db.documents.filter((x) => canSee(me, x)),
         announcements: db.announcements.filter((a) => a.active && canSee(me, a) && (!a.startDate || a.startDate <= d) && (!a.endDate || a.endDate >= d)),
+        announcementArchive: db.announcements
+          .filter((a) => a.active && canSee(me, a) && (!a.startDate || a.startDate <= d))
+          .sort((a, b) => (b.startDate || b.updatedAt.slice(0, 10)).localeCompare(a.startDate || a.updatedAt.slice(0, 10))),
         roles: db.roles.map((r) => ({ id: r.id, name: r.name })),
         gasVersion: EXPECTED_GAS_VERSION,
         help: db.help,
@@ -320,6 +327,11 @@ function demoCall(action: string, token: string, p: Payload): unknown {
       }
       return commit(db.branding)
     }
+    case 'setSecurityAlerts': {
+      requirePerm(me, '*')
+      db.securityAlerts = { ...db.securityAlerts, enabled: !!p.enabled }
+      return commit(db.securityAlerts)
+    }
     case 'bulkSetActive': {
       requirePerm(me, '*')
       const emails = list(p.emails)
@@ -371,8 +383,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
       return commit(db.errorDigest)
     }
     case 'setFavorites': {
-      const visible = db.tools.filter((x) => canSee(me, x)).map((x) => x.id)
-      const ids = list(p.ids).filter((id) => visible.includes(id)).slice(0, 50)
+      const visible = [...db.tools, ...db.links].filter((x) => canSee(me, x)).map((x) => x.id)
+      const ids = list(p.ids).filter((id) => visible.includes(id)).slice(0, 100)
       const user = db.users.find((u) => u.email === me.email)
       if (user) user.favorites = ids
       return commit({ favorites: ids })
@@ -467,6 +479,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         data.errorDigest = db.errorDigest
         data.discord = db.discord
         data.branding = db.branding
+        data.securityAlerts = db.securityAlerts
         data.uploadFolderUrl = ''
       }
       return commit(data)
@@ -508,6 +521,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         visibleRoles: validRoles(db, item.visibleRoles),
         order: existing?.order ?? Math.max(0, ...db.links.map((x) => x.order)) + 1,
         updatedAt: now(),
+        iconUrl: url(item.iconUrl),
       }
       upsert(db.links, 'id', record)
       log(existing ? 'Links.update' : 'Links.create', record.id, record.title)

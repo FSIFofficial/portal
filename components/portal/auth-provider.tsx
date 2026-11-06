@@ -54,6 +54,28 @@ function storeSession(s: StoredSession | null) {
   }
 }
 
+// 表示の高速化：前回受け取ったデータをブラウザに残し、次に開いたときにまず表示する（裏で最新に入れ替える）。
+// ログアウトすると消す。別のアカウントのデータを表示しないよう、セッションと組にして保存する
+const DATA_CACHE_KEY = 'fsif-portal-data-cache'
+
+function readDataCache(token: string): BootstrapData | null {
+  try {
+    const c = JSON.parse(window.localStorage.getItem(DATA_CACHE_KEY) ?? 'null') as { token: string; data: BootstrapData } | null
+    return c && c.token === token ? c.data : null
+  } catch {
+    return null
+  }
+}
+
+function writeDataCache(token: string, data: BootstrapData | null) {
+  try {
+    if (token && data) window.localStorage.setItem(DATA_CACHE_KEY, JSON.stringify({ token, data }))
+    else window.localStorage.removeItem(DATA_CACHE_KEY)
+  } catch {
+    // 容量オーバーなどで保存できなくても、表示が少し遅くなるだけ
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('loading')
   const [token, setToken] = useState('')
@@ -64,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clear = useCallback(() => {
     storeSession(null)
+    writeDataCache('', null)
     tokenRef.current = ''
     setToken('')
     setExpiresAt(0)
@@ -100,8 +123,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStatus('signedOut')
       return
     }
+    const cached = readDataCache(stored.token)
+    if (cached) {
+      // 前回のデータですぐに表示し、裏で最新を読み込む
+      accept(stored, cached)
+      api.bootstrap(stored.token)
+        .then((result) => accept(stored, result))
+        .catch((err) => {
+          // ログイン切れ・未登録・無効化のときだけログイン画面へ。通信エラーなどは前回のデータのまま表示を続ける
+          if (err instanceof ApiError && ['UNAUTHENTICATED', 'NOT_REGISTERED', 'FORBIDDEN'].includes(err.code)) fail(err)
+        })
+      return
+    }
     api.bootstrap(stored.token).then((result) => accept(stored, result)).catch(fail)
   }, [accept, fail])
+
+  // 最新のデータを受け取るたびに保存しておく（お気に入りの変更なども含む）
+  useEffect(() => {
+    if (token && data) writeDataCache(token, data)
+  }, [token, data])
 
   // セッションの期限が切れたらログイン画面に戻す
   useEffect(() => {
