@@ -2,6 +2,7 @@
 // 実際に開けるかどうかは Drive 側の共有設定に従う（ポータルの権限とは別に Drive の共有設定も必要）。
 
 import type { PortalDocument } from './types'
+import { splitIconUrl } from './icon'
 
 export type DriveKind = 'file' | 'document' | 'spreadsheets' | 'presentation' | 'forms' | 'folder' | 'unknown'
 
@@ -80,7 +81,9 @@ export function thumbnailUrl(doc: Pick<PortalDocument, 'driveUrl' | 'thumbnailUr
 }
 
 /** 画像として表示するURL。Driveの共有リンクならサムネイルURLに変換する */
-export function imageUrl(url: string, size = 200): string {
+export function imageUrl(value: string, size = 200): string {
+  // アイコンの表示位置（#fsif-crop=…）が付いていれば外す
+  const url = splitIconUrl(value).src
   if (!url) return ''
   const info = parseDriveUrl(url)
   if (info && info.kind !== 'folder' && info.kind !== 'forms') return `https://drive.google.com/thumbnail?id=${info.id}&sz=w${size}`

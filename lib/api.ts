@@ -5,7 +5,7 @@ import { DEMO_MODE, EXPECTED_GAS_VERSION, GAS_URL } from './config'
 import { createDemoDb, type DemoDb } from './demo-data'
 import type {
   AckStatus, AdminData, CategoryKind, LogFilter, SelfCheckResult, Announcement, BackupStatus, Branding, PortalLink, DiscordStatus, TrashItem, ErrorDigestStatus, BootstrapData, BulkAddResult, HelpContent, LogEntry, Me, Permission, PortalDocument, Role,
-  Settings, SystemCheck, Tool, UploadResult, UsageStats, User,
+  Settings, SystemCheck, Tool, UploadFolders, UploadResult, UsageStats, User,
 } from './types'
 import { DEFAULT_BRANDING } from './types'
 
@@ -98,6 +98,7 @@ export const api = {
     call<BulkAddResult>('bulkAddUsers', token, { users, roles }),
   backupNow: (token: string) => call<BackupStatus>('backupNow', token),
   setBackupSchedule: (token: string, enabled: boolean) => call<BackupStatus>('setBackupSchedule', token, { enabled }),
+  setUploadFolder: (token: string, purpose: 'document' | 'icon', url: string) => call<UploadFolders>('setUploadFolder', token, { purpose, url }),
 }
 
 /** ファイルを base64 文字列に変換する（アップロード用） */
@@ -245,6 +246,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
   db.trash ??= []
   db.links ??= []
   db.securityAlerts ??= { enabled: true, recipients: 1 }
+  db.uploadFolders ??= { document: { url: '', name: '', custom: false }, icon: { url: '', name: '', custom: false } }
   db.branding ??= { ...DEFAULT_BRANDING }
   db.discord ??= { configured: false, webhookHint: '', notifyDocuments: true, notifyAnnouncements: true, portalUrl: 'https://fsifofficial.github.io/portal/' }
   // デモではメールアドレスをそのままセッションとして使う
@@ -331,6 +333,18 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         primaryColor: color.toLowerCase(),
       }
       return commit(db.branding)
+    }
+    case 'setUploadFolder': {
+      requirePerm(me, '*')
+      // デモでは Drive に接続できないので、リンクの形だけ確かめて保存する
+      const raw = String(p.url ?? '').trim()
+      const m = raw.match(/drive\.google\.com\/drive\/(?:u\/\d+\/)?(?:mobile\/)?folders\/([\w-]+)/) ?? raw.match(/[?&]id=([\w-]+)/)
+      const id = m ? m[1] : /^[\w-]{10,}$/.test(raw) ? raw : ''
+      if (raw && !id) fail('BAD_REQUEST', 'Driveのフォルダのリンク（https://drive.google.com/drive/folders/…）を貼ってください')
+      const folder = { url: id ? `https://drive.google.com/drive/folders/${id}` : '', name: id ? `デモのフォルダ（${id.slice(0, 6)}…）` : '', custom: !!id }
+      db.uploadFolders = { ...db.uploadFolders!, [p.purpose === 'icon' ? 'icon' : 'document']: folder }
+      log('Settings.uploadFolder', String(p.purpose ?? ''), id ? folder.name : '既定に戻す')
+      return commit(db.uploadFolders)
     }
     case 'setSecurityAlerts': {
       requirePerm(me, '*')
@@ -486,6 +500,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         data.branding = db.branding
         data.securityAlerts = db.securityAlerts
         data.uploadFolderUrl = ''
+        data.uploadFolders = db.uploadFolders
       }
       return commit(data)
     }

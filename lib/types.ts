@@ -184,6 +184,8 @@ export interface AdminData {
   branding?: Branding
   links?: PortalLink[]
   securityAlerts?: { enabled: boolean; recipients: number }
+  /** アップロードの保存先（GAS 2.7.0 以降） */
+  uploadFolders?: UploadFolders
 }
 
 export interface HelpContent {
@@ -214,6 +216,18 @@ export interface UsageRow {
 export interface UsageStats {
   months: string[]
   rows: UsageRow[]
+}
+
+export interface UploadFolder {
+  url: string
+  name: string
+  /** 管理者が指定したフォルダか（false は既定：資料は自動で作るフォルダ、アイコンは資料と同じ） */
+  custom: boolean
+}
+
+export interface UploadFolders {
+  document: UploadFolder
+  icon: UploadFolder
 }
 
 export interface UploadResult {

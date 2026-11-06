@@ -14,7 +14,8 @@ import { useAuth } from './auth-provider'
 import { ModalFooter, RowActions, SectionHeader, Table, confirmDelete, fmt, useEditor, type Mutate } from './admin-shared'
 import { AdminGuide } from './admin-guide'
 import { LinksAdmin } from './admin-links'
-import { AckStatusModal, BackupPanel, BrandingPanel, CategoryAdmin, SecurityAlertsPanel, SelfCheckPanel, BulkImportModal, DiscordPanel, TrashAdmin, ErrorDigestPanel, NotifyCheckbox, HelpAdmin, UploadButton, UsageAdmin } from './admin-extra'
+import { IconImageField } from './icon-field'
+import { AckStatusModal, BackupPanel, BrandingPanel, CategoryAdmin, SecurityAlertsPanel, SelfCheckPanel, BulkImportModal, DiscordPanel, TrashAdmin, ErrorDigestPanel, NotifyCheckbox, HelpAdmin, UploadButton, UploadFolderPanel, UsageAdmin } from './admin-extra'
 import type { Navigate } from './router'
 import {
   Button, Checkbox, EmptyState, Field, Modal, RoleBadges, RolePicker, Select, StatusBadge, TONES, TOOL_ICONS, TextArea, TextInput,
@@ -171,13 +172,13 @@ function ToolsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate;
             </Field>
           </div>
           <Field label="接続先URL" hint="「開く」ボタンで新しいタブに開くURLです。"><TextInput type="url" placeholder="https://" value={ed.draft.url} onChange={(e) => ed.set('url', e.target.value)} /></Field>
-          <Field group label="アイコン画像" hint="画像を設定するとアイコンの代わりに表示されます。「画像をアップロード」を使うとDriveに保存して自動で設定します（誰でも表示できるリンク共有になります）。Driveの共有リンクや画像のURLを貼ることもできます。正方形の画像がおすすめです。">
-            <div className="flex items-center gap-3">
-              <ToolIcon name={ed.draft.icon} tone={ed.draft.tone} src={ed.draft.iconUrl} />
-              <TextInput type="url" aria-label="アイコン画像のURL" placeholder="https://drive.google.com/file/d/... または画像のURL" value={ed.draft.iconUrl} onChange={(e) => ed.set('iconUrl', e.target.value)} />
-              {ed.draft.iconUrl && <Button variant="ghost" onClick={() => ed.set('iconUrl', '')}>クリア</Button>}
-            </div>
-            <div className="mt-2"><UploadButton purpose="icon" label="画像をアップロード" onUploaded={(res) => ed.set('iconUrl', res.url)} /></div>
+          <Field group label="アイコン画像" hint="画像を設定するとアイコンの代わりに表示されます。「画像をアップロード」を使うとDriveに保存して自動で設定します（誰でも表示できるリンク共有になります）。Driveの共有リンクや画像のURLを貼ることもできます。貼るかアップロードすると、表示する位置と大きさを決める画面が開きます。">
+            <IconImageField
+              value={ed.draft.iconUrl}
+              onChange={(v) => ed.set('iconUrl', v)}
+              placeholder="https://drive.google.com/file/d/... または画像のURL"
+              preview={(v) => <ToolIcon name={ed.draft!.icon} tone={ed.draft!.tone} src={v} />}
+            />
           </Field>
           <Field group label={ed.draft.iconUrl ? 'アイコン（画像が表示できないときの代わり）' : 'アイコン'}>
             <div className="flex flex-wrap gap-2">
@@ -590,7 +591,8 @@ function SettingsAdmin({ data, mutate, header }: { data: AdminData; mutate: Muta
         <SecurityAlertsPanel initial={data.securityAlerts} />
         <DiscordPanel initial={data.discord} />
         <ErrorDigestPanel initial={data.errorDigest} />
-        <BackupPanel initial={data.backup} uploadFolderUrl={data.uploadFolderUrl} />
+        <UploadFolderPanel initial={data.uploadFolders} legacyUrl={data.uploadFolderUrl} />
+        <BackupPanel initial={data.backup} />
       </div>
     </>
   )
@@ -603,7 +605,7 @@ function SettingsAdmin({ data, mutate, header }: { data: AdminData; mutate: Muta
 const ACTION_LABELS: Record<string, string> = {
   create: '追加', update: '更新', delete: '削除', reorder: '並べ替え', autoRegister: '自動登録', restore: '復元', purge: '完全削除',
   renameCategory: 'カテゴリ名の変更', bulkCreate: '一括登録', bulkDisable: '一括無効化', bulkEnable: '一括有効化', error: 'エラー',
-  selfCheck: '動作チェック', upload: 'アップロード', driveSync: '共有の同期', restrictLink: 'リンク共有オフ',
+  selfCheck: '動作チェック', upload: 'アップロード', uploadFolder: 'アップロード先の変更', driveSync: '共有の同期', restrictLink: 'リンク共有オフ',
 }
 const SHEET_LABELS: Record<string, string> = {
   Tools: 'ツール', Documents: '資料', Links: 'リンク', Announcements: 'お知らせ', Users: 'アカウント', Roles: 'ロール', Settings: '設定', Help: 'ヘルプ', user: 'アカウント',

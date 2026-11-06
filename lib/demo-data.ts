@@ -1,6 +1,6 @@
 // デモモード（GAS未接続）で使う架空のサンプルデータ。実際の組織データは含めないこと（このファイルはGitHubで公開される）。
 
-import type { Announcement, BackupStatus, Branding, PortalLink, DiscordStatus, ErrorDigestStatus, HelpContent, PortalDocument, Role, Settings, Tool, User } from './types'
+import type { Announcement, BackupStatus, Branding, PortalLink, DiscordStatus, ErrorDigestStatus, HelpContent, PortalDocument, Role, Settings, Tool, UploadFolders, User } from './types'
 
 export interface DemoDb {
   users: User[]
@@ -20,6 +20,7 @@ export interface DemoDb {
   branding: Branding
   links: PortalLink[]
   securityAlerts: { enabled: boolean; recipients: number }
+  uploadFolders?: UploadFolders
 }
 
 // 日付は開いた日を基準にする（NEW表示が分かるよう、一部だけ最近更新したことにする）
