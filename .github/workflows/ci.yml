@@ -28,7 +28,18 @@ jobs:
         env:
           NEXT_PUBLIC_BASE_PATH: /portal
       # 画面の自動テスト（デモモードで、ログイン・権限・お気に入り・お知らせの確認・ゴミ箱・同時編集などを確認）
-      - run: pnpm exec playwright install --with-deps chromium
+      # テスト用ブラウザは毎回ダウンロードせず、キャッシュから使う（Playwrightの版が変わったときだけ取り直す）
+      - id: pw-version
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
       - run: pnpm test:e2e
       - if: failure()
         uses: actions/upload-artifact@v4

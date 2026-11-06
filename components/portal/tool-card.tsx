@@ -70,15 +70,15 @@ export function ToolCard({ tool, docCount, onDocs, onMissingUrl, dragHandle, res
         </div>
       </div>
       <h3 className="mt-4 flex items-center gap-2 text-[16px] font-bold text-[#1b304b]">{tool.name}{isNew(tool, data?.me) && <NewBadge />}</h3>
-      <p className="mt-1 text-[13px] leading-6 text-[#718096]">{tool.description}</p>
+      <p className="mt-1 text-[13px] leading-6 text-[#4f5f70]">{tool.description}</p>
       <div className="mt-auto flex items-center justify-between gap-2 pt-5">
-        <span className="truncate rounded-md bg-[#f5f7fa] px-2 py-1 text-[11px] text-[#718096]">{tool.category || 'その他'}</span>
+        <span className="truncate rounded-md bg-[#f5f7fa] px-2 py-1 text-[11px] text-[#4f5f70]">{tool.category || 'その他'}</span>
         <div className="flex shrink-0 items-center gap-2">
           {docCount > 0 && (
-            <button onClick={onDocs} className="text-[12px] font-semibold text-[#4f6b88] hover:text-[var(--brand)]">使い方</button>
+            <button onClick={onDocs} className="text-[12px] font-semibold text-[#4f6b88] hover:text-[var(--brand-fg)]">使い方</button>
           )}
           {disabled ? (
-            <span className="rounded-lg bg-[#dfe5eb] px-3 py-2 text-[12px] font-semibold text-[#6b7785]">{tool.status}</span>
+            <span className="rounded-lg bg-[#dfe5eb] px-3 py-2 text-[12px] font-semibold text-[#4f5f70]">{tool.status}</span>
           ) : tool.url ? (
             <a href={tool.url} target="_blank" rel="noopener noreferrer" onClick={() => track('tool', tool.id)} className={openButtonClass}>開く<ExternalLink size={13} /></a>
           ) : (
@@ -92,7 +92,7 @@ export function ToolCard({ tool, docCount, onDocs, onMissingUrl, dragHandle, res
 
 export function DragHandle({ label }: { label: string }) {
   return (
-    <span aria-label={label} className="absolute right-3 top-3 cursor-grab rounded-lg p-1.5 text-[#9aa8b8] hover:bg-[#f3f6f9]">
+    <span aria-label={label} className="absolute right-3 top-3 cursor-grab rounded-lg p-1.5 text-[#5b6b7c] hover:bg-[#f3f6f9]">
       <GripVertical size={18} />
     </span>
   )

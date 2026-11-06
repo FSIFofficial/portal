@@ -2,12 +2,13 @@
 
 // 管理画面の追加機能：ヘルプ編集・利用状況・一括登録・バックアップ・アップロード・ゴミ箱・ポータルの見た目
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, BellRing, MessageSquare, ShieldAlert, Palette, RotateCcw, CheckCircle2, Circle, DatabaseBackup, ExternalLink, LoaderCircle, Plus, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, BellRing, Stethoscope, XCircle, MessageSquare, ShieldAlert, Palette, RotateCcw, CheckCircle2, Circle, DatabaseBackup, ExternalLink, LoaderCircle, Plus, Trash2, Upload } from 'lucide-react'
 import { api, fileToBase64 } from '@/lib/api'
 import { DEMO_MODE } from '@/lib/config'
 import {
   DEFAULT_BRANDING, type AckStatus, type AdminData, type Announcement, type BackupStatus, type Branding, type BulkAddResult, type DiscordStatus,
-  type ErrorDigestStatus, type HelpContent, type TrashItem, type UploadResult, type UsageStats,
+  type CategoryKind, type ErrorDigestStatus, type HelpContent, type Me, type SelfCheckResult, type TrashItem, type UploadResult, type UsageStats,
+  can,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { SectionHeader, Table, fmt, type Mutate } from './admin-shared'
@@ -70,7 +71,7 @@ export function HelpAdmin({ section, data, mutate, loading, onReload }: { sectio
             <Button variant="secondary" className="self-start" onClick={() => setDraft({ ...draft, faqs: [...draft.faqs, { q: '', a: '' }] })}><Plus size={14} />質問を追加</Button>
           </div>
         </Field>
-        <p className="text-[11px] text-[#8a99a9]">空欄の行は保存時に取り除かれます。</p>
+        <p className="text-[11px] text-[#5b6b7c]">空欄の行は保存時に取り除かれます。</p>
       </div>
     </>
   )
@@ -122,14 +123,14 @@ export function UsageAdmin({ section, data }: { section: SectionInfo; data: Admi
         {stats && unused > 0 && <span className="ml-auto text-[12px] text-[#92400e]">直近3か月で一度も使われていない{kind === 'tool' ? 'ツール' : kind === 'doc' ? '資料' : 'リンク'}：{unused}件</span>}
       </div>
       {!stats ? (
-        <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-[#718096]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
+        <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-[#4f5f70]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
       ) : (
         <Table head={['名前', `今月（${stats.months[0]}）`, `先月（${stats.months[1]}）`, '直近3か月', '最後に使われた日時']} empty={!rows.length}>
           {rows.map((r) => (
             <tr key={r.id} className={cn('border-t border-[#edf0f3]', r.last3Months === 0 && 'bg-[#fffbf2]')}>
-              <td className="px-5 py-3 font-semibold text-[#38536f]">{r.name}<span className="block text-[11px] font-normal text-[#8a99a9]">{r.sub}</span></td>
+              <td className="px-5 py-3 font-semibold text-[#38536f]">{r.name}<span className="block text-[11px] font-normal text-[#5b6b7c]">{r.sub}</span></td>
               <td className="px-5 py-3 text-[#38536f]">{r.thisMonth}</td>
-              <td className="px-5 py-3 text-[#718296]">{r.lastMonth}</td>
+              <td className="px-5 py-3 text-[#4f5f70]">{r.lastMonth}</td>
               <td className="px-5 py-3">
                 <div className="flex items-center gap-2">
                   <span className="w-8 text-right font-bold text-[#1b304b]">{r.last3Months}</span>
@@ -137,12 +138,12 @@ export function UsageAdmin({ section, data }: { section: SectionInfo; data: Admi
                   {r.last3Months === 0 && <span className="rounded bg-[#fff5df] px-1.5 py-0.5 text-[10px] font-semibold text-[#92400e]">利用なし</span>}
                 </div>
               </td>
-              <td className="whitespace-nowrap px-5 py-3 text-[#718296]">{fmt(r.lastAt)}</td>
+              <td className="whitespace-nowrap px-5 py-3 text-[#4f5f70]">{fmt(r.lastAt)}</td>
             </tr>
           ))}
         </Table>
       )}
-      <p className="px-5 py-4 text-[11px] text-[#8a99a9]">「開く」「資料を開く」「プレビュー」「ダウンロード」、リンク集のリンクが押された回数です（同じ人が何度押しても数えます）。</p>
+      <p className="px-5 py-4 text-[11px] text-[#5b6b7c]">「開く」「資料を開く」「プレビュー」「ダウンロード」、リンク集のリンクが押された回数です（同じ人が何度押しても数えます）。</p>
     </>
   )
 }
@@ -223,11 +224,11 @@ export function BulkImportModal({ data, onClose, mutate }: { data: AdminData; on
           {rows.length > 0 && (
             <div className="max-h-[260px] overflow-y-auto rounded-xl border border-[#edf0f3]">
               <table className="w-full text-left text-[12px]">
-                <thead className="sticky top-0 bg-[#fafbfd] text-[#8998a8]"><tr><th className="px-3 py-2">名前</th><th className="px-3 py-2">メールアドレス</th><th className="px-3 py-2">判定</th></tr></thead>
+                <thead className="sticky top-0 bg-[#fafbfd] text-[#5b6b7c]"><tr><th className="px-3 py-2">名前</th><th className="px-3 py-2">メールアドレス</th><th className="px-3 py-2">判定</th></tr></thead>
                 <tbody>
                   {rows.map((r, i) => (
                     <tr key={i} className="border-t border-[#edf0f3]">
-                      <td className="px-3 py-2">{r.name || <span className="text-[#9aa7b5]">（メールアドレスを使用）</span>}</td>
+                      <td className="px-3 py-2">{r.name || <span className="text-[#5b6b7c]">（メールアドレスを使用）</span>}</td>
                       <td className="px-3 py-2">{r.email || '—'}</td>
                       <td className="px-3 py-2">
                         {!r.valid ? <span className="text-[#b42318]">メールアドレスが不正</span> : existing.has(r.email) ? <span className="text-[#92400e]">登録済み（スキップ）</span> : <span className="text-[#1c7a43]">登録する</span>}
@@ -270,12 +271,12 @@ export function BackupPanel({ initial, uploadFolderUrl }: { initial?: BackupStat
   return (
     <div className="mt-8 rounded-xl border border-[#edf0f3] p-4">
       <h3 className="flex items-center gap-2 text-[14px] font-bold"><DatabaseBackup size={16} className="text-[#4285b8]" />バックアップ</h3>
-      <p className="mt-1 text-[12px] leading-5 text-[#8a99a9]">スプレッドシートのコピーをGoogle Driveの「FSIF Portal バックアップ」フォルダに保存します。新しいものから{status?.keep ?? 10}個を残し、古いものはゴミ箱に移します（30日間は復元できます）。</p>
+      <p className="mt-1 text-[12px] leading-5 text-[#5b6b7c]">スプレッドシートのコピーをGoogle Driveの「FSIF Portal バックアップ」フォルダに保存します。新しいものから{status?.keep ?? 10}個を残し、古いものはゴミ箱に移します（30日間は復元できます）。</p>
       <div className="mt-3 text-[12px] leading-6 text-[#38536f]">
         <p>自動バックアップ：<b>{status?.enabled ? '毎週月曜 4時ごろ' : 'オフ'}</b></p>
-        <p>最後のバックアップ：{status?.lastAt ? <>{fmt(status.lastAt)}{status.lastUrl && <a href={status.lastUrl} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 text-[var(--brand)] hover:underline">開く<ExternalLink size={12} /></a>}</> : 'まだありません'}</p>
+        <p>最後のバックアップ：{status?.lastAt ? <>{fmt(status.lastAt)}{status.lastUrl && <a href={status.lastUrl} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 text-[var(--brand-fg)] hover:underline">開く<ExternalLink size={12} /></a>}</> : 'まだありません'}</p>
         {status?.lastError && <p className="text-[#b42318]">前回のエラー：{status.lastError}</p>}
-        {status?.folderUrl && <a href={status.folderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--brand)] hover:underline">バックアップのフォルダを開く<ExternalLink size={12} /></a>}
+        {status?.folderUrl && <a href={status.folderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--brand-fg)] hover:underline">バックアップのフォルダを開く<ExternalLink size={12} /></a>}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="secondary" disabled={busy} onClick={() => act((t) => api.backupNow(t), 'バックアップを作成しました', true)}>今すぐバックアップ</Button>
@@ -285,7 +286,7 @@ export function BackupPanel({ initial, uploadFolderUrl }: { initial?: BackupStat
       </div>
       {uploadFolderUrl && (
         <p className="mt-4 border-t border-[#edf0f3] pt-3 text-[12px] text-[#55708b]">
-          画面からアップロードしたファイルの保存先：<a href={uploadFolderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--brand)] hover:underline">FSIF Portal アップロード<ExternalLink size={12} /></a>
+          画面からアップロードしたファイルの保存先：<a href={uploadFolderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--brand-fg)] hover:underline">FSIF Portal アップロード<ExternalLink size={12} /></a>
         </p>
       )}
     </div>
@@ -358,27 +359,27 @@ export function AckStatusModal({ announcement, onClose }: { announcement: Announ
   return (
     <Modal wide title={`確認状況：${announcement.title}`} onClose={onClose} footer={<Button variant="secondary" onClick={onClose}>閉じる</Button>}>
       {!status ? (
-        <div className="flex items-center justify-center gap-2 p-10 text-[13px] text-[#718096]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
+        <div className="flex items-center justify-center gap-2 p-10 text-[13px] text-[#4f5f70]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
       ) : (
         <>
           <div className="mb-4">
             <p className="text-[13px] font-bold text-[#1b304b]">{status.acked.length} / {total}人が確認済み</p>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#eef1f5]"><div className="h-full rounded-full bg-[#1c7a43]" style={{ width: `${total ? (status.acked.length / total) * 100 : 0}%` }} /></div>
-            <p className="mt-1 text-[11px] text-[#8a99a9]">対象：このお知らせを見られる有効なアカウント</p>
+            <p className="mt-1 text-[11px] text-[#5b6b7c]">対象：このお知らせを見られる有効なアカウント</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <p className="mb-2 text-[12px] font-bold text-[#b42318]">未確認（{status.pending.length}人）</p>
               <ul className="flex flex-col gap-1 text-[12px]">
-                {status.pending.map((u) => <li key={u.email} className="flex items-center gap-2"><Circle size={12} className="shrink-0 text-[#c2ccd6]" /><span className="font-semibold">{u.name}</span><span className="truncate text-[#8a99a9]">{u.email}</span></li>)}
-                {!status.pending.length && <li className="text-[#8a99a9]">全員が確認しました</li>}
+                {status.pending.map((u) => <li key={u.email} className="flex items-center gap-2"><Circle size={12} className="shrink-0 text-[#c2ccd6]" /><span className="font-semibold">{u.name}</span><span className="truncate text-[#5b6b7c]">{u.email}</span></li>)}
+                {!status.pending.length && <li className="text-[#5b6b7c]">全員が確認しました</li>}
               </ul>
             </div>
             <div>
               <p className="mb-2 text-[12px] font-bold text-[#1c7a43]">確認済み（{status.acked.length}人）</p>
               <ul className="flex flex-col gap-1 text-[12px]">
-                {status.acked.map((u) => <li key={u.email} className="flex items-center gap-2"><CheckCircle2 size={12} className="shrink-0 text-[#1c7a43]" /><span className="font-semibold">{u.name}</span><span className="text-[#8a99a9]">{fmt(u.ackAt)}</span></li>)}
-                {!status.acked.length && <li className="text-[#8a99a9]">まだいません</li>}
+                {status.acked.map((u) => <li key={u.email} className="flex items-center gap-2"><CheckCircle2 size={12} className="shrink-0 text-[#1c7a43]" /><span className="font-semibold">{u.name}</span><span className="text-[#5b6b7c]">{fmt(u.ackAt)}</span></li>)}
+                {!status.acked.length && <li className="text-[#5b6b7c]">まだいません</li>}
               </ul>
             </div>
           </div>
@@ -412,9 +413,9 @@ export function ErrorDigestPanel({ initial }: { initial?: ErrorDigestStatus }) {
   return (
     <div className="mt-8 rounded-xl border border-[#edf0f3] p-4">
       <h3 className="flex items-center gap-2 text-[14px] font-bold"><BellRing size={16} className="text-[#4285b8]" />エラー通知メール</h3>
-      <p className="mt-1 text-[12px] leading-5 text-[#8a99a9]">毎朝8時ごろ、直近24時間に想定外のエラー（GASの不具合・Driveの共有失敗・バックアップ失敗など）があったときだけ、全権管理者（{status?.recipients ?? 0}人）にメールでまとめて知らせます。エラーがなければ送りません。</p>
+      <p className="mt-1 text-[12px] leading-5 text-[#5b6b7c]">毎朝8時ごろ、直近24時間に想定外のエラー（GASの不具合・Driveの共有失敗・バックアップ失敗など）があったときだけ、全権管理者（{status?.recipients ?? 0}人）にメールでまとめて知らせます。エラーがなければ送りません。</p>
       <div className="mt-3 text-[12px] leading-6 text-[#38536f]">
-        <p>通知：<b>{status?.enabled ? '毎朝' : 'オフ'}</b>{status?.lastSentAt && <span className="ml-3 text-[#8a99a9]">最後に送った日時：{fmt(status.lastSentAt)}</span>}</p>
+        <p>通知：<b>{status?.enabled ? '毎朝' : 'オフ'}</b>{status?.lastSentAt && <span className="ml-3 text-[#5b6b7c]">最後に送った日時：{fmt(status.lastSentAt)}</span>}</p>
       </div>
       <Button variant="secondary" className="mt-3" disabled={busy} onClick={() => void toggle()}>{status?.enabled ? 'エラー通知をオフにする' : 'エラー通知をオンにする'}</Button>
     </div>
@@ -466,7 +467,7 @@ export function DiscordPanel({ initial }: { initial?: DiscordStatus }) {
   return (
     <div className="mt-8 rounded-xl border border-[#edf0f3] p-4">
       <h3 className="flex items-center gap-2 text-[14px] font-bold"><MessageSquare size={16} className="text-[#5865f2]" />Discordへの新着通知</h3>
-      <p className="mt-1 text-[12px] leading-5 text-[#8a99a9]">
+      <p className="mt-1 text-[12px] leading-5 text-[#5b6b7c]">
         資料やお知らせを新しく追加したとき、DiscordのチャンネルにWebhookで投稿します。<b>公開範囲が「全員」のものだけ</b>が対象です（限定公開の内容はDiscordに出しません）。更新や削除は通知しません。
       </p>
       <p className="mt-3 text-[12px] text-[#38536f]">状態：<b>{status?.configured ? `設定済み（URL末尾 ${status.webhookHint}）` : '未設定（通知は送られません）'}</b></p>
@@ -489,10 +490,10 @@ export function DiscordPanel({ initial }: { initial?: DiscordStatus }) {
 
 /** 新規追加フォームの「Discordに通知する」チェック */
 export function NotifyCheckbox({ checked, onChange, restricted }: { checked: boolean; onChange: (v: boolean) => void; restricted: boolean }) {
-  if (restricted) return <p className="mb-4 text-[11px] text-[#8a99a9]">限定公開のため、Discordには通知されません。</p>
+  if (restricted) return <p className="mb-4 text-[11px] text-[#5b6b7c]">限定公開のため、Discordには通知されません。</p>
   return (
     <div className="mb-4">
-      <Checkbox checked={checked} onChange={onChange} label={<>Discordに通知する<span className="block text-[11px] text-[#8a99a9]">Discordへの通知が設定されている場合に、保存と同時に投稿されます。</span></>} />
+      <Checkbox checked={checked} onChange={onChange} label={<>Discordに通知する<span className="block text-[11px] text-[#5b6b7c]">Discordへの通知が設定されている場合に、保存と同時に投稿されます。</span></>} />
     </div>
   )
 }
@@ -533,15 +534,15 @@ export function TrashAdmin({ section, mutate }: { section: SectionInfo; mutate: 
     <>
       <SectionHeader section={section} loading={loading} onReload={load} />
       {!items ? (
-        <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-[#718096]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
+        <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-[#4f5f70]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
       ) : (
         <Table head={['種類', '名前', '削除した日時', '削除した人', '']} empty={!items.length}>
           {items.map((t) => (
             <tr key={t.key} className="border-t border-[#edf0f3]">
               <td className="whitespace-nowrap px-5 py-3"><span className="rounded bg-[#eef1f5] px-1.5 py-0.5 text-[11px] font-semibold text-[#55708b]">{SHEET_LABELS[t.sheet]}</span></td>
-              <td className="px-5 py-3 font-semibold text-[#38536f]">{t.title}{t.sheet === 'Users' && <span className="block text-[11px] font-normal text-[#8a99a9]">{t.itemKey}</span>}</td>
-              <td className="whitespace-nowrap px-5 py-3 text-[#718296]">{fmt(t.deletedAt)}<span className="block text-[11px] text-[#9aa7b5]">あと{daysLeft(t.deletedAt)}日で自動削除</span></td>
-              <td className="px-5 py-3 text-[#718296]">{t.deletedBy}</td>
+              <td className="px-5 py-3 font-semibold text-[#38536f]">{t.title}{t.sheet === 'Users' && <span className="block text-[11px] font-normal text-[#5b6b7c]">{t.itemKey}</span>}</td>
+              <td className="whitespace-nowrap px-5 py-3 text-[#4f5f70]">{fmt(t.deletedAt)}<span className="block text-[11px] text-[#5b6b7c]">あと{daysLeft(t.deletedAt)}日で自動削除</span></td>
+              <td className="px-5 py-3 text-[#4f5f70]">{t.deletedBy}</td>
               <td className="px-5 py-3">
                 <div className="flex justify-end gap-2">
                   <Button variant="secondary" onClick={() => void restore(t)}><RotateCcw size={14} />元に戻す</Button>
@@ -552,7 +553,7 @@ export function TrashAdmin({ section, mutate }: { section: SectionInfo; mutate: 
           ))}
         </Table>
       )}
-      <p className="px-5 py-4 text-[11px] text-[#8a99a9]">元に戻すと、削除する前の内容（公開範囲・設定を含む）で復活します。ツールは並び順の最後に戻ります。</p>
+      <p className="px-5 py-4 text-[11px] text-[#5b6b7c]">元に戻すと、削除する前の内容（公開範囲・設定を含む）で復活します。ツールは並び順の最後に戻ります。</p>
     </>
   )
 }
@@ -584,8 +585,8 @@ export function BrandingPanel({ initial }: { initial?: Branding }) {
 
   return (
     <div className="mt-8 rounded-xl border border-[#edf0f3] p-4">
-      <h3 className="flex items-center gap-2 text-[14px] font-bold"><Palette size={16} className="text-[var(--brand)]" />ポータル名・ロゴ・色</h3>
-      <p className="mt-1 text-[12px] leading-5 text-[#8a99a9]">ヘッダーやログイン画面に表示される名前・ロゴと、ボタンなどのメインカラーを変えられます。ホーム画面に追加したときのアプリ名とアイコンは変わりません。</p>
+      <h3 className="flex items-center gap-2 text-[14px] font-bold"><Palette size={16} className="text-[var(--brand-fg)]" />ポータル名・ロゴ・色</h3>
+      <p className="mt-1 text-[12px] leading-5 text-[#5b6b7c]">ヘッダーやログイン画面に表示される名前・ロゴと、ボタンなどのメインカラーを変えられます。ホーム画面に追加したときのアプリ名とアイコンは変わりません。</p>
       <div className="mt-3 grid gap-x-4 sm:grid-cols-2">
         <Field label="ポータル名" required><TextInput value={draft.portalName} maxLength={40} onChange={(e) => setDraft({ ...draft, portalName: e.target.value })} /></Field>
         <Field label="キャッチコピー" hint="ロゴの下の小さな文字。空欄なら表示しません。"><TextInput value={draft.tagline} maxLength={40} onChange={(e) => setDraft({ ...draft, tagline: e.target.value })} /></Field>
@@ -604,10 +605,10 @@ export function BrandingPanel({ initial }: { initial?: Branding }) {
         </div>
       </Field>
       <div className="mb-4 flex items-center gap-3 rounded-xl border border-[#edf0f3] bg-[#f8fafc] p-3" style={validColor ? ({ ['--brand' as string]: draft.primaryColor } as React.CSSProperties) : undefined}>
-        <span className="text-[11px] font-bold text-[#8a99a9]">プレビュー</span>
+        <span className="text-[11px] font-bold text-[#5b6b7c]">プレビュー</span>
         <span className="rounded-lg bg-[var(--brand)] px-3 py-2 text-[12px] font-bold text-white">ボタン</span>
-        <span className="rounded-lg bg-[var(--brand-soft)] px-3 py-2 text-[12px] font-bold text-[var(--brand)]">選択中のメニュー</span>
-        <span className="text-[12px] font-bold text-[var(--brand)]">リンク</span>
+        <span className="rounded-lg bg-[var(--brand-soft)] px-3 py-2 text-[12px] font-bold text-[var(--brand-fg)]">選択中のメニュー</span>
+        <span className="text-[12px] font-bold text-[var(--brand-fg)]">リンク</span>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button disabled={busy || !validColor || !draft.portalName.trim()} onClick={() => void save(draft, 'ポータルの見た目を保存しました')}>保存</Button>
@@ -641,11 +642,139 @@ export function SecurityAlertsPanel({ initial }: { initial?: { enabled: boolean;
   return (
     <div className="mt-8 rounded-xl border border-[#edf0f3] p-4">
       <h3 className="flex items-center gap-2 text-[14px] font-bold"><ShieldAlert size={16} className="text-[#c2410c]" />権限変更の通知メール</h3>
-      <p className="mt-1 text-[12px] leading-5 text-[#8a99a9]">
+      <p className="mt-1 text-[12px] leading-5 text-[#5b6b7c]">
         次の変更があったとき、すぐに全権管理者（{status.recipients}人）へメールで知らせます：全権管理者の追加・解除／ロールの権限の変更／未登録アカウントのログイン設定の変更。身に覚えのない変更に早く気づくための仕組みです。
       </p>
       <p className="mt-3 text-[12px] text-[#38536f]">通知：<b>{status.enabled ? 'オン（おすすめ）' : 'オフ'}</b></p>
       <Button variant="secondary" className="mt-3" disabled={busy} onClick={() => void toggle()}>{status.enabled ? '通知をオフにする' : '通知をオンにする'}</Button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// カテゴリ整理（カテゴリ名の一括変更・統合）
+// ---------------------------------------------------------------------------
+
+const CATEGORY_KINDS: { kind: CategoryKind; label: string; field: string; perm: 'tools.manage' | 'documents.manage' | 'links.manage' }[] = [
+  { kind: 'tools', label: 'ツールのカテゴリ', field: 'category', perm: 'tools.manage' },
+  { kind: 'documents', label: '資料の種類', field: 'type', perm: 'documents.manage' },
+  { kind: 'links', label: 'リンクのカテゴリ', field: 'category', perm: 'links.manage' },
+]
+
+export function CategoryAdmin({ section, data, me, mutate, loading, onReload }: { section: SectionInfo; data: AdminData; me: Me; mutate: Mutate; loading: boolean; onReload: () => void }) {
+  const kinds = CATEGORY_KINDS.filter((k) => can(me, k.perm))
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const rowsOf = (kind: CategoryKind): Record<string, unknown>[] =>
+    (kind === 'tools' ? data.tools : kind === 'documents' ? data.documents : data.links ?? []) as unknown as Record<string, unknown>[]
+  const rename = async (kind: CategoryKind, from: string) => {
+    const key = `${kind}:${from}`
+    const to = (drafts[key] ?? '').trim()
+    if (to === from) return
+    const exists = rowsOf(kind).some((r) => String(r[CATEGORY_KINDS.find((k) => k.kind === kind)!.field] ?? '').trim() === to)
+    const message = exists
+      ? `「${from || '（なし）'}」を既にある「${to || '（なし）'}」にまとめます。よろしいですか？`
+      : `「${from || '（なし）'}」を「${to || '（なし）'}」に変更します。よろしいですか？`
+    if (!window.confirm(message)) return
+    const ok = await mutate((t) => api.renameCategory(t, kind, from, to), `「${from || '（なし）'}」を「${to || '（なし）'}」に変更しました`)
+    if (ok) setDrafts((d) => ({ ...d, [key]: '' }))
+  }
+  return (
+    <>
+      <SectionHeader section={section} loading={loading} onReload={onReload} />
+      <div className="flex flex-col gap-6 p-5">
+        {kinds.map((k) => {
+          const counts = new Map<string, number>()
+          rowsOf(k.kind).forEach((r) => {
+            const c = String(r[k.field] ?? '').trim()
+            counts.set(c, (counts.get(c) ?? 0) + 1)
+          })
+          const list = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ja'))
+          return (
+            <section key={k.kind}>
+              <h3 className="mb-2 text-[14px] font-bold">{k.label}</h3>
+              {!list.length ? <p className="text-[12px] text-[#5b6b7c]">まだありません。</p> : (
+                <div className="overflow-x-auto rounded-xl border border-[#edf0f3]">
+                  <table className="w-full min-w-[520px] text-left text-[12px]">
+                    <thead className="bg-[#fafbfd] text-[#5b6b7c]"><tr><th className="px-4 py-2 font-semibold">名前</th><th className="px-4 py-2 font-semibold">件数</th><th className="px-4 py-2 font-semibold">新しい名前</th><th className="px-4 py-2" /></tr></thead>
+                    <tbody>
+                      {list.map(([name, n]) => {
+                        const key = `${k.kind}:${name}`
+                        return (
+                          <tr key={key} className="border-t border-[#edf0f3]">
+                            <td className="px-4 py-2 font-semibold text-[#38536f]">{name || <span className="text-[#5b6b7c]">（なし）</span>}</td>
+                            <td className="px-4 py-2 text-[#4f5f70]">{n}件</td>
+                            <td className="px-4 py-2">
+                              <TextInput aria-label={`「${name || 'なし'}」の新しい名前`} list={`cat-${k.kind}`} value={drafts[key] ?? ''} placeholder={name} onChange={(e) => setDrafts((d) => ({ ...d, [key]: e.target.value }))} className="h-9" />
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <Button variant="secondary" disabled={!drafts[key]?.trim() || drafts[key]?.trim() === name} onClick={() => void rename(k.kind, name)}>変更</Button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                  <datalist id={`cat-${k.kind}`}>{list.map(([name]) => name && <option key={name} value={name} />)}</datalist>
+                </div>
+              )}
+            </section>
+          )
+        })}
+        <p className="text-[11px] text-[#5b6b7c]">既にある名前に変更すると、2つがまとまります。名前を変えても各項目の更新日時は変わらず、NEWも付きません。</p>
+      </div>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 動作チェック（バージョン確認の画面に表示）
+// ---------------------------------------------------------------------------
+
+export function SelfCheckPanel() {
+  const { run } = useAuth()
+  const toast = useToast()
+  const [sendMail, setSendMail] = useState(false)
+  const [sendDiscord, setSendDiscord] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ results: SelfCheckResult[]; checkedAt: string } | null>(null)
+  const start = async () => {
+    setBusy(true)
+    try {
+      setResult(await run((t) => api.selfCheck(t, { sendMail, sendDiscord })))
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const failed = result?.results.filter((r) => !r.ok).length ?? 0
+  return (
+    <div className="mt-6 rounded-xl border border-[#edf0f3] p-4">
+      <h3 className="flex items-center gap-2 text-[14px] font-bold"><Stethoscope size={16} className="text-[var(--brand-fg)]" />動作チェック</h3>
+      <p className="mt-1 text-[12px] leading-5 text-[#5b6b7c]">本番の環境で、スプレッドシート・キャッシュ・Google Drive・メール・Discord・毎朝の自動処理・バックアップが動くかを順に試します。Driveでは一時ファイルを作ってすぐ削除します。</p>
+      <div className="mt-3 flex flex-wrap items-center gap-x-5">
+        <Checkbox checked={sendMail} onChange={setSendMail} label="自分あてにテストメールを送る" />
+        <Checkbox checked={sendDiscord} onChange={setSendDiscord} label="Discordにもテスト送信する" />
+      </div>
+      <Button className="mt-3" disabled={busy} onClick={() => void start()}>{busy ? <><LoaderCircle size={14} className="animate-spin" />チェック中…</> : '動作チェックを実行'}</Button>
+      {result && (
+        <div className="mt-4" aria-live="polite">
+          <p className={cn('mb-2 text-[13px] font-bold', failed ? 'text-[#b42318]' : 'text-[#1c7a43]')}>{failed ? `${failed}件の問題が見つかりました` : 'すべて正常に動いています'}</p>
+          <ul className="flex flex-col divide-y divide-[#edf0f3] rounded-xl border border-[#edf0f3]">
+            {result.results.map((r) => (
+              <li key={r.id} className="flex items-start gap-3 px-4 py-3">
+                {r.ok ? <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-[#1c7a43]" aria-label="正常" /> : <XCircle size={18} className="mt-0.5 shrink-0 text-[#b42318]" aria-label="問題あり" />}
+                <div className="min-w-0 text-[12px] leading-5">
+                  <p className="text-[13px] font-bold text-[#1b304b]">{r.label}</p>
+                  <p className="text-[#55708b]">{r.detail}</p>
+                  {!r.ok && r.fix && <p className="mt-1 font-semibold text-[#92400e]">対処：{r.fix}</p>}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[11px] text-[#5b6b7c]">実行日時：{fmt(result.checkedAt)}</p>
+        </div>
+      )}
     </div>
   )
 }

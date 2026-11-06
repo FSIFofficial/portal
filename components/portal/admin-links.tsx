@@ -47,20 +47,20 @@ export function LinksAdmin({ data, mutate, header }: { data: AdminData; mutate: 
           <tr key={l.id} className="border-t border-[#edf0f3]">
             <td className="whitespace-nowrap px-5 py-3">
               <div className="flex items-center gap-1">
-                <span className="w-5 text-right text-[11px] font-bold text-[#9aa7b5]">{i + 1}</span>
+                <span className="w-5 text-right text-[11px] font-bold text-[#5b6b7c]">{i + 1}</span>
                 <button onClick={() => void move(i, -1)} disabled={moving || i === 0} aria-label={`${l.title}を上へ`} className="rounded p-1 text-[#55708b] hover:bg-[#f1f5f8] disabled:opacity-30"><ArrowUp size={14} /></button>
                 <button onClick={() => void move(i, 1)} disabled={moving || i === links.length - 1} aria-label={`${l.title}を下へ`} className="rounded p-1 text-[#55708b] hover:bg-[#f1f5f8] disabled:opacity-30"><ArrowDown size={14} /></button>
               </div>
             </td>
-            <td className="px-5 py-3 font-semibold text-[#38536f]">{l.title}<span className="block text-[11px] font-normal text-[#8a99a9]">{l.description}</span></td>
-            <td className="px-5 py-3 text-[#718296]">{l.category || 'その他'}</td>
-            <td className="max-w-[220px] truncate px-5 py-3"><a href={l.url} target="_blank" rel="noopener noreferrer" className="text-[var(--brand)] hover:underline">{l.url}</a></td>
+            <td className="px-5 py-3 font-semibold text-[#38536f]">{l.title}<span className="block text-[11px] font-normal text-[#5b6b7c]">{l.description}</span></td>
+            <td className="px-5 py-3 text-[#4f5f70]">{l.category || 'その他'}</td>
+            <td className="max-w-[220px] truncate px-5 py-3"><a href={l.url} target="_blank" rel="noopener noreferrer" className="text-[var(--brand-fg)] hover:underline">{l.url}</a></td>
             <td className="px-5 py-3"><RoleBadges ids={l.visibleRoles} roles={data.roles} /></td>
             <td className="px-5 py-3"><RowActions label={l.title} onEdit={() => ed.open({ ...l })} onDelete={() => confirmDelete(l.title) && void mutate((t) => api.deleteLink(t, l.id), 'リンクを削除しました（ゴミ箱から元に戻せます）')} /></td>
           </tr>
         ))}
       </Table>
-      <p className="px-5 py-4 text-[11px] text-[#8a99a9]">リンク集ではカテゴリごとにまとめて表示されます。同じカテゴリの中では、この並び順で表示されます。</p>
+      <p className="px-5 py-4 text-[11px] text-[#5b6b7c]">リンク集ではカテゴリごとにまとめて表示されます。同じカテゴリの中では、この並び順で表示されます。</p>
       {ed.draft && (
         <Modal title={ed.isNew ? 'リンクを追加' : 'リンクを編集'} onClose={ed.close} footer={<ModalFooter onCancel={ed.close} onSave={save} saving={ed.saving} />}>
           <Field label="リンク名" required><TextInput value={ed.draft.title} onChange={(e) => ed.set('title', e.target.value)} placeholder="例：経費精算フォーム" /></Field>

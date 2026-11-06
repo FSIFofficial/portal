@@ -51,12 +51,12 @@ export function ThemeSwitcher() {
   ]
   return (
     <div className="px-3 py-2">
-      <p className="mb-1.5 text-[11px] font-bold text-[#8796a7]">表示モード</p>
+      <p className="mb-1.5 text-[11px] font-bold text-[#5b6b7c]">表示モード</p>
       <div className="grid grid-cols-3 gap-1 rounded-lg bg-[#f1f4f8] p-1" role="radiogroup" aria-label="表示モード">
         {options.map((o) => {
           const Icon = o.icon
           return (
-            <button key={o.id} role="radio" aria-checked={mode === o.id} onClick={() => change(o.id)} className={cn('flex flex-col items-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] font-semibold', mode === o.id ? 'bg-white text-[var(--brand)] shadow-sm' : 'text-[#6b7785] hover:text-[#1b304b]')}>
+            <button key={o.id} role="radio" aria-checked={mode === o.id} onClick={() => change(o.id)} className={cn('flex flex-col items-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] font-semibold', mode === o.id ? 'bg-white text-[var(--brand-fg)] shadow-sm' : 'text-[#4f5f70] hover:text-[#1b304b]')}>
               <Icon size={14} />{o.label}
             </button>
           )

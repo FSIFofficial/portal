@@ -138,6 +138,8 @@ export interface Me {
   newSince?: string
   /** 確認済みのお知らせID */
   acks?: string[]
+  /** 開いたもの（ID → 開いた時点の更新日時）。このブラウザにだけ保存し、NEWを消すのに使う */
+  seen?: Record<string, string>
 }
 
 export interface RoleSummary {
@@ -265,9 +267,30 @@ export interface AckStatus {
 }
 
 /** 前回ログイン以降に追加・更新されたか */
-export function isNew(item: { updatedAt: string }, me: Me | null | undefined): boolean {
-  return !!me?.newSince && !!item.updatedAt && item.updatedAt > me.newSince
+/** 前回ログイン以降に追加・更新されていて、まだ開いていないもの */
+export function isNew(item: { id?: string; updatedAt: string }, me: Me | null | undefined): boolean {
+  if (!me?.newSince || !item.updatedAt || item.updatedAt <= me.newSince) return false
+  return !(item.id && me.seen?.[item.id] === item.updatedAt)
 }
+
+export interface SelfCheckResult {
+  id: string
+  label: string
+  ok: boolean
+  detail: string
+  fix: string
+}
+
+export interface LogFilter {
+  q?: string
+  email?: string
+  kind?: string
+  from?: string
+  to?: string
+  includeArchive?: boolean
+}
+
+export type CategoryKind = 'tools' | 'documents' | 'links'
 
 export interface SheetCheck {
   name: string

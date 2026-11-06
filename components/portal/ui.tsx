@@ -103,7 +103,7 @@ export function Modal({ title, onClose, children, footer, wide, xl }: { title: s
       >
         <div className="flex items-center justify-between border-b border-[#edf0f3] px-5 py-4">
           <h2 className="text-[16px] font-bold text-[#1b304b]">{title}</h2>
-          <button onClick={onClose} aria-label="閉じる" className="rounded-lg p-1.5 text-[#7890a5] hover:bg-[#f1f5f8]"><X size={18} /></button>
+          <button onClick={onClose} aria-label="閉じる" className="rounded-lg p-1.5 text-[#5b6b7c] hover:bg-[#f1f5f8]"><X size={18} /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-[#edf0f3] px-5 py-3">{footer}</div>}
@@ -122,7 +122,7 @@ export function Field({ label, hint, children, required, group }: { label: strin
         {required && <span className="ml-1 text-[#c2410c]">*</span>}
       </span>
       {children}
-      {hint && <span className="mt-1 block text-[11px] leading-5 text-[#8a99a9]">{hint}</span>}
+      {hint && <span className="mt-1 block text-[11px] leading-5 text-[#5b6b7c]">{hint}</span>}
     </Tag>
   )
 }
@@ -171,7 +171,7 @@ export function RolePicker({ roles, value, onChange, emptyLabel, exclude = [] }:
           )
         })}
       </div>
-      {emptyLabel && value.length === 0 && <p className="mt-2 text-[11px] text-[#8a99a9]">{emptyLabel}</p>}
+      {emptyLabel && value.length === 0 && <p className="mt-2 text-[11px] text-[#5b6b7c]">{emptyLabel}</p>}
     </div>
   )
 }
@@ -187,7 +187,7 @@ export function Button({ variant = 'primary', className, ...props }: React.Butto
 }
 
 export function RoleBadges({ ids, roles, emptyLabel = '全員' }: { ids: string[]; roles: RoleSummary[]; emptyLabel?: string }) {
-  if (!ids.length) return <span className="text-[11px] text-[#9aa7b5]">{emptyLabel}</span>
+  if (!ids.length) return <span className="text-[11px] text-[#5b6b7c]">{emptyLabel}</span>
   return (
     <span className="flex flex-wrap gap-1">
       {ids.map((id) => (
@@ -202,17 +202,17 @@ export function EmptyState({ title, message }: { title: string; message?: string
     <div className="rounded-2xl border border-dashed border-[#d5dee7] bg-white p-12 text-center">
       <Search className="mx-auto text-[#a9b7c5]" size={28} />
       <p className="mt-3 text-[14px] font-semibold text-[#1b304b]">{title}</p>
-      {message && <p className="mt-1 text-[12px] text-[#8a99a9]">{message}</p>}
+      {message && <p className="mt-1 text-[12px] text-[#5b6b7c]">{message}</p>}
     </div>
   )
 }
 
 /** 前回ログイン以降に追加・更新されたものに付ける印 */
 export function NewBadge() {
-  return <span className="shrink-0 rounded bg-[#e5484d] px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">NEW</span>
+  return <span className="shrink-0 rounded bg-[#cc3339] px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">NEW</span>
 }
 
 export function StatusBadge({ status }: { status: string }) {
-  const style = status === '稼働中' ? 'bg-[#eaf7ef] text-[#1c7a43]' : status === '停止中' ? 'bg-[#fff1f0] text-[#b42318]' : 'bg-[#f1f3f5] text-[#6b7785]'
+  const style = status === '稼働中' ? 'bg-[#eaf7ef] text-[#1c7a43]' : status === '停止中' ? 'bg-[#fff1f0] text-[#b42318]' : 'bg-[#f1f3f5] text-[#4f5f70]'
   return <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-semibold', style)}>{status}</span>
 }

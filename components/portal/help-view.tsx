@@ -10,10 +10,10 @@ const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 /** 問い合わせ先の値を、メールならメール作成、URLならリンクとして表示する */
 export function ContactValue({ value }: { value: string }) {
   if (EMAIL.test(value)) {
-    return <a href={`mailto:${value}`} className="inline-flex items-center gap-1.5 font-semibold text-[var(--brand)] hover:underline"><Mail size={14} />{value}</a>
+    return <a href={`mailto:${value}`} className="inline-flex items-center gap-1.5 font-semibold text-[var(--brand-fg)] hover:underline"><Mail size={14} />{value}</a>
   }
   if (/^https?:\/\//i.test(value)) {
-    return <a href={value} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 break-all font-semibold text-[var(--brand)] hover:underline">{value}<ExternalLink size={13} /></a>
+    return <a href={value} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 break-all font-semibold text-[var(--brand-fg)] hover:underline">{value}<ExternalLink size={13} /></a>
   }
   return <span className="font-semibold text-[#38536f]">{value}</span>
 }
@@ -42,7 +42,7 @@ export function HelpView({ data, navigate }: { data: BootstrapData; navigate: Na
               <div className="grid gap-3 sm:grid-cols-2">
                 {help.contacts.map((c, i) => (
                   <div key={i} className="rounded-2xl border border-[#e4e9f0] bg-white p-4">
-                    <p className="text-[12px] font-bold text-[#8a99a9]">{c.label}</p>
+                    <p className="text-[12px] font-bold text-[#5b6b7c]">{c.label}</p>
                     <div className="mt-1 text-[13px]"><ContactValue value={c.value} /></div>
                   </div>
                 ))}
@@ -58,7 +58,7 @@ export function HelpView({ data, navigate }: { data: BootstrapData; navigate: Na
                     <summary className="flex cursor-pointer list-none items-center gap-3 p-4 text-[14px] font-bold text-[#1b304b]">
                       <MessageCircleQuestion size={18} className="shrink-0 text-[#4285b8]" />
                       <span className="flex-1">{f.q}</span>
-                      <ChevronDown size={16} className="shrink-0 text-[#9aa7b5] transition group-open:rotate-180" />
+                      <ChevronDown size={16} className="shrink-0 text-[#5b6b7c] transition group-open:rotate-180" />
                     </summary>
                     <p className="whitespace-pre-wrap border-t border-[#eef1f4] px-4 py-3 pl-[46px] text-[13px] leading-6 text-[#52677d]">{f.a}</p>
                   </details>

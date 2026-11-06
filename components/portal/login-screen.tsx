@@ -45,7 +45,7 @@ export function LoginScreen() {
         <div className="rounded-3xl border border-[#e4e9f0] bg-white p-8 shadow-[0_10px_40px_rgba(25,50,80,0.08)]">
           <BrandLogo branding={branding} className="mx-auto size-24 rounded-2xl" />
           <h1 className="mt-6 text-center text-[22px] font-bold tracking-[-0.03em]">{branding.portalName}</h1>
-          <p className="mt-2 text-center text-[13px] leading-6 text-[#718096]">
+          <p className="mt-2 text-center text-[13px] leading-6 text-[#4f5f70]">
             メンバー向けポータルです。<br />登録済みのGoogleアカウントでログインしてください。
           </p>
 
@@ -58,7 +58,7 @@ export function LoginScreen() {
 
           <div className="mt-6">
             {status === 'loading' ? (
-              <div className="flex items-center justify-center gap-2 py-3 text-[13px] text-[#718096]">
+              <div className="flex items-center justify-center gap-2 py-3 text-[13px] text-[#4f5f70]">
                 <LoaderCircle size={18} className="animate-spin" />ログインしています…
               </div>
             ) : DEMO_MODE ? (
@@ -71,7 +71,7 @@ export function LoginScreen() {
             )}
           </div>
         </div>
-        <p className="mt-6 text-center text-[11px] text-[#9aa8b8]">アカウントの追加・権限の変更は全権管理者にお問い合わせください。</p>
+        <p className="mt-6 text-center text-[11px] text-[#5b6b7c]">アカウントの追加・権限の変更は全権管理者にお問い合わせください。</p>
       </div>
     </main>
   )
@@ -86,10 +86,10 @@ function DemoLogin({ users, onPick }: { users: User[]; onPick: (email: string) =
       <div className="flex flex-col gap-2">
         {users.map((u) => (
           <button key={u.email} onClick={() => onPick(u.email)} className="flex items-center gap-3 rounded-xl border border-[#e1e7ee] px-3 py-2.5 text-left hover:border-[#9fbfdc] hover:bg-[#f7fafd]">
-            <span className="grid size-8 place-items-center rounded-full bg-[#dcecf8] text-[12px] font-bold text-[var(--brand)]">{u.name.slice(0, 1)}</span>
+            <span className="grid size-8 place-items-center rounded-full bg-[#dcecf8] text-[12px] font-bold text-[var(--brand-fg)]">{u.name.slice(0, 1)}</span>
             <span className="min-w-0 flex-1">
               <span className="block text-[13px] font-bold text-[#334b67]">{u.name}</span>
-              <span className="block truncate text-[11px] text-[#8796a7]">{u.email} · {u.roles.join(', ')}</span>
+              <span className="block truncate text-[11px] text-[#5b6b7c]">{u.email} · {u.roles.join(', ')}</span>
             </span>
             <ChevronRight size={15} className="text-[#a9b5c2]" />
           </button>
@@ -100,7 +100,7 @@ function DemoLogin({ users, onPick }: { users: User[]; onPick: (email: string) =
           resetDemoDb()
           window.location.reload()
         }}
-        className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-[#7890a5] hover:text-[var(--brand)]"
+        className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-[#5b6b7c] hover:text-[var(--brand-fg)]"
       >
         <RotateCcw size={12} />デモデータを初期状態に戻す
       </button>
