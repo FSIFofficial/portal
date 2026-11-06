@@ -2,12 +2,12 @@
 
 // 管理画面の追加機能：ヘルプ編集・利用状況・一括登録・バックアップ・アップロード・ゴミ箱・ポータルの見た目
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, BellRing, Stethoscope, XCircle, MessageSquare, ShieldAlert, Palette, RotateCcw, CheckCircle2, Circle, DatabaseBackup, ExternalLink, LoaderCircle, Plus, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, BellRing, Stethoscope, XCircle, MessageSquare, ShieldAlert, Palette, RotateCcw, CheckCircle2, Circle, DatabaseBackup, ExternalLink, FolderOpen, LoaderCircle, Plus, Trash2, Upload } from 'lucide-react'
 import { api, fileToBase64 } from '@/lib/api'
 import { DEMO_MODE } from '@/lib/config'
 import {
   DEFAULT_BRANDING, type AckStatus, type AdminData, type Announcement, type BackupStatus, type Branding, type BulkAddResult, type DiscordStatus,
-  type CategoryKind, type ErrorDigestStatus, type HelpContent, type Me, type SelfCheckResult, type TrashItem, type UploadResult, type UsageStats,
+  type CategoryKind, type ErrorDigestStatus, type HelpContent, type Me, type SelfCheckResult, type TrashItem, type UploadFolder, type UploadFolders, type UploadResult, type UsageStats,
   can,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -249,7 +249,7 @@ export function BulkImportModal({ data, onClose, mutate }: { data: AdminData; on
 // バックアップ（設定画面の中に表示）
 // ---------------------------------------------------------------------------
 
-export function BackupPanel({ initial, uploadFolderUrl }: { initial?: BackupStatus; uploadFolderUrl?: string }) {
+export function BackupPanel({ initial }: { initial?: BackupStatus }) {
   const { run } = useAuth()
   const toast = useToast()
   const [status, setStatus] = useState<BackupStatus | undefined>(initial)
@@ -284,11 +284,94 @@ export function BackupPanel({ initial, uploadFolderUrl }: { initial?: BackupStat
           {status?.enabled ? '自動バックアップをオフにする' : '毎週の自動バックアップをオンにする'}
         </Button>
       </div>
-      {uploadFolderUrl && (
-        <p className="mt-4 border-t border-[#edf0f3] pt-3 text-[12px] text-[#55708b]">
-          画面からアップロードしたファイルの保存先：<a href={uploadFolderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--brand-fg)] hover:underline">FSIF Portal アップロード<ExternalLink size={12} /></a>
-        </p>
-      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// アップロードの保存先フォルダ（設定画面の中に表示）
+// ---------------------------------------------------------------------------
+
+export function UploadFolderPanel({ initial, legacyUrl }: { initial?: UploadFolders; legacyUrl?: string }) {
+  const [folders, setFolders] = useState<UploadFolders | undefined>(initial)
+  // 古い GAS（2.7.0 より前）は保存先のURLしか返さない
+  const doc: UploadFolder = folders?.document ?? { url: legacyUrl ?? '', name: legacyUrl ? 'FSIF Portal アップロード' : '', custom: false }
+  const icon: UploadFolder = folders?.icon ?? { url: '', name: '', custom: false }
+  return (
+    <div className="mt-8 rounded-xl border border-[#edf0f3] p-4">
+      <h3 className="flex items-center gap-2 text-[14px] font-bold"><FolderOpen size={16} className="text-[#4285b8]" />アップロードの保存先</h3>
+      <p className="mt-1 text-[12px] leading-5 text-[#5b6b7c]">
+        画面の「アップロード」ボタンで送ったファイルを保存するGoogle Driveのフォルダです。フォルダの共有リンクを貼って指定できます（GASを実行しているアカウントに、そのフォルダの編集権限が必要です）。変えても、今までにアップロードしたファイルは元の場所に残ります。
+      </p>
+      <FolderRow
+        purpose="document"
+        label="資料のファイル"
+        folder={doc}
+        defaultText="既定：「FSIF Portal アップロード」フォルダ（初めてのアップロードで自動で作ります）"
+        onSaved={setFolders}
+      />
+      <FolderRow
+        purpose="icon"
+        label="アイコン画像"
+        folder={icon}
+        defaultText="既定：資料と同じフォルダ"
+        note="アイコン画像は誰でも表示できるよう、ファイルごとにリンク共有をオンにします。"
+        onSaved={setFolders}
+      />
+    </div>
+  )
+}
+
+function FolderRow({ purpose, label, folder, defaultText, note, onSaved }: {
+  purpose: 'document' | 'icon'
+  label: string
+  folder: UploadFolder
+  defaultText: string
+  note?: string
+  onSaved: (f: UploadFolders) => void
+}) {
+  const { run } = useAuth()
+  const toast = useToast()
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+  const save = async (url: string) => {
+    setBusy(true)
+    try {
+      const res = await run((t) => api.setUploadFolder(t, purpose, url))
+      onSaved(res)
+      setValue('')
+      const f = res[purpose]
+      toast(url ? `${label}の保存先を「${f.name}」にしました` : `${label}の保存先を既定に戻しました`)
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mt-4 border-t border-[#edf0f3] pt-3">
+      <p className="text-[12px] font-bold text-[#38536f]">{label}</p>
+      <p className="mt-1 text-[12px] text-[#55708b]">
+        {folder.custom && folder.url ? (
+          <>今の保存先：<a href={folder.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--brand-fg)] hover:underline">{folder.name || 'フォルダを開く'}<ExternalLink size={12} /></a></>
+        ) : folder.url ? (
+          <>今の保存先：<a href={folder.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--brand-fg)] hover:underline">{folder.name || 'FSIF Portal アップロード'}<ExternalLink size={12} /></a>（既定）</>
+        ) : defaultText}
+      </p>
+      {note && <p className="mt-1 text-[11px] text-[#5b6b7c]">{note}</p>}
+      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+        <TextInput
+          type="url"
+          aria-label={`${label}の保存先フォルダのリンク`}
+          placeholder="https://drive.google.com/drive/folders/…"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <Button variant="secondary" className="shrink-0 whitespace-nowrap" disabled={busy || !value.trim()} onClick={() => void save(value.trim())}>
+          {busy ? <LoaderCircle size={14} className="animate-spin" /> : null}このフォルダにする
+        </Button>
+        {folder.custom && <Button variant="ghost" className="shrink-0 whitespace-nowrap" disabled={busy} onClick={() => void save('')}>既定に戻す</Button>}
+      </div>
     </div>
   )
 }

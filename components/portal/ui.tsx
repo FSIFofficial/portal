@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { imageUrl } from '@/lib/drive'
+import { cropStyle, splitIconUrl } from '@/lib/icon'
 import {
   BookOpen, Briefcase, CalendarPlus, ChartBar, CircleHelp, ClipboardList, Database, FileText, Globe, GraduationCap,
   LayoutDashboard, Mail, Megaphone, MessageSquare, Rocket, Search, ShieldCheck, Sparkles, Users, Wrench, X, Zap,
@@ -34,11 +35,17 @@ export const TONES: Record<string, string> = {
 export function ToolIcon({ name, tone, size = 22, className, src }: { name: string; tone: string; size?: number; className?: string; src?: string }) {
   const Icon = TOOL_ICONS[name] ?? Zap
   const [failed, setFailed] = useState(false)
-  const url = imageUrl(src ?? '')
+  const { crop } = splitIconUrl(src ?? '')
+  // 拡大して表示するときは、ぼやけないよう大きめの画像を取る
+  const url = imageUrl(src ?? '', Math.min(800, Math.round(200 * (crop?.zoom ?? 1))))
   useEffect(() => setFailed(false), [url])
   if (url && !failed) {
     // 画像が読み込めない（Driveの共有設定など）場合はアイコン表示に戻す
-    return <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} className={cn('size-12 shrink-0 rounded-xl border border-[#eef1f4] bg-white object-cover', className)} />
+    return (
+      <div className={cn('relative size-12 shrink-0 overflow-hidden rounded-xl border border-[#eef1f4] bg-white', className)}>
+        <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} className="absolute inset-0 size-full" style={cropStyle(crop)} />
+      </div>
+    )
   }
   return (
     <div className={cn('grid size-12 shrink-0 place-items-center rounded-xl', TONES[tone] ?? TONES.blue, className)}>
@@ -87,11 +94,19 @@ export const useToast = () => useContext(ToastContext)
 // フォーム部品
 // ---------------------------------------------------------------------------
 
+const openModals: symbol[] = []
+
 export function Modal({ title, onClose, children, footer, wide, xl }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean; xl?: boolean }) {
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    // ポップアップの上にポップアップを開いたときは、いちばん上のものだけを Esc で閉じる
+    const id = Symbol('modal')
+    openModals.push(id)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && openModals[openModals.length - 1] === id && onClose()
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      openModals.splice(openModals.indexOf(id), 1)
+    }
   }, [onClose])
   // ヘッダー（背景のぼかし効果がある）などの中で開いても、画面全体を基準に表示されるよう body の直下に出す
   if (typeof document === 'undefined') return null

@@ -6,7 +6,7 @@ import { ArrowDown, ArrowUp, Plus } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { AdminData, PortalLink } from '@/lib/types'
 import { ModalFooter, RowActions, Table, confirmDelete, useEditor, type Mutate } from './admin-shared'
-import { UploadButton } from './admin-extra'
+import { IconImageField } from './icon-field'
 import { SiteIcon } from './links-view'
 import { Field, Modal, RoleBadges, RolePicker, TextInput } from './ui'
 import { Button } from './ui'
@@ -66,13 +66,13 @@ export function LinksAdmin({ data, mutate, header }: { data: AdminData; mutate: 
           <Field label="リンク名" required><TextInput value={ed.draft.title} onChange={(e) => ed.set('title', e.target.value)} placeholder="例：経費精算フォーム" /></Field>
           <Field label="URL" required><TextInput type="url" value={ed.draft.url} onChange={(e) => ed.set('url', e.target.value)} placeholder="https://" /></Field>
           <Field label="説明"><TextInput value={ed.draft.description} onChange={(e) => ed.set('description', e.target.value)} placeholder="どんなときに使うか" /></Field>
-          <Field group label="アイコン画像（任意）" hint="空欄ならサイトのアイコンを自動で表示します。社内サイトなどでアイコンが出ないときは、画像のURLを入れるかアップロードしてください。">
-            <div className="flex items-center gap-3">
-              <SiteIcon link={{ url: ed.draft.url, iconUrl: ed.draft.iconUrl, title: ed.draft.title }} />
-              <TextInput type="url" aria-label="アイコン画像のURL" placeholder="https://… または Driveの共有リンク" value={ed.draft.iconUrl ?? ''} onChange={(e) => ed.set('iconUrl', e.target.value)} />
-              {ed.draft.iconUrl && <Button variant="ghost" onClick={() => ed.set('iconUrl', '')}>クリア</Button>}
-            </div>
-            <div className="mt-2"><UploadButton purpose="icon" label="画像をアップロード" onUploaded={(res) => ed.set('iconUrl', res.url)} /></div>
+          <Field group label="アイコン画像（任意）" hint="空欄ならサイトのアイコンを自動で表示します。社内サイトなどでアイコンが出ないときは、画像のURLを入れるかアップロードしてください。貼るかアップロードすると、表示する位置と大きさを決める画面が開きます。">
+            <IconImageField
+              value={ed.draft.iconUrl ?? ''}
+              onChange={(v) => ed.set('iconUrl', v)}
+              placeholder="https://… または Driveの共有リンク"
+              preview={(v) => <SiteIcon link={{ url: ed.draft!.url, iconUrl: v, title: ed.draft!.title }} />}
+            />
           </Field>
           <Field label="カテゴリ" hint="同じカテゴリのリンクがまとめて表示されます。空欄なら「その他」になります。">
             <TextInput list="link-categories" value={ed.draft.category} onChange={(e) => ed.set('category', e.target.value)} />

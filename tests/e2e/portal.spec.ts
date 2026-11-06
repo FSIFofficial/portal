@@ -213,6 +213,67 @@ test('管理：変更履歴の絞り込み・カテゴリ名の一括変更・�
   await expect(page.getByText('すべて正常に動いています')).toBeVisible()
 })
 
+test('アイコン画像は位置と大きさを決めて登録でき、Escでは上のポップアップだけ閉じる', async ({ page }) => {
+  // 横長の画像（外部に出ずにテストできるよう、ブラウザ内で返す）
+  await page.route('https://img.example.com/**', (route) =>
+    route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="100" height="100" fill="#c00"/><rect x="100" width="100" height="100" fill="#00c"/></svg>' }))
+  await login(page, '管理 太郎')
+  await page.goto('./#/admin/tools')
+  await page.getByRole('button', { name: 'サンプルツールDを編集' }).click()
+  const editor = page.getByRole('dialog', { name: 'ツールを編集' })
+  await editor.getByLabel('アイコン画像のURL').fill('https://img.example.com/wide.svg')
+  await editor.getByRole('button', { name: '位置を調整' }).click()
+  const cropper = page.getByRole('dialog', { name: 'アイコンの位置を調整' })
+  await expect(cropper).toBeVisible()
+
+  // Esc は上の「位置を調整」だけを閉じる
+  await page.keyboard.press('Escape')
+  await expect(cropper).toHaveCount(0)
+  await expect(editor).toBeVisible()
+
+  await editor.getByRole('button', { name: '位置を調整' }).click()
+  const box = cropper.getByRole('application')
+  const b = (await box.boundingBox())!
+  // 左へドラッグ → 画像の右側（青）が見える
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(b.x + 10, b.y + b.height / 2, { steps: 5 })
+  await page.mouse.up()
+  await cropper.getByLabel('拡大率').fill('2')
+  await cropper.getByRole('button', { name: 'この位置にする' }).click()
+  await expect(cropper).toHaveCount(0)
+  await expect(editor.getByText('位置を調整済み（200%）')).toBeVisible()
+  await editor.getByRole('button', { name: '保存' }).click()
+  await expect(page.getByText('ツールを更新しました')).toBeVisible()
+
+  // 一覧のアイコンに、決めた位置と大きさが使われている
+  await page.goto('./#/tools')
+  const img = page.locator('article', { hasText: 'サンプルツールD' }).locator('img').first()
+  await expect(img).toHaveAttribute('src', 'https://img.example.com/wide.svg')
+  const style = await img.getAttribute('style')
+  expect(style).toContain('scale(2)')
+  // 左へドラッグしたので、画像の右寄りが表示される位置になっている
+  const x = Number(style!.match(/object-position: ([\d.]+)% 50%/)?.[1])
+  expect(x).toBeGreaterThan(80)
+})
+
+test('アップロードの保存先フォルダを指定でき、既定に戻せる', async ({ page }) => {
+  await login(page, '管理 太郎')
+  await page.goto('./#/admin/settings')
+  const input = page.getByLabel('資料のファイルの保存先フォルダのリンク')
+  await input.fill('https://example.com/not-a-folder')
+  const panel = page.locator('div.rounded-xl', { hasText: 'アップロードの保存先' }).last()
+  await panel.getByRole('button', { name: 'このフォルダにする' }).first().click()
+  await expect(page.getByText('Driveのフォルダのリンク（https://drive.google.com/drive/folders/…）を貼ってください')).toBeVisible()
+  await input.fill('https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp')
+  await panel.getByRole('button', { name: 'このフォルダにする' }).first().click()
+  await expect(page.getByText(/資料のファイルの保存先を「デモのフォルダ/)).toBeVisible()
+  await expect(panel.getByRole('link', { name: /デモのフォルダ/ })).toHaveAttribute('href', 'https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp')
+  await panel.getByRole('button', { name: '既定に戻す' }).click()
+  await expect(page.getByText('資料のファイルの保存先を既定に戻しました')).toBeVisible()
+  await expect(panel.getByRole('link', { name: /デモのフォルダ/ })).toHaveCount(0)
+})
+
 for (const size of [{ name: 'PC', width: 1360, height: 900 }, { name: 'スマホ', width: 390, height: 664 }]) {
   test(`「ホーム画面に追加」の案内が画面内に表示される（${size.name}）`, async ({ page }) => {
     // ヘッダー（背景のぼかし効果あり）の中から開くポップアップが、画面の上にはみ出していた不具合の確認

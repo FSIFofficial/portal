@@ -11,6 +11,7 @@ import { useFavorites } from './tool-card'
 import { EmptyState, NewBadge, useToast } from './ui'
 import { copyText } from '@/lib/clipboard'
 import { imageUrl } from '@/lib/drive'
+import { cropStyle, splitIconUrl } from '@/lib/icon'
 
 const NO_CATEGORY = 'その他'
 
@@ -28,7 +29,7 @@ function hostOf(url: string) {
  */
 export function iconCandidates(link: Pick<PortalLink, 'url' | 'iconUrl'>): string[] {
   const list: string[] = []
-  if (link.iconUrl) list.push(imageUrl(link.iconUrl, 128))
+  if (link.iconUrl) list.push(imageUrl(link.iconUrl, Math.min(512, Math.round(128 * (splitIconUrl(link.iconUrl).crop?.zoom ?? 1)))))
   const host = hostOf(link.url)
   if (host) {
     list.push(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`)
@@ -64,7 +65,8 @@ export function SiteIcon({ link }: { link: Pick<PortalLink, 'url' | 'iconUrl' | 
           // 取得先によっては、見つからないときに1px程度の画像を返すので次を試す
           if (e.currentTarget.naturalWidth > 0 && e.currentTarget.naturalWidth < 8) setIndex((n) => n + 1)
         }}
-        className={custom ? 'size-full object-cover' : 'size-6'}
+        className={custom ? 'size-full' : 'size-6'}
+        style={custom ? cropStyle(splitIconUrl(link.iconUrl ?? '').crop) : undefined}
       />
     </span>
   )
