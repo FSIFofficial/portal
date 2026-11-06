@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { imageUrl } from '@/lib/drive'
 import {
   BookOpen, Briefcase, CalendarPlus, ChartBar, CircleHelp, ClipboardList, Database, FileText, Globe, GraduationCap,
@@ -92,7 +93,9 @@ export function Modal({ title, onClose, children, footer, wide, xl }: { title: s
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
-  return (
+  // ヘッダー（背景のぼかし効果がある）などの中で開いても、画面全体を基準に表示されるよう body の直下に出す
+  if (typeof document === 'undefined') return null
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#0f2440]/40 p-0 sm:items-center sm:p-4" onMouseDown={onClose}>
       <div
         role="dialog"
@@ -108,7 +111,8 @@ export function Modal({ title, onClose, children, footer, wide, xl }: { title: s
         <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-[#edf0f3] px-5 py-3">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
