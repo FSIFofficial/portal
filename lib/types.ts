@@ -158,6 +158,7 @@ export interface AdminData {
   errorDigest?: ErrorDigestStatus
   /** お知らせID → 確認済み人数 */
   ackCounts?: Record<string, number>
+  discord?: DiscordStatus
 }
 
 export interface HelpContent {
@@ -200,6 +201,15 @@ export interface UploadResult {
 export interface BulkAddResult {
   added: string[]
   skipped: { email: string; reason: string }[]
+}
+
+export interface DiscordStatus {
+  configured: boolean
+  /** Webhook URL の末尾だけ（URLを知っていれば誰でも投稿できるため、全体は返さない） */
+  webhookHint: string
+  notifyDocuments: boolean
+  notifyAnnouncements: boolean
+  portalUrl: string
 }
 
 export interface ErrorDigestStatus {

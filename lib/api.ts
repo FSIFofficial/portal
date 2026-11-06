@@ -4,7 +4,7 @@
 import { DEMO_MODE, EXPECTED_GAS_VERSION, GAS_URL } from './config'
 import { createDemoDb, type DemoDb } from './demo-data'
 import type {
-  AckStatus, AdminData, Announcement, BackupStatus, ErrorDigestStatus, BootstrapData, BulkAddResult, HelpContent, LogEntry, Me, Permission, PortalDocument, Role,
+  AckStatus, AdminData, Announcement, BackupStatus, DiscordStatus, ErrorDigestStatus, BootstrapData, BulkAddResult, HelpContent, LogEntry, Me, Permission, PortalDocument, Role,
   Settings, SystemCheck, Tool, UploadResult, UsageStats, User,
 } from './types'
 
@@ -50,14 +50,18 @@ export const api = {
   ackAnnouncement: (token: string, id: string) => call('ackAnnouncement', token, { id }),
   announcementAcks: (token: string, id: string) => call<AckStatus>('announcementAcks', token, { id }),
   setErrorDigest: (token: string, enabled: boolean) => call<ErrorDigestStatus>('setErrorDigest', token, { enabled }),
+  saveDiscord: (token: string, item: { webhookUrl?: string; clearWebhook?: boolean; notifyDocuments: boolean; notifyAnnouncements: boolean; portalUrl: string }) =>
+    call<DiscordStatus>('saveDiscord', token, { item }),
+  testDiscord: (token: string) => call('testDiscord', token),
   adminData: (token: string) => call<AdminData>('adminData', token),
   // isNew=false のときは item.updatedAt（編集開始時点の値）で同時編集の衝突を検出する
   saveTool: (token: string, item: Partial<Tool>, isNew: boolean) => call<Tool>('saveTool', token, { item, isNew }),
   deleteTool: (token: string, id: string) => call('deleteTool', token, { id }),
   reorderTools: (token: string, ids: string[], baseIds: string[]) => call<Tool[]>('reorderTools', token, { ids, baseIds }),
-  saveDocument: (token: string, item: Partial<PortalDocument>, isNew: boolean) => call<PortalDocument>('saveDocument', token, { item, isNew }),
+  // notify=false のときは、新規追加でも Discord に通知しない
+  saveDocument: (token: string, item: Partial<PortalDocument>, isNew: boolean, notify = true) => call<PortalDocument>('saveDocument', token, { item, isNew, notify }),
   deleteDocument: (token: string, id: string) => call('deleteDocument', token, { id }),
-  saveAnnouncement: (token: string, item: Partial<Announcement>, isNew: boolean) => call<Announcement>('saveAnnouncement', token, { item, isNew }),
+  saveAnnouncement: (token: string, item: Partial<Announcement>, isNew: boolean, notify = true) => call<Announcement>('saveAnnouncement', token, { item, isNew, notify }),
   deleteAnnouncement: (token: string, id: string) => call('deleteAnnouncement', token, { id }),
   saveUser: (token: string, item: Partial<User>, isNew: boolean) => call<User>('saveUser', token, { item, isNew }),
   deleteUser: (token: string, email: string) => call('deleteUser', token, { email }),
@@ -205,6 +209,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
   const db = loadDb()
   db.acks ??= []
   db.errorDigest ??= { enabled: false, lastSentAt: '', recipients: 1 }
+  db.discord ??= { configured: false, webhookHint: '', notifyDocuments: true, notifyAnnouncements: true, portalUrl: 'https://fsifofficial.github.io/portal/' }
   // デモではメールアドレスをそのままセッションとして使う
   if (action === 'login') {
     const data = demoCall('bootstrap', String(p.idToken ?? ''), {}) as BootstrapData
@@ -259,6 +264,23 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         pending: targets.filter((u) => !acked.has(u.email)).map((u) => ({ email: u.email, name: u.name })),
       })
     }
+    case 'saveDiscord': {
+      requirePerm(me, '*')
+      const hook = String(item.webhookUrl ?? '').trim()
+      if (hook && !/^https:\/\/(?:canary\.|ptb\.)?(?:discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(hook)) fail('BAD_REQUEST', 'DiscordのWebhook URL（https://discord.com/api/webhooks/…）を入力してください')
+      const configured = item.clearWebhook ? false : hook ? true : db.discord.configured
+      db.discord = {
+        configured,
+        webhookHint: item.clearWebhook ? '' : hook ? `…${hook.slice(-6)}` : db.discord.webhookHint,
+        notifyDocuments: item.notifyDocuments !== false,
+        notifyAnnouncements: item.notifyAnnouncements !== false,
+        portalUrl: url(item.portalUrl) || 'https://fsifofficial.github.io/portal/',
+      }
+      return commit(db.discord)
+    }
+    case 'testDiscord':
+      requirePerm(me, '*')
+      fail('DEMO', 'デモモードではDiscordに送信しません（GASに接続すると送信できます）')
     case 'setErrorDigest': {
       requirePerm(me, '*')
       db.errorDigest = { ...db.errorDigest, enabled: !!p.enabled }
@@ -358,6 +380,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         data.settings = db.settings
         data.backup = db.backup
         data.errorDigest = db.errorDigest
+        data.discord = db.discord
         data.uploadFolderUrl = ''
       }
       return commit(data)

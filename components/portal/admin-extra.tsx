@@ -2,14 +2,14 @@
 
 // 管理画面の追加機能：ヘルプ編集・利用状況・アカウント一括登録・バックアップ・Driveへのアップロード
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, BellRing, CheckCircle2, Circle, DatabaseBackup, ExternalLink, LoaderCircle, Plus, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, BellRing, MessageSquare, CheckCircle2, Circle, DatabaseBackup, ExternalLink, LoaderCircle, Plus, Trash2, Upload } from 'lucide-react'
 import { api, fileToBase64 } from '@/lib/api'
 import { DEMO_MODE } from '@/lib/config'
-import type { AckStatus, AdminData, Announcement, BackupStatus, ErrorDigestStatus, BulkAddResult, HelpContent, UploadResult, UsageStats } from '@/lib/types'
+import type { AckStatus, AdminData, Announcement, BackupStatus, DiscordStatus, ErrorDigestStatus, BulkAddResult, HelpContent, UploadResult, UsageStats } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { SectionHeader, Table, fmt, type Mutate } from './admin-shared'
 import { useAuth } from './auth-provider'
-import { Button, Field, Modal, RolePicker, TextArea, TextInput, useToast } from './ui'
+import { Button, Checkbox, Field, Modal, RolePicker, TextArea, TextInput, useToast } from './ui'
 
 type SectionInfo = { label: string; description: string }
 
@@ -412,6 +412,82 @@ export function ErrorDigestPanel({ initial }: { initial?: ErrorDigestStatus }) {
         <p>通知：<b>{status?.enabled ? '毎朝' : 'オフ'}</b>{status?.lastSentAt && <span className="ml-3 text-[#8a99a9]">最後に送った日時：{fmt(status.lastSentAt)}</span>}</p>
       </div>
       <Button variant="secondary" className="mt-3" disabled={busy} onClick={() => void toggle()}>{status?.enabled ? 'エラー通知をオフにする' : 'エラー通知をオンにする'}</Button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Discord への新着通知（設定画面の中に表示）
+// ---------------------------------------------------------------------------
+
+const DEFAULT_PORTAL_URL = 'https://fsifofficial.github.io/portal/'
+
+export function DiscordPanel({ initial }: { initial?: DiscordStatus }) {
+  const { run } = useAuth()
+  const toast = useToast()
+  const [status, setStatus] = useState<DiscordStatus | undefined>(initial)
+  const [hook, setHook] = useState('')
+  const [docs, setDocs] = useState(initial?.notifyDocuments ?? true)
+  const [anns, setAnns] = useState(initial?.notifyAnnouncements ?? true)
+  const [portalUrl, setPortalUrl] = useState(initial?.portalUrl || DEFAULT_PORTAL_URL)
+  const [busy, setBusy] = useState(false)
+
+  const save = async (clearWebhook = false) => {
+    if (clearWebhook && !window.confirm('Discordへの通知を止めて、保存しているWebhook URLを削除します。よろしいですか？')) return
+    setBusy(true)
+    try {
+      const s = await run((t) => api.saveDiscord(t, { webhookUrl: hook.trim() || undefined, clearWebhook, notifyDocuments: docs, notifyAnnouncements: anns, portalUrl }))
+      setStatus(s)
+      setHook('')
+      toast(clearWebhook ? 'Discordへの通知を止めました' : 'Discordの通知設定を保存しました')
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const test = async () => {
+    setBusy(true)
+    try {
+      await run((t) => api.testDiscord(t))
+      toast('Discordにテスト通知を送りました')
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-8 rounded-xl border border-[#edf0f3] p-4">
+      <h3 className="flex items-center gap-2 text-[14px] font-bold"><MessageSquare size={16} className="text-[#5865f2]" />Discordへの新着通知</h3>
+      <p className="mt-1 text-[12px] leading-5 text-[#8a99a9]">
+        資料やお知らせを新しく追加したとき、DiscordのチャンネルにWebhookで投稿します。<b>公開範囲が「全員」のものだけ</b>が対象です（限定公開の内容はDiscordに出しません）。更新や削除は通知しません。
+      </p>
+      <p className="mt-3 text-[12px] text-[#38536f]">状態：<b>{status?.configured ? `設定済み（URL末尾 ${status.webhookHint}）` : '未設定（通知は送られません）'}</b></p>
+      <div className="mt-3">
+        <Field label={status?.configured ? 'Webhook URL を変更する（変更しない場合は空欄）' : 'Webhook URL'} hint="Discordで チャンネルの編集 → 連携サービス → ウェブフック → 新しいウェブフック →「ウェブフックURLをコピー」したものを貼り付けます。このURLを知っていれば誰でも投稿できるので、ほかの人には共有しないでください。">
+          <TextInput type="url" placeholder="https://discord.com/api/webhooks/…" value={hook} onChange={(e) => setHook(e.target.value)} autoComplete="off" />
+        </Field>
+        <Field label="通知に載せるポータルのURL"><TextInput type="url" value={portalUrl} onChange={(e) => setPortalUrl(e.target.value)} /></Field>
+        <Checkbox checked={docs} onChange={setDocs} label="新しい資料を通知する" />
+        <Checkbox checked={anns} onChange={setAnns} label="新しいお知らせを通知する（掲載開始日が先のもの・非表示のものは送りません）" />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="secondary" disabled={busy} onClick={() => void save()}>保存</Button>
+        {status?.configured && <Button variant="secondary" disabled={busy} onClick={() => void test()}>テスト送信</Button>}
+        {status?.configured && <Button variant="danger" disabled={busy} onClick={() => void save(true)}>通知を止める</Button>}
+      </div>
+    </div>
+  )
+}
+
+/** 新規追加フォームの「Discordに通知する」チェック */
+export function NotifyCheckbox({ checked, onChange, restricted }: { checked: boolean; onChange: (v: boolean) => void; restricted: boolean }) {
+  if (restricted) return <p className="mb-4 text-[11px] text-[#8a99a9]">限定公開のため、Discordには通知されません。</p>
+  return (
+    <div className="mb-4">
+      <Checkbox checked={checked} onChange={onChange} label={<>Discordに通知する<span className="block text-[11px] text-[#8a99a9]">Discordへの通知が設定されている場合に、保存と同時に投稿されます。</span></>} />
     </div>
   )
 }

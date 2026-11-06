@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useAuth } from './auth-provider'
 import { ModalFooter, RowActions, SectionHeader, Table, confirmDelete, fmt, useEditor, type Mutate } from './admin-shared'
-import { AckStatusModal, BackupPanel, BulkImportModal, ErrorDigestPanel, HelpAdmin, UploadButton, UsageAdmin } from './admin-extra'
+import { AckStatusModal, BackupPanel, BulkImportModal, DiscordPanel, ErrorDigestPanel, NotifyCheckbox, HelpAdmin, UploadButton, UsageAdmin } from './admin-extra'
 import type { Navigate } from './router'
 import {
   Button, Checkbox, EmptyState, Field, Modal, RoleBadges, RolePicker, Select, StatusBadge, TONES, TOOL_ICONS, TextArea, TextInput,
@@ -212,7 +212,7 @@ const emptyDoc = (): PortalDocument => ({
 })
 
 function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate; header: (action: ReactNode) => ReactNode }) {
-  const ed = useEditor<PortalDocument & { tagsText?: string }>()
+  const ed = useEditor<PortalDocument & { tagsText?: string; notify?: boolean }>()
   const [query, setQuery] = useState('')
   const types = useMemo(() => [...new Set(['オンボーディング', 'マニュアル', ...data.documents.map((d) => d.type)].filter(Boolean))], [data.documents])
   const toolNames = useMemo(() => [...new Set(['共通', ...data.tools.map((t) => t.name), ...data.documents.map((d) => d.tool)].filter(Boolean))], [data.tools, data.documents])
@@ -220,10 +220,10 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
 
   const save = async () => {
     if (!ed.draft) return
-    const { tagsText, ...item } = ed.draft
+    const { tagsText, notify, ...item } = ed.draft
     const payload = { ...item, tags: (tagsText ?? item.tags.join(', ')).split(/[,、]/).map((s) => s.trim()).filter(Boolean) }
     ed.setSaving(true)
-    const ok = await mutate((t) => api.saveDocument(t, payload, ed.isNew), ed.isNew ? '資料を追加しました' : '資料を更新しました')
+    const ok = await mutate((t) => api.saveDocument(t, payload, ed.isNew, notify !== false), ed.isNew ? '資料を追加しました' : '資料を更新しました')
     ed.setSaving(false)
     if (ok) ed.close()
   }
@@ -241,7 +241,7 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
       {header(
         <>
           {syncCount > 0 && <Button variant="secondary" onClick={() => void mutate((t) => api.syncDrive(t), 'Driveの共有を同期しました')} title="共有を同期する資料すべてを、今の公開範囲に合わせ直します"><RefreshCcw size={15} />共有を同期</Button>}
-          <Button onClick={() => ed.open(emptyDoc(), true)}><Plus size={15} />新規追加</Button>
+          <Button onClick={() => ed.open({ ...emptyDoc(), notify: true }, true)}><Plus size={15} />新規追加</Button>
         </>,
       )}
       <div className="border-b border-[#edf0f3] px-5 py-3"><TextInput placeholder="資料名・種類・ツールで絞り込み" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
@@ -314,6 +314,7 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
               </div>
             )}
           </div>
+          {ed.isNew && <NotifyCheckbox checked={ed.draft.notify !== false} onChange={(v) => ed.set('notify', v)} restricted={ed.draft.visibleRoles.length > 0} />}
           <details className="rounded-lg border border-[#edf0f3] px-3 py-2">
             <summary className="cursor-pointer text-[12px] font-bold text-[#55708b]">詳細設定（通常は空欄のままでOK）</summary>
             <div className="mt-3">
@@ -334,18 +335,18 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
 const emptyAnnouncement: Announcement = { id: '', title: '', body: '', level: 'info', active: true, startDate: '', endDate: '', visibleRoles: [], updatedAt: '' }
 
 function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate; header: (action: ReactNode) => ReactNode }) {
-  const ed = useEditor<Announcement>()
+  const ed = useEditor<Announcement & { notify?: boolean }>()
   const [ackOf, setAckOf] = useState<Announcement | null>(null)
   const save = async () => {
     if (!ed.draft) return
     ed.setSaving(true)
-    const ok = await mutate((t) => api.saveAnnouncement(t, ed.draft!, ed.isNew), ed.isNew ? 'お知らせを追加しました' : 'お知らせを更新しました')
+    const ok = await mutate((t) => api.saveAnnouncement(t, ed.draft!, ed.isNew, ed.draft!.notify !== false), ed.isNew ? 'お知らせを追加しました' : 'お知らせを更新しました')
     ed.setSaving(false)
     if (ok) ed.close()
   }
   return (
     <>
-      {header(<Button onClick={() => ed.open({ ...emptyAnnouncement }, true)}><Plus size={15} />新規追加</Button>)}
+      {header(<Button onClick={() => ed.open({ ...emptyAnnouncement, notify: true }, true)}><Plus size={15} />新規追加</Button>)}
       {ackOf && <AckStatusModal announcement={ackOf} onClose={() => setAckOf(null)} />}
       <Table head={['タイトル', '種別', '表示', '期間', '公開範囲', '確認状況', '']} empty={!data.announcements.length}>
         {data.announcements.map((a) => (
@@ -381,6 +382,7 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
           <Checkbox checked={!!ed.draft.requireAck} onChange={(v) => ed.set('requireAck', v)} label={<><b>確認を求める</b><span className="block text-[11px] leading-5 text-[#8a99a9]">「確認しました」ボタンを表示し、押すまでお知らせが消えなくなります。誰が確認したかを一覧で見られます。</span></>} />
           <div className="mt-3">
             <Field group label="公開範囲"><RolePicker roles={data.roles} value={ed.draft.visibleRoles} onChange={(v) => ed.set('visibleRoles', v)} exclude={['superadmin']} emptyLabel="未選択：ログインできる全員に表示" /></Field>
+            {ed.isNew && <NotifyCheckbox checked={ed.draft.notify !== false} onChange={(v) => ed.set('notify', v)} restricted={ed.draft.visibleRoles.length > 0} />}
           </div>
         </Modal>
       )}
@@ -548,6 +550,7 @@ function SettingsAdmin({ data, mutate, header }: { data: AdminData; mutate: Muta
           </div>
         )}
         <div className="mt-6"><Button onClick={save} disabled={saving}>{saving ? '保存中…' : '設定を保存'}</Button></div>
+        <DiscordPanel initial={data.discord} />
         <ErrorDigestPanel initial={data.errorDigest} />
         <BackupPanel initial={data.backup} uploadFolderUrl={data.uploadFolderUrl} />
       </div>

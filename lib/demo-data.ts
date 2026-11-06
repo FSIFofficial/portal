@@ -1,6 +1,6 @@
 // デモモード（GAS未接続）で使う架空のサンプルデータ。実際の組織データは含めないこと（このファイルはGitHubで公開される）。
 
-import type { Announcement, BackupStatus, ErrorDigestStatus, HelpContent, PortalDocument, Role, Settings, Tool, User } from './types'
+import type { Announcement, BackupStatus, DiscordStatus, ErrorDigestStatus, HelpContent, PortalDocument, Role, Settings, Tool, User } from './types'
 
 export interface DemoDb {
   users: User[]
@@ -15,6 +15,7 @@ export interface DemoDb {
   backup: BackupStatus
   acks: { announcementId: string; email: string; ackAt: string }[]
   errorDigest: ErrorDigestStatus
+  discord: DiscordStatus
 }
 
 // 日付は開いた日を基準にする（NEW表示が分かるよう、一部だけ最近更新したことにする）
@@ -80,5 +81,6 @@ export function createDemoDb(): DemoDb {
     backup: { enabled: false, lastAt: '', lastUrl: '', lastError: '', keep: 10, folderUrl: '' },
     acks: [],
     errorDigest: { enabled: false, lastSentAt: '', recipients: 1 },
+    discord: { configured: false, webhookHint: '', notifyDocuments: true, notifyAnnouncements: true, portalUrl: 'https://fsifofficial.github.io/portal/' },
   }
 }
