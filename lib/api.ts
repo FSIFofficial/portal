@@ -4,9 +4,10 @@
 import { DEMO_MODE, EXPECTED_GAS_VERSION, GAS_URL } from './config'
 import { createDemoDb, type DemoDb } from './demo-data'
 import type {
-  AckStatus, AdminData, Announcement, BackupStatus, DiscordStatus, ErrorDigestStatus, BootstrapData, BulkAddResult, HelpContent, LogEntry, Me, Permission, PortalDocument, Role,
+  AckStatus, AdminData, Announcement, BackupStatus, Branding, DiscordStatus, TrashItem, ErrorDigestStatus, BootstrapData, BulkAddResult, HelpContent, LogEntry, Me, Permission, PortalDocument, Role,
   Settings, SystemCheck, Tool, UploadResult, UsageStats, User,
 } from './types'
+import { DEFAULT_BRANDING } from './types'
 
 export class ApiError extends Error {
   constructor(public code: string, message: string) {
@@ -53,6 +54,12 @@ export const api = {
   saveDiscord: (token: string, item: { webhookUrl?: string; clearWebhook?: boolean; notifyDocuments: boolean; notifyAnnouncements: boolean; portalUrl: string }) =>
     call<DiscordStatus>('saveDiscord', token, { item }),
   testDiscord: (token: string) => call('testDiscord', token),
+  saveBranding: (token: string, item: Branding) => call<Branding>('saveBranding', token, { item }),
+  bulkSetActive: (token: string, emails: string[], active: boolean) =>
+    call<{ changed: string[]; skipped: { email: string; reason: string }[] }>('bulkSetActive', token, { emails, active }),
+  listTrash: (token: string) => call<TrashItem[]>('listTrash', token),
+  restoreTrash: (token: string, key: string) => call('restoreTrash', token, { key }),
+  purgeTrash: (token: string, key: string) => call('purgeTrash', token, { key }),
   adminData: (token: string) => call<AdminData>('adminData', token),
   // isNew=false のときは item.updatedAt（編集開始時点の値）で同時編集の衝突を検出する
   saveTool: (token: string, item: Partial<Tool>, isNew: boolean) => call<Tool>('saveTool', token, { item, isNew }),
@@ -96,7 +103,7 @@ export function fileToBase64(file: File): Promise<string> {
 // デモバックエンド（localStorage に保存）
 // ---------------------------------------------------------------------------
 
-const DEMO_KEY = 'fsif-portal-demo-db-v4'
+const DEMO_KEY = 'fsif-portal-demo-db-v5'
 const SUPER = 'superadmin'
 
 function loadDb(): DemoDb {
@@ -199,6 +206,21 @@ function demoPopularity(db: DemoDb) {
   return map
 }
 
+const TRASH_PERM: Record<string, Permission> = { Tools: 'tools.manage', Documents: 'documents.manage', Announcements: 'announcements.manage', Users: '*' }
+
+function demoCanManage(me: Me, sheet: string) {
+  const perm = TRASH_PERM[sheet]
+  return !!perm && (me.isSuper || me.permissions.includes(perm))
+}
+
+function demoSheet(db: DemoDb, sheet: string) {
+  return sheet === 'Tools' ? db.tools : sheet === 'Documents' ? db.documents : sheet === 'Announcements' ? db.announcements : db.users
+}
+
+function toTrash(db: DemoDb, me: Me, sheet: TrashItem['sheet'], itemKey: string, title: string, data: unknown) {
+  db.trash.push({ key: newId(), sheet, itemKey, title, data, deletedAt: now(), deletedBy: me.email })
+}
+
 function upsert<T>(rows: T[], key: keyof T, record: T) {
   const i = rows.findIndex((r) => r[key] === record[key])
   if (i >= 0) rows[i] = record
@@ -209,6 +231,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
   const db = loadDb()
   db.acks ??= []
   db.errorDigest ??= { enabled: false, lastSentAt: '', recipients: 1 }
+  db.trash ??= []
+  db.branding ??= { ...DEFAULT_BRANDING }
   db.discord ??= { configured: false, webhookHint: '', notifyDocuments: true, notifyAnnouncements: true, portalUrl: 'https://fsifofficial.github.io/portal/' }
   // デモではメールアドレスをそのままセッションとして使う
   if (action === 'login') {
@@ -243,6 +267,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         gasVersion: EXPECTED_GAS_VERSION,
         help: db.help,
         popularity: demoPopularity(db),
+        branding: db.branding,
       })
     }
     case 'logout':
@@ -277,6 +302,59 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         portalUrl: url(item.portalUrl) || 'https://fsifofficial.github.io/portal/',
       }
       return commit(db.discord)
+    }
+    case 'saveBranding': {
+      requirePerm(me, '*')
+      const color = String(item.primaryColor || '#1f6fba')
+      if (!/^#[0-9a-fA-F]{6}$/.test(color)) fail('BAD_REQUEST', '色は #1f6fba のような6桁のカラーコードで入力してください')
+      db.branding = {
+        portalName: required(item.portalName, 'ポータル名').slice(0, 40),
+        tagline: String(item.tagline ?? '').slice(0, 40),
+        logoUrl: url(item.logoUrl),
+        primaryColor: color.toLowerCase(),
+      }
+      return commit(db.branding)
+    }
+    case 'bulkSetActive': {
+      requirePerm(me, '*')
+      const emails = list(p.emails)
+      const changed: string[] = []
+      const skipped: { email: string; reason: string }[] = []
+      db.users.forEach((u) => {
+        if (!emails.includes(u.email)) return
+        if (!p.active && u.email === me.email) return skipped.push({ email: u.email, reason: '自分自身は無効化できません' })
+        if (u.active === !!p.active) return
+        u.active = !!p.active
+        u.updatedAt = now()
+        changed.push(u.email)
+      })
+      return commit({ changed, skipped })
+    }
+    case 'listTrash': {
+      requirePerm(me, 'any-manager')
+      return commit(db.trash.filter((t) => demoCanManage(me, t.sheet)).map(({ data: _data, ...t }) => t).sort((a, b) => b.deletedAt.localeCompare(a.deletedAt)))
+    }
+    case 'restoreTrash': {
+      const t = db.trash.find((x) => x.key === p.key)
+      if (!t) fail('NOT_FOUND', 'ゴミ箱に見つかりません')
+      if (!demoCanManage(me, t.sheet)) fail('FORBIDDEN', 'この操作を行う権限がありません')
+      const target = demoSheet(db, t.sheet) as unknown as { [k: string]: unknown }[]
+      const keyCol = t.sheet === 'Users' ? 'email' : 'id'
+      if (target.some((x) => x[keyCol] === t.itemKey)) fail('CONFLICT', '同じ項目がすでにあるため元に戻せません')
+      const record = { ...(t.data as object), updatedAt: now() } as { [k: string]: unknown }
+      if (t.sheet === 'Tools') record.order = Math.max(0, ...db.tools.map((x) => x.order)) + 1
+      target.push(record)
+      db.trash = db.trash.filter((x) => x.key !== t.key)
+      log(`${t.sheet}.restore`, t.itemKey, t.title)
+      return commit({ sheet: t.sheet, itemKey: t.itemKey })
+    }
+    case 'purgeTrash': {
+      const t = db.trash.find((x) => x.key === p.key)
+      if (!t) fail('NOT_FOUND', 'ゴミ箱に見つかりません')
+      if (!demoCanManage(me, t.sheet)) fail('FORBIDDEN', 'この操作を行う権限がありません')
+      db.trash = db.trash.filter((x) => x.key !== t.key)
+      if (t.sheet === 'Announcements') db.acks = db.acks.filter((a) => a.announcementId !== t.itemKey)
+      return commit({ key: t.key })
     }
     case 'testDiscord':
       requirePerm(me, '*')
@@ -381,6 +459,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         data.backup = db.backup
         data.errorDigest = db.errorDigest
         data.discord = db.discord
+        data.branding = db.branding
         data.uploadFolderUrl = ''
       }
       return commit(data)
@@ -409,6 +488,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     }
     case 'deleteTool': {
       requirePerm(me, 'tools.manage')
+      const removedTool = db.tools.find((x) => x.id === p.id)
+      if (removedTool) toTrash(db, me, 'Tools', removedTool.id, removedTool.name, removedTool)
       db.tools = db.tools.filter((x) => x.id !== p.id)
       log('Tools.delete', String(p.id))
       return commit({ id: p.id })
@@ -456,6 +537,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     }
     case 'deleteDocument': {
       requirePerm(me, 'documents.manage')
+      const removedDoc = db.documents.find((x) => x.id === p.id)
+      if (removedDoc) toTrash(db, me, 'Documents', removedDoc.id, removedDoc.title, removedDoc)
       db.documents = db.documents.filter((x) => x.id !== p.id)
       log('Documents.delete', String(p.id))
       return commit({ id: p.id })
@@ -482,8 +565,9 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     }
     case 'deleteAnnouncement': {
       requirePerm(me, 'announcements.manage')
+      const removedAnn = db.announcements.find((x) => x.id === p.id)
+      if (removedAnn) toTrash(db, me, 'Announcements', removedAnn.id, removedAnn.title, removedAnn)
       db.announcements = db.announcements.filter((x) => x.id !== p.id)
-      db.acks = db.acks.filter((a) => a.announcementId !== p.id)
       log('Announcements.delete', String(p.id))
       return commit({ id: p.id })
     }
@@ -513,6 +597,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     case 'deleteUser': {
       requirePerm(me, '*')
       if (p.email === me.email) fail('BAD_REQUEST', '自分自身は削除できません')
+      const removedUser = db.users.find((u) => u.email === p.email)
+      if (removedUser) toTrash(db, me, 'Users', removedUser.email, removedUser.name, removedUser)
       db.users = db.users.filter((u) => u.email !== p.email)
       log('Users.delete', String(p.email))
       return commit({ email: p.email })
@@ -558,8 +644,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     }
     case 'systemCheck': {
       requirePerm(me, 'any-manager')
-      const sheets = ['Users', 'Roles', 'Tools', 'Documents', 'Announcements', 'Settings', 'Logs', 'Stats', 'Acks'].map((name) => ({ name, ok: true, missing: [], extra: [] }))
-      return commit<SystemCheck>({ version: EXPECTED_GAS_VERSION, sheets, clientIdSet: true, superAdminCount: 1, recentErrors: [], checkedAt: now() })
+      const sheets = ['Users', 'Roles', 'Tools', 'Documents', 'Announcements', 'Settings', 'Logs', 'Stats', 'Acks', 'Trash'].map((name) => ({ name, ok: true, missing: [], extra: [] }))
+      return commit<SystemCheck>({ version: EXPECTED_GAS_VERSION, sheets, clientIdSet: true, superAdminCount: 1, recentErrors: [], dailyJobs: true, checkedAt: now() })
     }
     case 'listLogs': {
       requirePerm(me, 'logs.view')

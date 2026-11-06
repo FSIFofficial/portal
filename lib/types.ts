@@ -91,6 +91,8 @@ export interface Announcement {
   updatedAt: string
   /** 「確認しました」ボタンを出して、誰が確認したかを記録する */
   requireAck?: boolean
+  /** Discordに通知した日時（'skip' は通知しない） */
+  notifiedAt?: string
 }
 
 export interface Settings {
@@ -143,6 +145,7 @@ export interface BootstrapData {
   /** login のときだけ返る */
   session?: string
   sessionExpiresAt?: string
+  branding?: Branding
 }
 
 export interface AdminData {
@@ -159,6 +162,7 @@ export interface AdminData {
   /** お知らせID → 確認済み人数 */
   ackCounts?: Record<string, number>
   discord?: DiscordStatus
+  branding?: Branding
 }
 
 export interface HelpContent {
@@ -203,6 +207,24 @@ export interface BulkAddResult {
   skipped: { email: string; reason: string }[]
 }
 
+export interface Branding {
+  portalName: string
+  tagline: string
+  logoUrl: string
+  primaryColor: string
+}
+
+export const DEFAULT_BRANDING: Branding = { portalName: 'FSIF Portal', tagline: 'CONNECT THE DOTS', logoUrl: '', primaryColor: '#1f6fba' }
+
+export interface TrashItem {
+  key: string
+  sheet: 'Tools' | 'Documents' | 'Announcements' | 'Users'
+  itemKey: string
+  title: string
+  deletedAt: string
+  deletedBy: string
+}
+
 export interface DiscordStatus {
   configured: boolean
   /** Webhook URL の末尾だけ（URLを知っていれば誰でも投稿できるため、全体は返さない） */
@@ -242,6 +264,8 @@ export interface SystemCheck {
   superAdminCount: number
   checkedAt: string
   recentErrors?: { timestamp: string; code: string; message: string }[]
+  /** 毎朝の自動処理（掲載開始日のお知らせの通知・ゴミ箱の整理）が登録されているか */
+  dailyJobs?: boolean
 }
 
 export function can(me: Me | null | undefined, perm: Permission): boolean {

@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, ExternalLink, FileText, FolderOpen, Pin } from 'lucide-react'
-import { downloadLabel, downloadUrl, driveKindLabel, parseDriveUrl, thumbnailUrl, viewUrl } from '@/lib/drive'
+import { Download, Eye, ExternalLink, FileText, FolderOpen, Pin } from 'lucide-react'
+import { downloadLabel, downloadUrl, driveKindLabel, parseDriveUrl, previewUrl, thumbnailUrl, viewUrl } from '@/lib/drive'
 import { isNew, type PortalDocument } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth, useTrack } from './auth-provider'
-import { NewBadge } from './ui'
+import { Button, Modal, NewBadge } from './ui'
 
 export function DocThumb({ doc, className }: { doc: PortalDocument; className?: string }) {
   const [failed, setFailed] = useState(false)
@@ -15,7 +15,7 @@ export function DocThumb({ doc, className }: { doc: PortalDocument; className?: 
   if (!src || failed) {
     const Icon = isFolder ? FolderOpen : FileText
     return (
-      <div className={cn('grid place-items-center bg-gradient-to-br from-[#eaf3fb] to-[#f5f8fc] text-[#7ca0bd]', className)}>
+      <div className={cn('grid place-items-center bg-gradient-to-br from-[var(--brand-soft)] to-[#f5f8fc] text-[#7ca0bd]', className)}>
         <Icon size={32} strokeWidth={1.5} />
       </div>
     )
@@ -26,13 +26,33 @@ export function DocThumb({ doc, className }: { doc: PortalDocument; className?: 
 
 export function DocActions({ doc, compact }: { doc: PortalDocument; compact?: boolean }) {
   const track = useTrack()
+  const [preview, setPreview] = useState(false)
   const open = viewUrl(doc)
   const dl = downloadUrl(doc)
+  const embed = previewUrl(doc)
   const size = compact ? 'px-2.5 py-1.5 text-[11px]' : 'px-3 py-2 text-[12px]'
   return (
     <div className="flex flex-wrap gap-2">
+      {embed && (
+        <button onClick={() => { setPreview(true); track('doc', doc.id) }} className={cn('inline-flex items-center gap-1.5 rounded-lg border border-[#cfdeeb] bg-white font-bold text-[#285b82] hover:bg-[#f2f7fc]', size)}>
+          <Eye size={12} />プレビュー
+        </button>
+      )}
+      {preview && (
+        <Modal xl title={doc.title} onClose={() => setPreview(false)} footer={
+          <>
+            {open && <a href={open} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-xl border border-[#dbe4ec] bg-white px-3.5 py-2.5 text-[12px] font-bold text-[#55708b] hover:bg-[#f7f9fb]">新しいタブで開く<ExternalLink size={12} /></a>}
+            <Button variant="secondary" onClick={() => setPreview(false)}>閉じる</Button>
+          </>
+        }>
+          <div className="flex h-full flex-col">
+            <iframe src={embed} title={doc.title} className="min-h-[60vh] w-full flex-1 rounded-lg border border-[#e4e9f0] bg-[#f6f8fb]" allow="autoplay" referrerPolicy="no-referrer-when-downgrade" />
+            <p className="mt-2 text-[11px] text-[#8a99a9]">表示されないときは、ブラウザで閲覧権限のあるGoogleアカウントにログインしているか確認するか、「新しいタブで開く」を使ってください。</p>
+          </div>
+        </Modal>
+      )}
       {open ? (
-        <a href={open} target="_blank" rel="noopener noreferrer" onClick={() => track('doc', doc.id)} className={cn('inline-flex items-center gap-1.5 rounded-lg bg-[#1f6fba] font-bold text-white hover:bg-[#185c9d]', size)}>
+        <a href={open} target="_blank" rel="noopener noreferrer" onClick={() => track('doc', doc.id)} className={cn('inline-flex items-center gap-1.5 rounded-lg bg-[var(--brand)] font-bold text-white hover:bg-[var(--brand-dark)]', size)}>
           資料を開く<ExternalLink size={12} />
         </a>
       ) : (

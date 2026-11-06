@@ -1,6 +1,6 @@
 // デモモード（GAS未接続）で使う架空のサンプルデータ。実際の組織データは含めないこと（このファイルはGitHubで公開される）。
 
-import type { Announcement, BackupStatus, DiscordStatus, ErrorDigestStatus, HelpContent, PortalDocument, Role, Settings, Tool, User } from './types'
+import type { Announcement, BackupStatus, Branding, DiscordStatus, ErrorDigestStatus, HelpContent, PortalDocument, Role, Settings, Tool, User } from './types'
 
 export interface DemoDb {
   users: User[]
@@ -16,6 +16,8 @@ export interface DemoDb {
   acks: { announcementId: string; email: string; ackAt: string }[]
   errorDigest: ErrorDigestStatus
   discord: DiscordStatus
+  trash: { key: string; sheet: 'Tools' | 'Documents' | 'Announcements' | 'Users'; itemKey: string; title: string; data: unknown; deletedAt: string; deletedBy: string }[]
+  branding: Branding
 }
 
 // 日付は開いた日を基準にする（NEW表示が分かるよう、一部だけ最近更新したことにする）
@@ -81,6 +83,8 @@ export function createDemoDb(): DemoDb {
     backup: { enabled: false, lastAt: '', lastUrl: '', lastError: '', keep: 10, folderUrl: '' },
     acks: [],
     errorDigest: { enabled: false, lastSentAt: '', recipients: 1 },
+    trash: [],
+    branding: { portalName: 'FSIF Portal', tagline: 'CONNECT THE DOTS', logoUrl: '', primaryColor: '#1f6fba' },
     discord: { configured: false, webhookHint: '', notifyDocuments: true, notifyAnnouncements: true, portalUrl: 'https://fsifofficial.github.io/portal/' },
   }
 }

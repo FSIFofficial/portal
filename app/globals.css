@@ -47,6 +47,10 @@
 
 :root {
   color-scheme: light;
+  /* ポータルのメインカラー（管理画面 > 設定 > ポータル名・ロゴ・色 で変更すると上書きされる） */
+  --brand: #1f6fba;
+  --brand-dark: color-mix(in srgb, var(--brand) 82%, black);
+  --brand-soft: color-mix(in srgb, var(--brand) 9%, white);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

@@ -86,7 +86,7 @@ export const useToast = () => useContext(ToastContext)
 // フォーム部品
 // ---------------------------------------------------------------------------
 
-export function Modal({ title, onClose, children, footer, wide }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
+export function Modal({ title, onClose, children, footer, wide, xl }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean; xl?: boolean }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
@@ -99,7 +99,7 @@ export function Modal({ title, onClose, children, footer, wide }: { title: strin
         aria-modal="true"
         aria-label={title}
         onMouseDown={(e) => e.stopPropagation()}
-        className={cn('flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl', wide ? 'sm:max-w-[760px]' : 'sm:max-w-[560px]')}
+        className={cn('flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl', xl ? 'h-[92vh] sm:max-w-[1100px]' : wide ? 'sm:max-w-[760px]' : 'sm:max-w-[560px]')}
       >
         <div className="flex items-center justify-between border-b border-[#edf0f3] px-5 py-4">
           <h2 className="text-[16px] font-bold text-[#1b304b]">{title}</h2>
@@ -127,7 +127,7 @@ export function Field({ label, hint, children, required, group }: { label: strin
   )
 }
 
-const inputClass = 'w-full rounded-lg border border-[#dbe3ec] bg-white px-3 py-2 text-[13px] text-[#1b304b] outline-none transition placeholder:text-[#a6b1bd] focus:border-[#1f6fba] focus:ring-2 focus:ring-[#1f6fba]/15 disabled:bg-[#f5f7fa]'
+const inputClass = 'w-full rounded-lg border border-[#dbe3ec] bg-white px-3 py-2 text-[13px] text-[#1b304b] outline-none transition placeholder:text-[#a6b1bd] focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/15 disabled:bg-[#f5f7fa]'
 
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cn(inputClass, 'h-10', props.className)} />
@@ -144,7 +144,7 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
 export function Checkbox({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode }) {
   return (
     <label className="flex cursor-pointer items-start gap-2 py-1 text-[13px] text-[#38536f]">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-1 size-4 accent-[#1f6fba]" />
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-1 size-4 accent-[var(--brand)]" />
       <span>{label}</span>
     </label>
   )
@@ -164,7 +164,7 @@ export function RolePicker({ roles, value, onChange, emptyLabel, exclude = [] }:
               key={r.id}
               onClick={() => toggle(r.id)}
               aria-pressed={on}
-              className={cn('rounded-full border px-3 py-1.5 text-[12px] font-semibold transition', on ? 'border-[#1f6fba] bg-[#1f6fba] text-white' : 'border-[#dbe3ec] bg-white text-[#55708b] hover:border-[#9fbfdc]')}
+              className={cn('rounded-full border px-3 py-1.5 text-[12px] font-semibold transition', on ? 'border-[var(--brand)] bg-[var(--brand)] text-white' : 'border-[#dbe3ec] bg-white text-[#55708b] hover:border-[#9fbfdc]')}
             >
               {r.name}
             </button>
@@ -178,7 +178,7 @@ export function RolePicker({ roles, value, onChange, emptyLabel, exclude = [] }:
 
 export function Button({ variant = 'primary', className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'danger' | 'ghost' }) {
   const styles = {
-    primary: 'bg-[#1f6fba] text-white hover:bg-[#185c9d] disabled:bg-[#dfe5eb] disabled:text-[#8995a2]',
+    primary: 'bg-[var(--brand)] text-white hover:bg-[var(--brand-dark)] disabled:bg-[#dfe5eb] disabled:text-[#8995a2]',
     secondary: 'border border-[#dbe4ec] bg-white text-[#55708b] hover:bg-[#f7f9fb]',
     danger: 'border border-[#f3d0cc] bg-white text-[#b42318] hover:bg-[#fff5f4]',
     ghost: 'text-[#55708b] hover:bg-[#f1f5f8]',
