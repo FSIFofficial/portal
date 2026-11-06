@@ -213,6 +213,21 @@ test('管理：変更履歴の絞り込み・カテゴリ名の一括変更・�
   await expect(page.getByText('すべて正常に動いています')).toBeVisible()
 })
 
+for (const size of [{ name: 'PC', width: 1360, height: 900 }, { name: 'スマホ', width: 390, height: 664 }]) {
+  test(`「ホーム画面に追加」の案内が画面内に表示される（${size.name}）`, async ({ page }) => {
+    // ヘッダー（背景のぼかし効果あり）の中から開くポップアップが、画面の上にはみ出していた不具合の確認
+    await page.setViewportSize({ width: size.width, height: size.height })
+    await login(page, 'メンバー 一郎')
+    await page.locator('header button[aria-expanded]').last().click()
+    await page.getByRole('button', { name: 'ホーム画面に追加' }).click()
+    const box = await page.getByRole('dialog').boundingBox()
+    expect(box).not.toBeNull()
+    expect(box!.y).toBeGreaterThanOrEqual(0)
+    expect(box!.y + box!.height).toBeLessThanOrEqual(size.height + 1)
+    await expect(page.getByRole('dialog').getByRole('button', { name: '閉じる', exact: true }).last()).toBeInViewport()
+  })
+}
+
 test('スマホ幅でも横にはみ出さない', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await login(page, 'メンバー 一郎')
