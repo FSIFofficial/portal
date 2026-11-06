@@ -2,12 +2,13 @@
 // GASコード（リポジトリ外で管理）の SCHEMA と対応しているので、項目を増やす場合は両方を更新すること。
 
 /** 権限キー。'*' は全権管理者（ユーザー・ロール・設定の管理を含むすべて） */
-export type Permission = '*' | 'tools.manage' | 'documents.manage' | 'announcements.manage' | 'logs.view'
+export type Permission = '*' | 'tools.manage' | 'documents.manage' | 'announcements.manage' | 'links.manage' | 'logs.view'
 
 export const PERMISSION_LABELS: Record<Exclude<Permission, '*'>, string> = {
   'tools.manage': 'ツールの追加・編集・並べ替え',
   'documents.manage': '資料の追加・編集',
   'announcements.manage': 'お知らせの追加・編集',
+  'links.manage': 'リンク集の追加・編集・並べ替え',
   'logs.view': '変更履歴の閲覧',
 }
 
@@ -79,6 +80,17 @@ export interface PortalDocument {
   driveSyncStatus?: string
 }
 
+export interface PortalLink {
+  id: string
+  title: string
+  url: string
+  description: string
+  category: string
+  visibleRoles: string[]
+  order: number
+  updatedAt: string
+}
+
 export interface Announcement {
   id: string
   title: string
@@ -146,6 +158,7 @@ export interface BootstrapData {
   session?: string
   sessionExpiresAt?: string
   branding?: Branding
+  links?: PortalLink[]
 }
 
 export interface AdminData {
@@ -163,6 +176,7 @@ export interface AdminData {
   ackCounts?: Record<string, number>
   discord?: DiscordStatus
   branding?: Branding
+  links?: PortalLink[]
 }
 
 export interface HelpContent {
@@ -181,7 +195,7 @@ export interface BackupStatus {
 }
 
 export interface UsageRow {
-  kind: 'tool' | 'doc'
+  kind: 'tool' | 'doc' | 'link'
   id: string
   thisMonth: number
   lastMonth: number
@@ -218,7 +232,7 @@ export const DEFAULT_BRANDING: Branding = { portalName: 'FSIF Portal', tagline: 
 
 export interface TrashItem {
   key: string
-  sheet: 'Tools' | 'Documents' | 'Announcements' | 'Users'
+  sheet: 'Tools' | 'Documents' | 'Announcements' | 'Links' | 'Users'
   itemKey: string
   title: string
   deletedAt: string

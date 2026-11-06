@@ -16,6 +16,6 @@ export const DEMO_MODE = !GAS_URL
  * この画面が前提としているGASの版名。GASコード1行目の GAS_VERSION と一致している必要がある。
  * GAS側のデータ形式を変えたら両方を同じ値に上げること（管理画面の「バージョン確認」で照合する）。
  */
-export const EXPECTED_GAS_VERSION = '2.3.0'
+export const EXPECTED_GAS_VERSION = '2.4.0'
 
 export const asset = (path: string) => `${BASE_PATH}${path}`

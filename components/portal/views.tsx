@@ -6,6 +6,7 @@ import { ApiError, api } from '@/lib/api'
 import { can, isNew, type BootstrapData, type PortalDocument, type Tool } from '@/lib/types'
 import { useAuth } from './auth-provider'
 import { DocActions, DocCard, DocThumb } from './doc-card'
+import { LinkCard } from './links-view'
 import type { Navigate } from './router'
 import { DragHandle, ToolCard } from './tool-card'
 import { Button, EmptyState, Select, useToast } from './ui'
@@ -351,6 +352,7 @@ export function SearchView({ data, navigate, query }: { data: BootstrapData; nav
   const counts = useDocCounts(data)
   const tools = data.tools.filter((t) => match(toolText(t), query))
   const docs = data.documents.filter((d) => match(docText(d), query)).sort(byDateDesc)
+  const links = (data.links ?? []).filter((l) => match(`${l.title} ${l.description} ${l.category} ${l.url}`, query))
   return (
     <>
       <div className="mb-6"><SearchBox large value={q} onChange={setQ} onSubmit={() => navigate('/search', { q })} placeholder="ツールや資料を検索" /></div>
@@ -364,6 +366,12 @@ export function SearchView({ data, navigate, query }: { data: BootstrapData; nav
       {docs.length === 0 ? <p className="text-[12px] text-[#8a99a9]">該当する資料はありません。</p> : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {docs.map((doc) => <DocCard key={doc.id} doc={doc} restricted={doc.visibleRoles.length > 0} />)}
+        </div>
+      )}
+      <h2 className="mb-3 mt-8 text-[15px] font-bold">リンク <span className="text-[12px] font-semibold text-[var(--brand)]">{links.length}件</span></h2>
+      {links.length === 0 ? <p className="text-[12px] text-[#8a99a9]">該当するリンクはありません。</p> : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {links.map((l) => <LinkCard key={l.id} link={l} restricted={l.visibleRoles.length > 0} />)}
         </div>
       )}
     </>

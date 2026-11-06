@@ -67,6 +67,19 @@ const TOPICS: Topic[] = [
     ),
   },
   {
+    title: 'リンク集を整える',
+    perm: 'links.manage',
+    link: { label: 'リンク管理を開く', path: '/admin/links' },
+    body: (
+      <ol>
+        <li>「リンク管理」→「新規追加」で、リンク名・URL・説明・カテゴリを入力します。同じカテゴリのリンクはリンク集でまとめて表示されます。</li>
+        <li>並び順は一覧の矢印で変えられます（押すとすぐ保存されます）。</li>
+        <li>特定の人だけに見せたいときは「公開範囲」でロールを選びます。</li>
+        <li>どのリンクがよく使われているかは「利用状況」の「リンク」で確認できます。</li>
+      </ol>
+    ),
+  },
+  {
     title: 'お知らせを出す',
     perm: 'announcements.manage',
     link: { label: 'お知らせを開く', path: '/admin/announcements' },

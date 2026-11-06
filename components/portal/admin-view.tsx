@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AlertTriangle, Bell, BookOpen, Trash2, UserX, ChartColumn, CheckCircle2, ChevronRight, FileText, History, KeyRound, LifeBuoy, Link2Off, LoaderCircle, Plus, RefreshCcw, Settings2, ShieldCheck, UserCog, Users, Wrench, XCircle } from 'lucide-react'
+import { AlertTriangle, Bell, BookOpen, Link2, Trash2, UserX, ChartColumn, CheckCircle2, ChevronRight, FileText, History, KeyRound, LifeBuoy, Link2Off, LoaderCircle, Plus, RefreshCcw, Settings2, ShieldCheck, UserCog, Users, Wrench, XCircle } from 'lucide-react'
 import { DEMO_MODE, EXPECTED_GAS_VERSION } from '@/lib/config'
 import { ApiError, api } from '@/lib/api'
 import { downloadUrl, driveKindLabel, parseDriveUrl } from '@/lib/drive'
@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { useAuth } from './auth-provider'
 import { ModalFooter, RowActions, SectionHeader, Table, confirmDelete, fmt, useEditor, type Mutate } from './admin-shared'
 import { AdminGuide } from './admin-guide'
+import { LinksAdmin } from './admin-links'
 import { AckStatusModal, BackupPanel, BrandingPanel, BulkImportModal, DiscordPanel, TrashAdmin, ErrorDigestPanel, NotifyCheckbox, HelpAdmin, UploadButton, UsageAdmin } from './admin-extra'
 import type { Navigate } from './router'
 import {
@@ -20,11 +21,12 @@ import {
   ToolIcon, useToast,
 } from './ui'
 
-type Section = 'guide' | 'tools' | 'documents' | 'announcements' | 'help' | 'users' | 'roles' | 'settings' | 'stats' | 'trash' | 'logs' | 'system'
+type Section = 'guide' | 'tools' | 'documents' | 'links' | 'announcements' | 'help' | 'users' | 'roles' | 'settings' | 'stats' | 'trash' | 'logs' | 'system'
 
 const SECTIONS: { id: Section; label: string; icon: typeof Wrench; allowed: (me: Me) => boolean; description: string }[] = [
   { id: 'tools', label: 'ツール管理', icon: Wrench, allowed: (me) => can(me, 'tools.manage'), description: 'ポータルに掲載するツールと接続先URL・公開範囲を管理します。' },
   { id: 'documents', label: '資料管理', icon: FileText, allowed: (me) => can(me, 'documents.manage'), description: '資料館に掲載するGoogle Driveの資料と公開範囲を管理します。' },
+  { id: 'links', label: 'リンク管理', icon: Link2, allowed: (me) => can(me, 'links.manage'), description: 'リンク集に載せるWebサイト・フォームと、並び順・公開範囲を管理します。' },
   { id: 'announcements', label: 'お知らせ', icon: Bell, allowed: (me) => can(me, 'announcements.manage'), description: 'ページ上部に表示するお知らせを管理します。' },
   { id: 'help', label: 'ヘルプ編集', icon: LifeBuoy, allowed: (me) => can(me, 'announcements.manage'), description: 'ヘルプ・問い合わせページの内容（問い合わせ先・よくある質問）を編集します。' },
   { id: 'users', label: 'アカウント', icon: UserCog, allowed: (me) => me.isSuper, description: 'ログインできるGoogleアカウントと、割り当てるロールを管理します。' },
@@ -100,6 +102,7 @@ export function AdminView({ me, section, navigate }: { me: Me; section: string; 
           <>
             {current.id === 'tools' && <ToolsAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'documents' && <DocumentsAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
+            {current.id === 'links' && <LinksAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'announcements' && <AnnouncementsAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'users' && <UsersAdmin me={me} data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'roles' && <RolesAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, BookOpen, CheckCircle2, Smartphone, ChevronDown, ChevronRight, LayoutDashboard, LifeBuoy, LoaderCircle, LogOut, Menu, Search, Settings2, Sparkles, X, Zap } from 'lucide-react'
+import { AlertTriangle, BookOpen, CheckCircle2, Link2, Smartphone, ChevronDown, ChevronRight, LayoutDashboard, LifeBuoy, LoaderCircle, LogOut, Menu, Search, Settings2, Sparkles, X, Zap } from 'lucide-react'
 import { DEMO_MODE, EXPECTED_GAS_VERSION, asset } from '@/lib/config'
 import { DEFAULT_BRANDING, isAnyManager, isNew, type BootstrapData } from '@/lib/types'
 import { api } from '@/lib/api'
@@ -14,6 +14,7 @@ import { BrandLogo, useApplyBranding } from './branding'
 import { InstallGuide } from './install'
 import { ToastProvider, useToast } from './ui'
 import { HelpView } from './help-view'
+import { LinksView } from './links-view'
 import { HomeView, LibraryView, SearchView, ToolsView } from './views'
 
 export function PortalApp() {
@@ -43,6 +44,7 @@ const NAV = [
   { path: '/', label: 'ホーム', icon: LayoutDashboard },
   { path: '/tools', label: 'ツール', icon: Zap },
   { path: '/library', label: '資料館', icon: BookOpen },
+  { path: '/links', label: 'リンク集', icon: Link2 },
 ] as const
 
 const DISMISS_KEY = 'fsif-portal-dismissed'
@@ -90,6 +92,7 @@ function Portal({ data }: { data: BootstrapData }) {
   const newCounts: Record<string, number> = {
     '/tools': data.tools.filter((t) => isNew(t, me)).length,
     '/library': data.documents.filter((d) => isNew(d, me)).length,
+    '/links': (data.links ?? []).filter((l) => isNew(l, me)).length,
   }
 
   const dismiss = (key: string) => {
@@ -112,6 +115,7 @@ function Portal({ data }: { data: BootstrapData }) {
   const meta: Record<string, { title: string; description: string }> = {
     home: { title: 'ホーム', description: '今日も必要な情報へ、すばやくアクセスできます。' },
     tools: { title: 'ツール', description: '業務に使うツールをまとめています。' },
+    links: { title: 'リンク集', description: 'よく使うWebサイトやフォームへのリンクをまとめています。' },
     library: { title: '資料館', description: 'マニュアルやオンボーディング資料を探せます。資料はGoogle Driveで開く・ダウンロードできます。' },
     search: { title: '検索結果', description: `「${route.params.get('q') ?? ''}」の検索結果` },
     admin: { title: '管理画面', description: 'ポータルの掲載情報・アカウント・権限を管理します。' },
@@ -178,13 +182,13 @@ function Portal({ data }: { data: BootstrapData }) {
           </div>
         </div>
         {mobileMenu && (
-          <nav className="flex gap-1 border-t border-[#eef1f5] px-4 py-2 md:hidden">
+          <nav className="grid grid-cols-3 gap-1 border-t border-[#eef1f5] px-4 py-2 md:hidden">
             {NAV.map((n) => (
-              <button key={n.path} onClick={() => { navigate(n.path); setMobileMenu(false) }} className={cn('flex-1 rounded-lg py-2 text-[13px] font-semibold', activePath === n.path ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>{n.label}</button>
+              <button key={n.path} onClick={() => { navigate(n.path); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', activePath === n.path ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>{n.label}</button>
             ))}
-            <button onClick={() => { navigate('/help'); setMobileMenu(false) }} className={cn('flex-1 rounded-lg py-2 text-[13px] font-semibold', tab === 'help' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>ヘルプ</button>
+            <button onClick={() => { navigate('/help'); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', tab === 'help' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>ヘルプ</button>
             {manager && (
-              <button onClick={() => { navigate('/admin'); setMobileMenu(false) }} className={cn('flex-1 rounded-lg py-2 text-[13px] font-semibold', tab === 'admin' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>管理</button>
+              <button onClick={() => { navigate('/admin'); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', tab === 'admin' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>管理</button>
             )}
           </nav>
         )}
@@ -246,6 +250,8 @@ function Content({ tab, segments, params, data, navigate }: { tab: string; segme
       return <LibraryView data={data} navigate={navigate} params={params} />
     case 'help':
       return <HelpView data={data} navigate={navigate} />
+    case 'links':
+      return <LinksView data={data} navigate={navigate} />
     case 'search':
       return <SearchView data={data} navigate={navigate} query={params.get('q') ?? ''} />
     case 'admin':

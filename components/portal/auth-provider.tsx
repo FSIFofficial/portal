@@ -173,7 +173,7 @@ export function useAuth() {
 /** 利用状況の記録（失敗しても画面には影響させない） */
 export function useTrack() {
   const { run } = useAuth()
-  return useCallback((kind: 'tool' | 'doc', id: string) => {
+  return useCallback((kind: 'tool' | 'doc' | 'link', id: string) => {
     void run((t) => api.track(t, kind, id)).catch(() => {})
   }, [run])
 }

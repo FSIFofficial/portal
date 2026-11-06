@@ -105,10 +105,33 @@ test('ポータル名と色を変えると、ヘッダーとログイン画面�
   await expect(page.getByRole('heading', { name: 'テストポータル' })).toBeVisible()
 })
 
+test('リンク集：カテゴリごとに表示され、限定公開は対象の人だけに見え、管理画面で追加できる', async ({ page }) => {
+  await login(page, 'メンバー 一郎')
+  await page.goto('./#/links')
+  await expect(page.getByRole('heading', { name: /公式/ })).toBeVisible()
+  await expect(page.getByText('経費精算フォーム（サンプル）')).toBeVisible()
+  await expect(page.getByText('契約書テンプレート置き場（サンプル）')).toHaveCount(0)
+  await page.getByRole('button', { name: '広報', exact: true }).click()
+  await expect(page.getByText('公式SNS（サンプル）')).toBeVisible()
+  await expect(page.getByText('経費精算フォーム（サンプル）')).toHaveCount(0)
+
+  await logout(page)
+  await login(page, '掲載 花子')
+  await page.goto('./#/admin/links')
+  await page.getByRole('button', { name: '新規追加' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByPlaceholder('例：経費精算フォーム').fill('新しいリンク')
+  await dialog.getByPlaceholder('https://').fill('https://example.com/new')
+  await dialog.getByRole('button', { name: '保存' }).click()
+  await expect(page.getByText('リンクを追加しました')).toBeVisible()
+  await page.goto('./#/links')
+  await expect(page.getByText('新しいリンク')).toBeVisible()
+})
+
 test('スマホ幅でも横にはみ出さない', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await login(page, 'メンバー 一郎')
-  for (const path of ['./#/', './#/tools', './#/library', './#/help']) {
+  for (const path of ['./#/', './#/tools', './#/library', './#/links', './#/help']) {
     await page.goto(path)
     await expect(page.locator('header')).toBeVisible()
     await page.waitForTimeout(200)

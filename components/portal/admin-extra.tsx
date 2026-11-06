@@ -85,7 +85,7 @@ export function UsageAdmin({ section, data }: { section: SectionInfo; data: Admi
   const toast = useToast()
   const [stats, setStats] = useState<UsageStats | null>(null)
   const [loading, setLoading] = useState(false)
-  const [kind, setKind] = useState<'tool' | 'doc'>('tool')
+  const [kind, setKind] = useState<'tool' | 'doc' | 'link'>('tool')
   const load = useCallback(() => {
     setLoading(true)
     run((t) => api.usageStats(t))
@@ -98,7 +98,9 @@ export function UsageAdmin({ section, data }: { section: SectionInfo; data: Admi
   const rows = useMemo(() => {
     const items = kind === 'tool'
       ? data.tools.map((t) => ({ id: t.id, name: t.name, sub: t.category }))
-      : data.documents.map((d) => ({ id: d.id, name: d.title, sub: d.type }))
+      : kind === 'link'
+        ? (data.links ?? []).map((l) => ({ id: l.id, name: l.title, sub: l.category || 'その他' }))
+        : data.documents.map((d) => ({ id: d.id, name: d.title, sub: d.type }))
     return items
       .map((it) => {
         const s = stats?.rows.find((r) => r.kind === kind && r.id === it.id)
@@ -112,12 +114,12 @@ export function UsageAdmin({ section, data }: { section: SectionInfo; data: Admi
     <>
       <SectionHeader section={section} loading={loading} onReload={load} />
       <div className="flex flex-wrap items-center gap-2 border-b border-[#edf0f3] px-5 py-3">
-        {(['tool', 'doc'] as const).map((k) => (
+        {(['tool', 'doc', 'link'] as const).map((k) => (
           <button key={k} onClick={() => setKind(k)} aria-pressed={kind === k} className={cn('rounded-full border px-3 py-1.5 text-[12px] font-semibold', kind === k ? 'border-[var(--brand)] bg-[var(--brand)] text-white' : 'border-[#dbe3ec] text-[#55708b]')}>
-            {k === 'tool' ? 'ツール' : '資料'}
+            {k === 'tool' ? 'ツール' : k === 'doc' ? '資料' : 'リンク'}
           </button>
         ))}
-        {stats && unused > 0 && <span className="ml-auto text-[12px] text-[#92400e]">直近3か月で一度も使われていない{kind === 'tool' ? 'ツール' : '資料'}：{unused}件</span>}
+        {stats && unused > 0 && <span className="ml-auto text-[12px] text-[#92400e]">直近3か月で一度も使われていない{kind === 'tool' ? 'ツール' : kind === 'doc' ? '資料' : 'リンク'}：{unused}件</span>}
       </div>
       {!stats ? (
         <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-[#718096]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
@@ -140,7 +142,7 @@ export function UsageAdmin({ section, data }: { section: SectionInfo; data: Admi
           ))}
         </Table>
       )}
-      <p className="px-5 py-4 text-[11px] text-[#8a99a9]">「開く」「資料を開く」「ダウンロード」が押された回数です（同じ人が何度押しても数えます）。</p>
+      <p className="px-5 py-4 text-[11px] text-[#8a99a9]">「開く」「資料を開く」「プレビュー」「ダウンロード」、リンク集のリンクが押された回数です（同じ人が何度押しても数えます）。</p>
     </>
   )
 }
@@ -499,7 +501,7 @@ export function NotifyCheckbox({ checked, onChange, restricted }: { checked: boo
 // ゴミ箱
 // ---------------------------------------------------------------------------
 
-const SHEET_LABELS: Record<TrashItem['sheet'], string> = { Tools: 'ツール', Documents: '資料', Announcements: 'お知らせ', Users: 'アカウント' }
+const SHEET_LABELS: Record<TrashItem['sheet'], string> = { Tools: 'ツール', Documents: '資料', Announcements: 'お知らせ', Links: 'リンク', Users: 'アカウント' }
 
 export function TrashAdmin({ section, mutate }: { section: SectionInfo; mutate: Mutate }) {
   const { run } = useAuth()
