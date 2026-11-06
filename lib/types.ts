@@ -89,6 +89,8 @@ export interface PortalLink {
   visibleRoles: string[]
   order: number
   updatedAt: string
+  /** 自分で設定したアイコン画像（空ならサイトのアイコンを自動で取得） */
+  iconUrl?: string
 }
 
 export interface Announcement {
@@ -159,6 +161,8 @@ export interface BootstrapData {
   sessionExpiresAt?: string
   branding?: Branding
   links?: PortalLink[]
+  /** お知らせ一覧用（閉じたもの・掲載が終わったものも含む） */
+  announcementArchive?: Announcement[]
 }
 
 export interface AdminData {
@@ -177,6 +181,7 @@ export interface AdminData {
   discord?: DiscordStatus
   branding?: Branding
   links?: PortalLink[]
+  securityAlerts?: { enabled: boolean; recipients: number }
 }
 
 export interface HelpContent {

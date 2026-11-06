@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowRight, ArrowUp, BookOpen, ChevronRight, FileText, Filter, GripVertical, Search, X } from 'lucide-react'
 import { ApiError, api } from '@/lib/api'
-import { can, isNew, type BootstrapData, type PortalDocument, type Tool } from '@/lib/types'
+import { can, isNew, type BootstrapData, type PortalDocument, type PortalLink, type Tool } from '@/lib/types'
 import { useAuth } from './auth-provider'
 import { DocActions, DocCard, DocThumb } from './doc-card'
 import { LinkCard } from './links-view'
@@ -69,6 +69,7 @@ export function HomeView({ data, navigate }: { data: BootstrapData; navigate: Na
     const favs = favorites.map((id) => data.tools.find((t) => t.id === id)).filter((t): t is Tool => !!t)
     return [...favs, ...data.tools.filter((t) => !favorites.includes(t.id))].slice(0, Math.max(6, favs.length))
   }, [data.tools, favorites])
+  const favLinks = useMemo(() => favorites.map((id) => (data.links ?? []).find((l) => l.id === id)).filter((l): l is PortalLink => !!l), [data.links, favorites])
   return (
     <>
       <div className="mb-8">
@@ -89,6 +90,17 @@ export function HomeView({ data, navigate }: { data: BootstrapData; navigate: Na
             <ToolCard key={tool.id} tool={tool} docCount={counts[tool.name] ?? 0} restricted={tool.visibleRoles.length > 0} onDocs={() => navigate('/library', { tool: tool.name })} onMissingUrl={() => toast('このツールの接続先はまだ設定されていません')} />
           ))}
         </div>
+      )}
+      {favLinks.length > 0 && (
+        <section className="mt-10">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-[17px] font-bold">お気に入りのリンク</h2>
+            <button onClick={() => navigate('/links')} className="flex items-center gap-1 text-[12px] font-bold text-[var(--brand)]">リンク集へ <ArrowRight size={14} /></button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {favLinks.map((l) => <LinkCard key={l.id} link={l} restricted={l.visibleRoles.length > 0} />)}
+          </div>
+        </section>
       )}
       <div className="mt-10 grid gap-5 lg:grid-cols-[1.1fr_1fr]">
         <div className="flex flex-col rounded-2xl bg-[#173a62] p-6 text-white">

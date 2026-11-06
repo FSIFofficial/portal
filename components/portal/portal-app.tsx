@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, BookOpen, CheckCircle2, Link2, Smartphone, ChevronDown, ChevronRight, LayoutDashboard, LifeBuoy, LoaderCircle, LogOut, Menu, Search, Settings2, Sparkles, X, Zap } from 'lucide-react'
+import { AlertTriangle, Bell, BookOpen, CheckCircle2, Link2, Smartphone, ChevronDown, ChevronRight, LayoutDashboard, LifeBuoy, LoaderCircle, LogOut, Menu, Search, Settings2, Sparkles, X, Zap } from 'lucide-react'
 import { DEMO_MODE, EXPECTED_GAS_VERSION, asset } from '@/lib/config'
 import { DEFAULT_BRANDING, isAnyManager, isNew, type BootstrapData } from '@/lib/types'
 import { api } from '@/lib/api'
@@ -12,8 +12,10 @@ import { LoginScreen } from './login-screen'
 import { useHashRoute, type Navigate } from './router'
 import { BrandLogo, useApplyBranding } from './branding'
 import { InstallGuide } from './install'
+import { ThemeSwitcher } from './theme'
 import { ToastProvider, useToast } from './ui'
 import { HelpView } from './help-view'
+import { AnnouncementsView } from './announcements-view'
 import { LinksView } from './links-view'
 import { HomeView, LibraryView, SearchView, ToolsView } from './views'
 
@@ -119,6 +121,7 @@ function Portal({ data }: { data: BootstrapData }) {
     library: { title: '資料館', description: 'マニュアルやオンボーディング資料を探せます。資料はGoogle Driveで開く・ダウンロードできます。' },
     search: { title: '検索結果', description: `「${route.params.get('q') ?? ''}」の検索結果` },
     admin: { title: '管理画面', description: 'ポータルの掲載情報・アカウント・権限を管理します。' },
+    announcements: { title: 'お知らせ一覧', description: 'これまでのお知らせを読み返せます。閉じたものや掲載が終わったものも表示しています。' },
     help: { title: 'ヘルプ・問い合わせ', description: '使い方で困ったときの問い合わせ先と、よくある質問です。' },
   }
   const page = meta[tab] ?? meta.home
@@ -186,6 +189,7 @@ function Portal({ data }: { data: BootstrapData }) {
             {NAV.map((n) => (
               <button key={n.path} onClick={() => { navigate(n.path); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', activePath === n.path ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>{n.label}</button>
             ))}
+            <button onClick={() => { navigate('/announcements'); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', tab === 'announcements' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>お知らせ</button>
             <button onClick={() => { navigate('/help'); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', tab === 'help' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>ヘルプ</button>
             {manager && (
               <button onClick={() => { navigate('/admin'); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', tab === 'admin' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>管理</button>
@@ -213,6 +217,9 @@ function Portal({ data }: { data: BootstrapData }) {
                   <Settings2 size={17} />管理画面
                 </button>
               )}
+              <button onClick={() => navigate('/announcements')} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', tab === 'announcements' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#647589] hover:bg-white')}>
+                <Bell size={17} />お知らせ一覧
+              </button>
               <button onClick={() => navigate('/help')} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', tab === 'help' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#647589] hover:bg-white')}>
                 <LifeBuoy size={17} />ヘルプ・問い合わせ
               </button>
@@ -248,6 +255,8 @@ function Content({ tab, segments, params, data, navigate }: { tab: string; segme
       return <ToolsView data={data} navigate={navigate} initialQuery={params.get('q') ?? ''} />
     case 'library':
       return <LibraryView data={data} navigate={navigate} params={params} />
+    case 'announcements':
+      return <AnnouncementsView data={data} />
     case 'help':
       return <HelpView data={data} navigate={navigate} />
     case 'links':
@@ -300,6 +309,7 @@ function UserMenu({ data }: { data: BootstrapData }) {
               {roleNames.map((r) => <span key={r} className="rounded bg-[var(--brand-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--brand)]">{r}</span>)}
             </div>
           </div>
+          <ThemeSwitcher />
           <button onClick={() => { setOpen(false); setInstall(true) }} className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[12px] font-semibold text-[#55708b] hover:bg-[#f6f8fa]">
             <Smartphone size={15} />ホーム画面に追加
           </button>

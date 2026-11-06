@@ -128,10 +128,43 @@ test('リンク集：カテゴリごとに表示され、限定公開は対象�
   await expect(page.getByText('新しいリンク')).toBeVisible()
 })
 
+test('リンクのURLをコピーでき、☆を付けたリンクがホームに表示される', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await login(page, 'メンバー 一郎')
+  await page.goto('./#/links')
+  await page.getByRole('button', { name: '経費精算フォーム（サンプル）のリンクをコピー' }).click()
+  await expect(page.getByText('リンクをコピーしました')).toBeVisible()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('https://example.com/form')
+  await page.getByRole('button', { name: '公式SNS（サンプル）をお気に入りに追加' }).click()
+  await page.goto('./#/')
+  await expect(page.getByRole('heading', { name: 'お気に入りのリンク' })).toBeVisible()
+})
+
+test('お知らせ一覧で、掲載が終わったものも読み返せて「確認しました」も押せる', async ({ page }) => {
+  await login(page, 'メンバー 一郎')
+  await page.goto('./#/announcements')
+  await expect(page.getByText('先月のお知らせ（掲載終了・サンプル）')).toBeVisible()
+  await expect(page.getByText('掲載終了').first()).toBeVisible()
+  await page.locator('article', { hasText: '利用規約を確認してください' }).getByRole('button', { name: '確認しました' }).click()
+  await expect(page.locator('article', { hasText: '利用規約を確認してください' }).getByText('確認済み')).toBeVisible()
+})
+
+test('ダークモードを選ぶと再読み込みしても保たれ、ログアウトで前回のデータが消える', async ({ page }) => {
+  await login(page, 'メンバー 一郎')
+  await page.locator('header button[aria-expanded]').last().click()
+  await page.getByRole('radio', { name: /ダーク/ }).click()
+  await expect(page.locator('html')).toHaveClass(/dark/)
+  await page.reload()
+  await expect(page.locator('html')).toHaveClass(/dark/)
+  expect(await page.evaluate(() => !!localStorage.getItem('fsif-portal-data-cache'))).toBe(true)
+  await logout(page)
+  expect(await page.evaluate(() => localStorage.getItem('fsif-portal-data-cache'))).toBeNull()
+})
+
 test('スマホ幅でも横にはみ出さない', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await login(page, 'メンバー 一郎')
-  for (const path of ['./#/', './#/tools', './#/library', './#/links', './#/help']) {
+  for (const path of ['./#/', './#/tools', './#/library', './#/links', './#/announcements', './#/help']) {
     await page.goto(path)
     await expect(page.locator('header')).toBeVisible()
     await page.waitForTimeout(200)

@@ -1,13 +1,16 @@
 'use client'
 
 // リンク集：よく使うWebサイトやフォームへのリンクを、カテゴリごとにまとめて表示する
-import { useMemo, useState } from 'react'
-import { ExternalLink, Search, Settings2, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Copy, ExternalLink, Search, Settings2, Star, X } from 'lucide-react'
 import { can, isNew, type BootstrapData, type PortalLink } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useTrack } from './auth-provider'
 import type { Navigate } from './router'
-import { EmptyState, NewBadge } from './ui'
+import { useFavorites } from './tool-card'
+import { EmptyState, NewBadge, useToast } from './ui'
+import { copyText } from '@/lib/clipboard'
+import { imageUrl } from '@/lib/drive'
 
 const NO_CATEGORY = 'その他'
 
@@ -19,41 +22,92 @@ function hostOf(url: string) {
   }
 }
 
-/** サイトのアイコン（取得できなければ頭文字） */
-function SiteIcon({ link }: { link: PortalLink }) {
-  const [failed, setFailed] = useState(false)
+/**
+ * アイコンを取る先を順番に試す：自分で設定した画像 → Google → DuckDuckGo → サイト自身の favicon。
+ * どれも取れなければ頭文字を表示する（社内サイトや、広告ブロックなどでアイコンの取得が止められている場合）
+ */
+export function iconCandidates(link: Pick<PortalLink, 'url' | 'iconUrl'>): string[] {
+  const list: string[] = []
+  if (link.iconUrl) list.push(imageUrl(link.iconUrl, 128))
   const host = hostOf(link.url)
-  if (!host || failed) {
-    return <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[15px] font-bold text-[var(--brand)]">{link.title.slice(0, 1)}</span>
+  if (host) {
+    list.push(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`)
+    list.push(`https://icons.duckduckgo.com/ip3/${encodeURIComponent(host)}.ico`)
+    try {
+      list.push(`${new URL(link.url).origin}/favicon.ico`)
+    } catch {
+      // URLとして読めない
+    }
   }
+  return list
+}
+
+export function SiteIcon({ link }: { link: Pick<PortalLink, 'url' | 'iconUrl' | 'title'> }) {
+  const candidates = iconCandidates(link)
+  const [index, setIndex] = useState(0)
+  useEffect(() => setIndex(0), [link.url, link.iconUrl])
+  const src = candidates[index]
+  if (!src) {
+    return <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[15px] font-bold text-[var(--brand)]">{(link.title || '?').slice(0, 1)}</span>
+  }
+  // 自分で設定した画像は枠いっぱいに、自動取得したアイコンは小さめに表示する
+  const custom = !!link.iconUrl && index === 0
   return (
-    <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-[#eef1f4] bg-white">
-      <img src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} className="size-6" />
+    <span className="site-icon grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl border border-[#eef1f4] bg-white">
+      <img
+        src={src}
+        alt=""
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => setIndex((n) => n + 1)}
+        onLoad={(e) => {
+          // 取得先によっては、見つからないときに1px程度の画像を返すので次を試す
+          if (e.currentTarget.naturalWidth > 0 && e.currentTarget.naturalWidth < 8) setIndex((n) => n + 1)
+        }}
+        className={custom ? 'size-full object-cover' : 'size-6'}
+      />
     </span>
   )
 }
 
 export function LinkCard({ link, restricted }: { link: PortalLink; restricted?: boolean }) {
   const track = useTrack()
+  const toast = useToast()
+  const { favorites, toggle } = useFavorites()
+  const fav = favorites.includes(link.id)
+  const copy = async () => {
+    const ok = await copyText(link.url)
+    toast(ok ? 'リンクをコピーしました' : 'コピーできませんでした。リンクを長押し（右クリック）してコピーしてください', ok ? 'info' : 'error')
+  }
   return (
-    <a
-      href={link.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={() => track('link', link.id)}
-      className="group flex items-start gap-3 rounded-2xl border border-[#e4e9f0] bg-white p-4 shadow-[0_2px_10px_rgba(25,50,80,0.03)] transition hover:-translate-y-0.5 hover:border-[#bdd4e7] hover:shadow-md"
-    >
-      <SiteIcon link={link} />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-[14px] font-bold text-[#1b304b] group-hover:text-[var(--brand)]">{link.title}</span>
-          {restricted && <span className="shrink-0 rounded bg-[#fff5df] px-1.5 py-0.5 text-[10px] font-semibold text-[#92400e]">限定公開</span>}
+    <div className="group flex items-start gap-1 rounded-2xl border border-[#e4e9f0] bg-white p-4 pr-2 shadow-[0_2px_10px_rgba(25,50,80,0.03)] transition hover:-translate-y-0.5 hover:border-[#bdd4e7] hover:shadow-md">
+      <a href={link.url} target="_blank" rel="noopener noreferrer" onClick={() => track('link', link.id)} className="flex min-w-0 flex-1 items-start gap-3">
+        <SiteIcon link={link} />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="truncate text-[14px] font-bold text-[#1b304b] group-hover:text-[var(--brand)]">{link.title}</span>
+            <ExternalLink size={13} className="shrink-0 text-[#a9b5c2]" />
+            {restricted && <span className="shrink-0 rounded bg-[#fff5df] px-1.5 py-0.5 text-[10px] font-semibold text-[#92400e]">限定公開</span>}
+          </span>
+          {link.description && <span className="mt-0.5 block line-clamp-2 text-[12px] leading-5 text-[#718096]">{link.description}</span>}
+          <span className="mt-1 block truncate text-[11px] text-[#9aa7b5]">{hostOf(link.url)}</span>
         </span>
-        {link.description && <span className="mt-0.5 block line-clamp-2 text-[12px] leading-5 text-[#718096]">{link.description}</span>}
-        <span className="mt-1 block truncate text-[11px] text-[#9aa7b5]">{hostOf(link.url)}</span>
-      </span>
-      <ExternalLink size={15} className="mt-1 shrink-0 text-[#a9b5c2] group-hover:text-[var(--brand)]" />
-    </a>
+      </a>
+      <div className="flex shrink-0 flex-col items-center gap-0.5">
+        <button
+          onClick={() => void toggle(link.id)}
+          aria-pressed={fav}
+          aria-label={fav ? `${link.title}をお気に入りから外す` : `${link.title}をお気に入りに追加`}
+          title={fav ? 'お気に入りから外す' : 'お気に入りに追加（ホームに表示されます）'}
+          className={cn('rounded-lg p-1.5 transition hover:bg-[#fff8e6]', fav ? 'text-[#e5a00d]' : 'text-[#c2ccd6] hover:text-[#e5a00d]')}
+        >
+          <Star size={16} fill={fav ? 'currentColor' : 'none'} />
+        </button>
+        <button onClick={() => void copy()} aria-label={`${link.title}のリンクをコピー`} title="リンクをコピー" className="rounded-lg p-1.5 text-[#9aa7b5] transition hover:bg-[var(--brand-soft)] hover:text-[var(--brand)]">
+          <Copy size={16} />
+        </button>
+      </div>
+    </div>
   )
 }
 

@@ -4,10 +4,10 @@
   "private": true,
   "packageManager": "pnpm@12.3.4",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/gen-dark-css.mjs && next dev",
+    "build": "node scripts/gen-dark-css.mjs && next build",
     "start": "npx serve out",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node scripts/gen-dark-css.mjs && tsc --noEmit",
     "test:e2e": "playwright test"
   },
   "dependencies": {

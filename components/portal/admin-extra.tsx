@@ -2,7 +2,7 @@
 
 // 管理画面の追加機能：ヘルプ編集・利用状況・一括登録・バックアップ・アップロード・ゴミ箱・ポータルの見た目
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, BellRing, MessageSquare, Palette, RotateCcw, CheckCircle2, Circle, DatabaseBackup, ExternalLink, LoaderCircle, Plus, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, BellRing, MessageSquare, ShieldAlert, Palette, RotateCcw, CheckCircle2, Circle, DatabaseBackup, ExternalLink, LoaderCircle, Plus, Trash2, Upload } from 'lucide-react'
 import { api, fileToBase64 } from '@/lib/api'
 import { DEMO_MODE } from '@/lib/config'
 import {
@@ -613,6 +613,39 @@ export function BrandingPanel({ initial }: { initial?: Branding }) {
         <Button disabled={busy || !validColor || !draft.portalName.trim()} onClick={() => void save(draft, 'ポータルの見た目を保存しました')}>保存</Button>
         <Button variant="secondary" disabled={busy} onClick={() => { if (window.confirm('ポータル名・ロゴ・色を最初の状態に戻します。よろしいですか？')) void save(DEFAULT_BRANDING, '最初の状態に戻しました') }}>最初の状態に戻す</Button>
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 権限変更の通知メール（設定画面の中に表示）
+// ---------------------------------------------------------------------------
+
+export function SecurityAlertsPanel({ initial }: { initial?: { enabled: boolean; recipients: number } }) {
+  const { run } = useAuth()
+  const toast = useToast()
+  const [status, setStatus] = useState(initial ?? { enabled: true, recipients: 0 })
+  const [busy, setBusy] = useState(false)
+  const toggle = async () => {
+    setBusy(true)
+    try {
+      const s = await run((t) => api.setSecurityAlerts(t, !status.enabled))
+      setStatus(s)
+      toast(s.enabled ? '権限変更の通知メールをオンにしました' : '権限変更の通知メールをオフにしました')
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mt-8 rounded-xl border border-[#edf0f3] p-4">
+      <h3 className="flex items-center gap-2 text-[14px] font-bold"><ShieldAlert size={16} className="text-[#c2410c]" />権限変更の通知メール</h3>
+      <p className="mt-1 text-[12px] leading-5 text-[#8a99a9]">
+        次の変更があったとき、すぐに全権管理者（{status.recipients}人）へメールで知らせます：全権管理者の追加・解除／ロールの権限の変更／未登録アカウントのログイン設定の変更。身に覚えのない変更に早く気づくための仕組みです。
+      </p>
+      <p className="mt-3 text-[12px] text-[#38536f]">通知：<b>{status.enabled ? 'オン（おすすめ）' : 'オフ'}</b></p>
+      <Button variant="secondary" className="mt-3" disabled={busy} onClick={() => void toggle()}>{status.enabled ? '通知をオフにする' : '通知をオンにする'}</Button>
     </div>
   )
 }

@@ -11,3 +11,6 @@ next-env.d.ts
 # GASコード・組織の内部データはGitHubに上げない
 gas/
 *.gs
+
+# scripts/gen-dark-css.mjs がビルドのたびに作る
+app/dark.css
