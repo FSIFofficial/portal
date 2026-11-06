@@ -6,7 +6,7 @@ import { DEMO_MODE, EXPECTED_GAS_VERSION, asset } from '@/lib/config'
 import { DEFAULT_BRANDING, isAnyManager, isNew, type BootstrapData } from '@/lib/types'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { AdminView } from './admin-view'
+import dynamic from 'next/dynamic'
 import { AuthProvider, useAuth } from './auth-provider'
 import { LoginScreen } from './login-screen'
 import { useHashRoute, type Navigate } from './router'
@@ -18,6 +18,16 @@ import { HelpView } from './help-view'
 import { AnnouncementsView } from './announcements-view'
 import { LinksView } from './links-view'
 import { HomeView, LibraryView, SearchView, ToolsView } from './views'
+
+// 管理画面は管理者しか使わないので、開いたときにだけ読み込む（メンバーが最初に読み込む量を減らす）
+const AdminView = dynamic(() => import('./admin-view').then((m) => m.AdminView), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center gap-2 rounded-2xl border border-[#e4e9f0] bg-white p-16 text-[13px] text-[#4f5f70]">
+      <LoaderCircle size={18} className="animate-spin" />管理画面を読み込み中…
+    </div>
+  ),
+})
 
 export function PortalApp() {
   return (
@@ -35,7 +45,7 @@ function Gate() {
   if (status === 'loading') {
     return (
       <main className="grid min-h-screen place-items-center bg-[#f6f8fb]">
-        <div className="flex items-center gap-2 text-[13px] text-[#718096]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
+        <div className="flex items-center gap-2 text-[13px] text-[#4f5f70]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
       </main>
     )
   }
@@ -73,7 +83,19 @@ function Portal({ data }: { data: BootstrapData }) {
 
   useEffect(() => setDismissed(readDismissed()), [])
 
-  const { run, patchData } = useAuth()
+  const { run, patchData, markAllSeen } = useAuth()
+  const [clearing, setClearing] = useState(false)
+  const clearNew = async () => {
+    setClearing(true)
+    try {
+      await markAllSeen()
+      toast('NEWをすべて既読にしました')
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setClearing(false)
+    }
+  }
   const toast = useToast()
   const [acking, setAcking] = useState('')
   const acks = me.acks ?? []
@@ -96,6 +118,7 @@ function Portal({ data }: { data: BootstrapData }) {
     '/library': data.documents.filter((d) => isNew(d, me)).length,
     '/links': (data.links ?? []).filter((l) => isNew(l, me)).length,
   }
+  const totalNew = Object.values(newCounts).reduce((a, b) => a + b, 0)
 
   const dismiss = (key: string) => {
     const next = [...dismissed, key]
@@ -143,7 +166,7 @@ function Portal({ data }: { data: BootstrapData }) {
           <div className="mx-auto flex max-w-[1320px] items-center gap-2 text-[12px]">
             <span className={cn('shrink-0 rounded px-1.5 py-0.5 font-bold', a.level === 'important' ? 'bg-[#f7d8d6]' : 'bg-[#dcecf8]')}>お知らせ</span>
             <span className="font-semibold">{a.title}</span>
-            <span className={cn('truncate opacity-80', a.requireAck ? 'hidden md:inline' : 'hidden sm:inline')}>{a.body}</span>
+            <span className={cn('truncate font-normal', a.level === 'important' ? 'text-[#8f2f2f]' : 'text-[#285b82]', a.requireAck ? 'hidden md:inline' : 'hidden sm:inline')}>{a.body}</span>
             {a.requireAck ? (
               <button onClick={() => void ack(a.id)} disabled={acking === a.id} className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 font-bold text-[#1b304b] shadow-sm ring-1 ring-black/10 hover:bg-[#f7f9fb] disabled:opacity-60">
                 <CheckCircle2 size={14} />{acking === a.id ? '送信中…' : '確認しました'}
@@ -161,12 +184,12 @@ function Portal({ data }: { data: BootstrapData }) {
             <BrandLogo branding={branding} className="size-10 rounded-xl" />
             <span className="text-left">
               <span className="block text-[17px] font-bold tracking-[-0.03em] text-[#132b4f]">{branding.portalName}</span>
-              {branding.tagline && <span className="block text-[10px] font-medium tracking-[0.18em] text-[#7b8da5]">{branding.tagline}</span>}
+              {branding.tagline && <span className="block text-[10px] font-medium tracking-[0.18em] text-[#5b6b7c]">{branding.tagline}</span>}
             </span>
           </button>
           <nav className="hidden items-center gap-1 md:flex">
             {NAV.map((n) => (
-              <button key={n.path} onClick={() => navigate(n.path)} className={cn('rounded-lg px-4 py-2 text-[13px] font-semibold transition', activePath === n.path ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096] hover:bg-[#f5f7fa] hover:text-[#1b304b]')}>{n.label}<NewCount n={newCounts[n.path]} /></button>
+              <button key={n.path} onClick={() => navigate(n.path)} className={cn('rounded-lg px-4 py-2 text-[13px] font-semibold transition', activePath === n.path ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'text-[#4f5f70] hover:bg-[#f5f7fa] hover:text-[#1b304b]')}>{n.label}<NewCount n={newCounts[n.path]} /></button>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-3">
@@ -184,15 +207,22 @@ function Portal({ data }: { data: BootstrapData }) {
             <UserMenu data={data} />
           </div>
         </div>
+        {mobileMenu && totalNew > 0 && (
+          <div className="border-t border-[#eef1f5] px-4 pt-2 md:hidden">
+            <button onClick={() => void clearNew()} disabled={clearing} className="w-full rounded-lg bg-[#f5f7fa] py-2 text-[12px] font-semibold text-[#55708b] disabled:opacity-60">
+              {clearing ? '既読にしています…' : `NEW（${totalNew}件）をすべて既読にする`}
+            </button>
+          </div>
+        )}
         {mobileMenu && (
           <nav className="grid grid-cols-3 gap-1 border-t border-[#eef1f5] px-4 py-2 md:hidden">
             {NAV.map((n) => (
-              <button key={n.path} onClick={() => { navigate(n.path); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', activePath === n.path ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>{n.label}</button>
+              <button key={n.path} onClick={() => { navigate(n.path); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', activePath === n.path ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'text-[#4f5f70]')}>{n.label}</button>
             ))}
-            <button onClick={() => { navigate('/announcements'); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', tab === 'announcements' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>お知らせ</button>
-            <button onClick={() => { navigate('/help'); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', tab === 'help' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>ヘルプ</button>
+            <button onClick={() => { navigate('/announcements'); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', tab === 'announcements' ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'text-[#4f5f70]')}>お知らせ</button>
+            <button onClick={() => { navigate('/help'); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', tab === 'help' ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'text-[#4f5f70]')}>ヘルプ</button>
             {manager && (
-              <button onClick={() => { navigate('/admin'); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', tab === 'admin' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>管理</button>
+              <button onClick={() => { navigate('/admin'); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', tab === 'admin' ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'text-[#4f5f70]')}>管理</button>
             )}
           </nav>
         )}
@@ -201,26 +231,31 @@ function Portal({ data }: { data: BootstrapData }) {
       <div className="mx-auto flex max-w-[1320px] gap-8 px-4 py-8 lg:px-8">
         <aside className="hidden w-[215px] shrink-0 lg:block">
           <div className="sticky top-28">
-            <p className="mb-3 px-3 text-[11px] font-bold tracking-[0.14em] text-[#9aa8b8]">PORTAL MENU</p>
+            <p className="mb-3 px-3 text-[11px] font-bold tracking-[0.14em] text-[#5b6b7c]">PORTAL MENU</p>
             <div className="flex flex-col gap-1">
               {NAV.map((n) => {
                 const Icon = n.icon
                 return (
-                  <button key={n.path} onClick={() => navigate(n.path)} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', activePath === n.path ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#647589] hover:bg-white')}>
+                  <button key={n.path} onClick={() => navigate(n.path)} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', activePath === n.path ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'text-[#4f5f70] hover:bg-white')}>
                     <Icon size={17} /><span className="flex-1">{n.label}</span><NewCount n={newCounts[n.path]} />
                   </button>
                 )
               })}
+              {totalNew > 0 && (
+                <button onClick={() => void clearNew()} disabled={clearing} className="mt-1 rounded-lg px-3 py-1.5 text-left text-[11px] font-semibold text-[#5b6b7c] hover:bg-white hover:text-[var(--brand-fg)] disabled:opacity-60">
+                  {clearing ? '既読にしています…' : `NEW（${totalNew}件）をすべて既読にする`}
+                </button>
+              )}
               <div className="my-4 border-t border-[#e4eaf0]" />
               {manager && (
-                <button onClick={() => navigate('/admin')} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', tab === 'admin' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#647589] hover:bg-white')}>
+                <button onClick={() => navigate('/admin')} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', tab === 'admin' ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'text-[#4f5f70] hover:bg-white')}>
                   <Settings2 size={17} />管理画面
                 </button>
               )}
-              <button onClick={() => navigate('/announcements')} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', tab === 'announcements' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#647589] hover:bg-white')}>
+              <button onClick={() => navigate('/announcements')} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', tab === 'announcements' ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'text-[#4f5f70] hover:bg-white')}>
                 <Bell size={17} />お知らせ一覧
               </button>
-              <button onClick={() => navigate('/help')} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', tab === 'help' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#647589] hover:bg-white')}>
+              <button onClick={() => navigate('/help')} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', tab === 'help' ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'text-[#4f5f70] hover:bg-white')}>
                 <LifeBuoy size={17} />ヘルプ・問い合わせ
               </button>
             </div>
@@ -228,7 +263,7 @@ function Portal({ data }: { data: BootstrapData }) {
               <div className="mt-10 rounded-2xl bg-[var(--brand-soft)] p-4">
                 <div className="mb-2 flex size-8 items-center justify-center rounded-lg bg-white text-[#3986be]"><Sparkles size={16} /></div>
                 <p className="text-[12px] font-bold text-[#285b82]">デモモード</p>
-                <p className="mt-1 text-[11px] leading-5 text-[#6a879d]">GAS未接続のため、サンプルデータで動いています。変更はこのブラウザにだけ保存されます。</p>
+                <p className="mt-1 text-[11px] leading-5 text-[#5b6b7c]">GAS未接続のため、サンプルデータで動いています。変更はこのブラウザにだけ保存されます。</p>
               </div>
             )}
           </div>
@@ -236,11 +271,11 @@ function Portal({ data }: { data: BootstrapData }) {
 
         <section className="min-w-0 flex-1">
           <div className="mb-7">
-            <div className="mb-2 flex items-center gap-2 text-[12px] text-[#8a99a9]"><span>{branding.portalName}</span><ChevronRight size={13} /><span>{page.title}</span></div>
+            <div className="mb-2 flex items-center gap-2 text-[12px] text-[#5b6b7c]"><span>{branding.portalName}</span><ChevronRight size={13} /><span>{page.title}</span></div>
             <h1 className="text-[27px] font-bold tracking-[-0.04em] text-[#1b304b]">
-              {tab === 'home' || !meta[tab] ? <>おかえりなさい、<span className="text-[var(--brand)]">{firstName}さん</span></> : page.title}
+              {tab === 'home' || !meta[tab] ? <>おかえりなさい、<span className="text-[var(--brand-fg)]">{firstName}さん</span></> : page.title}
             </h1>
-            <p className="mt-2 text-[13px] text-[#7d8c9d]">{page.description}</p>
+            <p className="mt-2 text-[13px] text-[#5b6b7c]">{page.description}</p>
           </div>
           <Content tab={tab} segments={segments} params={route.params} data={data} navigate={navigate} />
         </section>
@@ -292,11 +327,11 @@ function UserMenu({ data }: { data: BootstrapData }) {
         {me.picture ? (
           <img src={me.picture} alt="" referrerPolicy="no-referrer" className="size-8 rounded-full" />
         ) : (
-          <span className="grid size-8 place-items-center rounded-full bg-[#dcecf8] text-[12px] font-bold text-[var(--brand)]">{me.name.slice(0, 1)}</span>
+          <span className="grid size-8 place-items-center rounded-full bg-[#dcecf8] text-[12px] font-bold text-[var(--brand-fg)]">{me.name.slice(0, 1)}</span>
         )}
         <span className="hidden text-left sm:block">
           <span className="block max-w-[140px] truncate text-[12px] font-bold text-[#334b67]">{me.name}</span>
-          <span className="block max-w-[140px] truncate text-[10px] text-[#8796a7]">{roleNames.join('・') || 'ロールなし'}</span>
+          <span className="block max-w-[140px] truncate text-[10px] text-[#5b6b7c]">{roleNames.join('・') || 'ロールなし'}</span>
         </span>
         <ChevronDown size={14} className="text-[#91a0af]" />
       </button>
@@ -304,9 +339,9 @@ function UserMenu({ data }: { data: BootstrapData }) {
         <div className="absolute right-0 top-full z-30 mt-2 w-[260px] rounded-2xl border border-[#e4e9f0] bg-white p-2 shadow-xl">
           <div className="border-b border-[#edf0f3] px-3 pb-3 pt-2">
             <p className="text-[13px] font-bold text-[#1b304b]">{me.name}</p>
-            <p className="truncate text-[11px] text-[#8796a7]">{me.email}</p>
+            <p className="truncate text-[11px] text-[#5b6b7c]">{me.email}</p>
             <div className="mt-2 flex flex-wrap gap-1">
-              {roleNames.map((r) => <span key={r} className="rounded bg-[var(--brand-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--brand)]">{r}</span>)}
+              {roleNames.map((r) => <span key={r} className="rounded bg-[var(--brand-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--brand-fg)]">{r}</span>)}
             </div>
           </div>
           <ThemeSwitcher />
@@ -325,5 +360,5 @@ function UserMenu({ data }: { data: BootstrapData }) {
 /** ナビゲーションの「NEW」件数 */
 function NewCount({ n }: { n?: number }) {
   if (!n) return null
-  return <span className="ml-1.5 rounded-full bg-[#e5484d] px-1.5 py-0.5 text-[10px] font-bold leading-none text-white" aria-label={`新着${n}件`}>{n}</span>
+  return <span className="ml-1.5 rounded-full bg-[#cc3339] px-1.5 py-0.5 text-[10px] font-bold leading-none text-white" aria-label={`新着${n}件`}>{n}</span>
 }

@@ -48,7 +48,7 @@ export function SiteIcon({ link }: { link: Pick<PortalLink, 'url' | 'iconUrl' | 
   useEffect(() => setIndex(0), [link.url, link.iconUrl])
   const src = candidates[index]
   if (!src) {
-    return <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[15px] font-bold text-[var(--brand)]">{(link.title || '?').slice(0, 1)}</span>
+    return <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[15px] font-bold text-[var(--brand-fg)]">{(link.title || '?').slice(0, 1)}</span>
   }
   // 自分で設定した画像は枠いっぱいに、自動取得したアイコンは小さめに表示する
   const custom = !!link.iconUrl && index === 0
@@ -85,12 +85,12 @@ export function LinkCard({ link, restricted }: { link: PortalLink; restricted?: 
         <SiteIcon link={link} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
-            <span className="truncate text-[14px] font-bold text-[#1b304b] group-hover:text-[var(--brand)]">{link.title}</span>
+            <span className="truncate text-[14px] font-bold text-[#1b304b] group-hover:text-[var(--brand-fg)]">{link.title}</span>
             <ExternalLink size={13} className="shrink-0 text-[#a9b5c2]" />
             {restricted && <span className="shrink-0 rounded bg-[#fff5df] px-1.5 py-0.5 text-[10px] font-semibold text-[#92400e]">限定公開</span>}
           </span>
-          {link.description && <span className="mt-0.5 block line-clamp-2 text-[12px] leading-5 text-[#718096]">{link.description}</span>}
-          <span className="mt-1 block truncate text-[11px] text-[#9aa7b5]">{hostOf(link.url)}</span>
+          {link.description && <span className="mt-0.5 block line-clamp-2 text-[12px] leading-5 text-[#4f5f70]">{link.description}</span>}
+          <span className="mt-1 block truncate text-[11px] text-[#5b6b7c]">{hostOf(link.url)}</span>
         </span>
       </a>
       <div className="flex shrink-0 flex-col items-center gap-0.5">
@@ -103,7 +103,7 @@ export function LinkCard({ link, restricted }: { link: PortalLink; restricted?: 
         >
           <Star size={16} fill={fav ? 'currentColor' : 'none'} />
         </button>
-        <button onClick={() => void copy()} aria-label={`${link.title}のリンクをコピー`} title="リンクをコピー" className="rounded-lg p-1.5 text-[#9aa7b5] transition hover:bg-[var(--brand-soft)] hover:text-[var(--brand)]">
+        <button onClick={() => void copy()} aria-label={`${link.title}のリンクをコピー`} title="リンクをコピー" className="rounded-lg p-1.5 text-[#5b6b7c] transition hover:bg-[var(--brand-soft)] hover:text-[var(--brand-fg)]">
           <Copy size={16} />
         </button>
       </div>
@@ -138,9 +138,9 @@ export function LinksView({ data, navigate }: { data: BootstrapData; navigate: N
     <>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
         <div className="flex flex-1 items-center gap-2 rounded-xl border border-[#dfe6ed] bg-white px-3">
-          <Search size={16} className="text-[#9aa8b8]" />
+          <Search size={16} className="text-[#5b6b7c]" />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="リンク名・説明・URLで検索" aria-label="リンクを検索" className="h-10 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[#a6b1bd]" />
-          {query && <button onClick={() => setQuery('')} aria-label="検索をクリア" className="rounded p-1 text-[#9aa8b8] hover:bg-[#f3f6f9]"><X size={14} /></button>}
+          {query && <button onClick={() => setQuery('')} aria-label="検索をクリア" className="rounded p-1 text-[#5b6b7c] hover:bg-[#f3f6f9]"><X size={14} /></button>}
         </div>
         {can(data.me, 'links.manage') && (
           <button onClick={() => navigate('/admin/links')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#dbe4ec] bg-white px-3.5 py-2.5 text-[12px] font-bold text-[#55708b] hover:bg-[#f7f9fb]">
@@ -166,7 +166,7 @@ export function LinksView({ data, navigate }: { data: BootstrapData; navigate: N
           {groups.map((g) => (
             <section key={g.name}>
               <h2 className="mb-3 flex items-center gap-2 text-[15px] font-bold">
-                {g.name}<span className="text-[12px] font-semibold text-[#9aa7b5]">{g.items.length}</span>
+                {g.name}<span className="text-[12px] font-semibold text-[#5b6b7c]">{g.items.length}</span>
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {g.items.map((l) => (

@@ -4,7 +4,7 @@
 import { DEMO_MODE, EXPECTED_GAS_VERSION, GAS_URL } from './config'
 import { createDemoDb, type DemoDb } from './demo-data'
 import type {
-  AckStatus, AdminData, Announcement, BackupStatus, Branding, PortalLink, DiscordStatus, TrashItem, ErrorDigestStatus, BootstrapData, BulkAddResult, HelpContent, LogEntry, Me, Permission, PortalDocument, Role,
+  AckStatus, AdminData, CategoryKind, LogFilter, SelfCheckResult, Announcement, BackupStatus, Branding, PortalLink, DiscordStatus, TrashItem, ErrorDigestStatus, BootstrapData, BulkAddResult, HelpContent, LogEntry, Me, Permission, PortalDocument, Role,
   Settings, SystemCheck, Tool, UploadResult, UsageStats, User,
 } from './types'
 import { DEFAULT_BRANDING } from './types'
@@ -81,7 +81,12 @@ export const api = {
   saveRole: (token: string, item: Partial<Role>, isNew: boolean) => call<Role>('saveRole', token, { item, isNew }),
   deleteRole: (token: string, id: string) => call('deleteRole', token, { id }),
   saveSettings: (token: string, item: Settings) => call<Settings>('saveSettings', token, { item }),
-  listLogs: (token: string) => call<LogEntry[]>('listLogs', token, { limit: 300 }),
+  listLogs: (token: string, filter: LogFilter = {}) => call<LogEntry[]>('listLogs', token, { limit: 300, ...filter }),
+  markAllSeen: (token: string) => call<{ newSince: string }>('markAllSeen', token),
+  searchContent: (token: string, q: string) => call<{ ids: string[] }>('searchContent', token, { q }),
+  selfCheck: (token: string, opts: { sendMail?: boolean; sendDiscord?: boolean }) =>
+    call<{ results: SelfCheckResult[]; checkedAt: string }>('selfCheck', token, opts),
+  renameCategory: (token: string, kind: CategoryKind, from: string, to: string) => call<{ count: number }>('renameCategory', token, { kind, from, to }),
   systemCheck: (token: string) => call<SystemCheck>('systemCheck', token),
   saveHelp: (token: string, item: HelpContent) => call<HelpContent>('saveHelp', token, { item }),
   usageStats: (token: string) => call<UsageStats>('usageStats', token),
@@ -710,7 +715,64 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     }
     case 'listLogs': {
       requirePerm(me, 'logs.view')
-      return commit([...db.logs].reverse().slice(0, 300))
+      const q = String(p.q ?? '').toLowerCase()
+      return commit([...db.logs].reverse().filter((l) =>
+        (!p.email || l.email === p.email) &&
+        (!p.kind || l.action.split('.')[0] === p.kind) &&
+        (!p.from || l.timestamp.slice(0, 10) >= String(p.from)) &&
+        (!p.to || l.timestamp.slice(0, 10) <= String(p.to)) &&
+        (!q || `${l.target} ${l.detail} ${l.action} ${l.email}`.toLowerCase().includes(q))).slice(0, 300))
+    }
+    case 'markAllSeen': {
+      const user = db.users.find((u) => u.email === me.email)
+      const stamp = now()
+      if (user) {
+        user.prevLoginAt = stamp
+        user.lastLoginAt = stamp
+      }
+      return commit({ newSince: stamp })
+    }
+    case 'searchContent': {
+      // デモでは本文がないので、説明文とキーワードを「本文」とみなして探す
+      const q = String(p.q ?? '').trim().toLowerCase()
+      if (q.length < 2) return commit({ ids: [] })
+      return commit({ ids: db.documents.filter((d) => canSee(me, d) && `${d.description} ${d.keywords}`.toLowerCase().includes(q)).map((d) => d.id) })
+    }
+    case 'selfCheck': {
+      requirePerm(me, '*')
+      const demo = 'デモモードのため、実際には試していません'
+      return commit({
+        checkedAt: now(),
+        results: [
+          { id: 'sheets', label: 'スプレッドシートの読み書き', ok: true, detail: demo, fix: '' },
+          { id: 'cache', label: 'キャッシュ（ログインの維持・表示の高速化）', ok: true, detail: demo, fix: '' },
+          { id: 'drive', label: 'Google Drive（アップロード・共有の同期）', ok: true, detail: demo, fix: '' },
+          { id: 'mail', label: 'メール送信（エラー通知・権限変更の通知）', ok: true, detail: p.sendMail ? `${demo}（テストメールは送っていません）` : demo, fix: '' },
+          { id: 'discord', label: 'Discordへの通知', ok: true, detail: db.discord.configured ? demo : '未設定（通知は送られません）', fix: '' },
+          { id: 'triggers', label: '毎朝の自動処理・定期実行', ok: true, detail: demo, fix: '' },
+          { id: 'backup', label: 'バックアップ', ok: !db.backup.lastError, detail: db.backup.lastError || demo, fix: db.backup.lastError ? '「設定 > バックアップ」で「今すぐバックアップ」を試してください' : '' },
+        ],
+      })
+    }
+    case 'renameCategory': {
+      const target = ({ tools: { rows: db.tools, field: 'category', perm: 'tools.manage' }, documents: { rows: db.documents, field: 'type', perm: 'documents.manage' }, links: { rows: db.links, field: 'category', perm: 'links.manage' } } as const)[p.kind as CategoryKind]
+      if (!target) fail('BAD_REQUEST', '種類が正しくありません')
+      requirePerm(me, target.perm)
+      const from = String(p.from ?? '').trim()
+      const to = String(p.to ?? '').trim().slice(0, 40)
+      if (from === to) fail('BAD_REQUEST', '変更前と変更後が同じです')
+      if (p.kind === 'documents' && !to) fail('BAD_REQUEST', '資料の種類は空欄にできません')
+      let count = 0
+      ;(target.rows as unknown as Record<string, string>[]).forEach((row) => {
+        if (String(row[target.field] ?? '').trim() === from) {
+          row[target.field] = to
+          count++
+        }
+      })
+      if (!count) fail('NOT_FOUND', `「${from || '（なし）'}」の項目が見つかりません`)
+      const sheet = { tools: 'Tools', documents: 'Documents', links: 'Links' }[p.kind as CategoryKind]
+      log(`${sheet}.renameCategory`, `${from} → ${to}`, `${count}件`)
+      return commit({ count })
     }
     default:
       fail('BAD_REQUEST', `不明な操作です: ${action}`)

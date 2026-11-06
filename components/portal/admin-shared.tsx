@@ -14,7 +14,7 @@ export function SectionHeader({ section, action, loading, onReload }: { section:
     <div className="flex flex-col gap-3 border-b border-[#edf0f3] p-5 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h2 className="text-[16px] font-bold">{section.label}</h2>
-        <p className="mt-1 text-[12px] text-[#8998a8]">{section.description}</p>
+        <p className="mt-1 text-[12px] text-[#5b6b7c]">{section.description}</p>
       </div>
       <div className="flex shrink-0 gap-2">
         <Button variant="ghost" onClick={onReload} aria-label="再読み込み" disabled={loading}><RefreshCw size={15} className={loading ? 'animate-spin' : undefined} /></Button>
@@ -28,12 +28,12 @@ export function Table({ head, children, empty }: { head: ReactNode[]; children: 
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[680px] text-left text-[12px]">
-        <thead className="bg-[#fafbfd] text-[#8998a8]">
+        <thead className="bg-[#fafbfd] text-[#5b6b7c]">
           <tr>{head.map((h, i) => <th key={i} className="px-5 py-3 font-semibold">{h}</th>)}</tr>
         </thead>
         <tbody>{children}</tbody>
       </table>
-      {empty && <p className="p-10 text-center text-[12px] text-[#8a99a9]">まだ登録がありません。</p>}
+      {empty && <p className="p-10 text-center text-[12px] text-[#5b6b7c]">まだ登録がありません。</p>}
     </div>
   )
 }
@@ -41,7 +41,7 @@ export function Table({ head, children, empty }: { head: ReactNode[]; children: 
 export function RowActions({ onEdit, onDelete, label }: { onEdit: () => void; onDelete?: () => void; label: string }) {
   return (
     <div className="flex justify-end gap-1">
-      <button onClick={onEdit} aria-label={`${label}を編集`} className="rounded-lg p-2 text-[#7890a5] hover:bg-[#f1f5f8]"><Pencil size={15} /></button>
+      <button onClick={onEdit} aria-label={`${label}を編集`} className="rounded-lg p-2 text-[#5b6b7c] hover:bg-[#f1f5f8]"><Pencil size={15} /></button>
       {onDelete && <button onClick={onDelete} aria-label={`${label}を削除`} className="rounded-lg p-2 text-[#b42318] hover:bg-[#fff5f4]"><Trash2 size={15} /></button>}
     </div>
   )

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowRight, ArrowUp, BookOpen, ChevronRight, FileText, Filter, GripVertical, Search, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, BookOpen, LoaderCircle, ChevronRight, FileText, Filter, GripVertical, Search, X } from 'lucide-react'
 import { ApiError, api } from '@/lib/api'
 import { can, isNew, type BootstrapData, type PortalDocument, type PortalLink, type Tool } from '@/lib/types'
 import { useAuth } from './auth-provider'
@@ -37,7 +37,7 @@ function SearchBox({ value, onChange, onSubmit, placeholder, large }: { value: s
       }}
       className={large ? 'flex items-center gap-3 rounded-2xl border border-[#d9e8f3] bg-white p-3 shadow-[0_4px_16px_rgba(25,50,80,0.03)]' : 'flex flex-1 items-center gap-2 rounded-xl border border-[#dfe6ed] bg-white px-3'}
     >
-      <Search className={large ? 'ml-2 text-[#7ca0bd]' : 'text-[#9aa8b8]'} size={large ? 19 : 16} />
+      <Search className={large ? 'ml-2 text-[#7ca0bd]' : 'text-[#5b6b7c]'} size={large ? 19 : 16} />
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -46,7 +46,7 @@ function SearchBox({ value, onChange, onSubmit, placeholder, large }: { value: s
         className={large ? 'h-10 min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-[#99a8b7]' : 'h-10 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[#a6b1bd]'}
       />
       {value && !large && (
-        <button type="button" onClick={() => onChange('')} aria-label="検索をクリア" className="rounded p-1 text-[#9aa8b8] hover:bg-[#f3f6f9]"><X size={14} /></button>
+        <button type="button" onClick={() => onChange('')} aria-label="検索をクリア" className="rounded p-1 text-[#5b6b7c] hover:bg-[#f3f6f9]"><X size={14} /></button>
       )}
       {large && <button type="submit" className="rounded-xl bg-[var(--brand)] px-4 py-2.5 text-[12px] font-bold text-white">検索</button>}
     </form>
@@ -78,9 +78,9 @@ export function HomeView({ data, navigate }: { data: BootstrapData; navigate: Na
       <div className="mb-5 flex items-center justify-between">
         <div>
           <h2 className="text-[17px] font-bold">よく使うツール</h2>
-          <p className="mt-1 text-[12px] text-[#8998a8]">{favorites.length ? '☆を付けたお気に入りのツールが先頭に表示されます' : 'ツールの☆を押すと、お気に入りとしてここに固定できます'}</p>
+          <p className="mt-1 text-[12px] text-[#5b6b7c]">{favorites.length ? '☆を付けたお気に入りのツールが先頭に表示されます' : 'ツールの☆を押すと、お気に入りとしてここに固定できます'}</p>
         </div>
-        <button onClick={() => navigate('/tools')} className="flex items-center gap-1 text-[12px] font-bold text-[var(--brand)]">すべてのツール <ArrowRight size={14} /></button>
+        <button onClick={() => navigate('/tools')} className="flex items-center gap-1 text-[12px] font-bold text-[var(--brand-fg)]">すべてのツール <ArrowRight size={14} /></button>
       </div>
       {data.tools.length === 0 ? (
         <EmptyState title="表示できるツールがありません" message="閲覧権限のあるツールが登録されるとここに表示されます。" />
@@ -95,7 +95,7 @@ export function HomeView({ data, navigate }: { data: BootstrapData; navigate: Na
         <section className="mt-10">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-[17px] font-bold">お気に入りのリンク</h2>
-            <button onClick={() => navigate('/links')} className="flex items-center gap-1 text-[12px] font-bold text-[var(--brand)]">リンク集へ <ArrowRight size={14} /></button>
+            <button onClick={() => navigate('/links')} className="flex items-center gap-1 text-[12px] font-bold text-[var(--brand-fg)]">リンク集へ <ArrowRight size={14} /></button>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {favLinks.map((l) => <LinkCard key={l.id} link={l} restricted={l.visibleRoles.length > 0} />)}
@@ -124,17 +124,17 @@ export function HomeView({ data, navigate }: { data: BootstrapData; navigate: Na
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-[16px] font-bold">最近更新された資料</h2>
-              <p className="mt-1 text-[12px] text-[#8a99a9]">最新の資料をチェック</p>
+              <p className="mt-1 text-[12px] text-[#5b6b7c]">最新の資料をチェック</p>
             </div>
             <FileText size={24} className="text-[#78a6c6]" />
           </div>
           <div className="mt-5 flex flex-col gap-3">
-            {recent.length === 0 && <p className="text-[12px] text-[#8a99a9]">まだ資料がありません。</p>}
+            {recent.length === 0 && <p className="text-[12px] text-[#5b6b7c]">まだ資料がありません。</p>}
             {recent.map((doc) => (
               <button key={doc.id} onClick={() => navigate('/library', { q: doc.title })} className="flex items-center justify-between border-b border-[#eef1f4] pb-3 text-left last:border-0 last:pb-0">
                 <span className="min-w-0">
                   <span className="block truncate text-[13px] font-semibold text-[#39536f]">{doc.title}</span>
-                  <span className="mt-1 block text-[11px] text-[#9aa7b5]">{doc.type} · {doc.date}</span>
+                  <span className="mt-1 block text-[11px] text-[#5b6b7c]">{doc.type} · {doc.date}</span>
                 </span>
                 <ChevronRight size={15} className="shrink-0 text-[#a9b5c2]" />
               </button>
@@ -210,7 +210,7 @@ export function ToolsView({ data, navigate, initialQuery }: { data: BootstrapDat
           <>
             <SearchBox value={query} onChange={setQuery} placeholder="名称・用途・カテゴリで検索" />
             <div className="flex items-center gap-2">
-              <Filter size={15} className="text-[#7890a5]" />
+              <Filter size={15} className="text-[#5b6b7c]" />
               <Select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="カテゴリ" className="w-auto min-w-[150px]">
                 <option value="">すべてのカテゴリ</option>
                 {categories.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -229,7 +229,7 @@ export function ToolsView({ data, navigate, initialQuery }: { data: BootstrapDat
           )
         )}
       </div>
-      {!editing && <p className="mb-4 text-[12px] text-[#8b99a8]">{visible.length}件のツール</p>}
+      {!editing && <p className="mb-4 text-[12px] text-[#5b6b7c]">{visible.length}件のツール</p>}
       {visible.length === 0 ? (
         <EmptyState title="ツールが見つかりません" message="検索条件を変えてお試しください。" />
       ) : (
@@ -257,7 +257,7 @@ export function ToolsView({ data, navigate, initialQuery }: { data: BootstrapDat
                   <>
                     <DragHandle label={`${tool.name}を並べ替え`} />
                     <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 gap-1 rounded-lg border border-[#dbe4ec] bg-white p-1 shadow-sm">
-                      <span className="px-1.5 py-1 text-[11px] font-bold text-[#7890a5]">{index + 1}</span>
+                      <span className="px-1.5 py-1 text-[11px] font-bold text-[#5b6b7c]">{index + 1}</span>
                       <button onClick={() => move(tool.id, index - 1)} disabled={index === 0} aria-label="前へ" className="rounded p-1 text-[#55708b] hover:bg-[#f1f5f8] disabled:opacity-30"><ArrowUp size={14} /></button>
                       <button onClick={() => move(tool.id, index + 1)} disabled={index === visible.length - 1} aria-label="後ろへ" className="rounded p-1 text-[#55708b] hover:bg-[#f1f5f8] disabled:opacity-30"><ArrowDown size={14} /></button>
                     </div>
@@ -308,7 +308,7 @@ export function LibraryView({ data, navigate, params }: { data: BootstrapData; n
           <div className="flex flex-col">
             <span className="w-fit rounded-full bg-[#fff0e5] px-2.5 py-1 text-[10px] font-bold text-[#c2410c]">ピックアップ</span>
             <h2 className="mt-3 text-[18px] font-bold">{pinned.title}</h2>
-            <p className="mt-1 text-[11px] text-[#7d8c9d]">{pinned.date} · {pinned.type}</p>
+            <p className="mt-1 text-[11px] text-[#5b6b7c]">{pinned.date} · {pinned.type}</p>
             <div className="mt-2 flex flex-wrap gap-1">{pinned.tags.map((t) => <span key={t} className="rounded border border-[#d5e3ef] px-1.5 py-0.5 text-[10px] text-[#55708b]">{t}</span>)}</div>
             <p className="mt-3 text-[13px] leading-6 text-[#52677d]">{pinned.description}</p>
             <div className="mt-auto pt-4"><DocActions doc={pinned} /></div>
@@ -333,14 +333,19 @@ export function LibraryView({ data, navigate, params }: { data: BootstrapData; n
             <option value="popular">よく見られている順</option>
           </Select>
           {newCount > 0 && (
-            <button onClick={() => setOnlyNew(!onlyNew)} aria-pressed={onlyNew} className={`h-10 whitespace-nowrap rounded-lg border px-3 text-[12px] font-bold ${onlyNew ? 'border-[#e5484d] bg-[#e5484d] text-white' : 'border-[#f3c4c4] bg-white text-[#c0373c]'}`}>
+            <button onClick={() => setOnlyNew(!onlyNew)} aria-pressed={onlyNew} className={`h-10 whitespace-nowrap rounded-lg border px-3 text-[12px] font-bold ${onlyNew ? 'border-[#cc3339] bg-[#cc3339] text-white' : 'border-[#f3c4c4] bg-white text-[#c0373c]'}`}>
               新着のみ（{newCount}）
             </button>
           )}
           {hasFilter && <Button variant="secondary" onClick={() => { setOnlyNew(false); navigate('/library') }}>リセット</Button>}
         </div>
       </div>
-      <p className="mb-4 text-[12px] font-bold text-[#38536f]">資料一覧 <span className="font-semibold text-[var(--brand)]">{filtered.length}件</span></p>
+      <p className="mb-4 flex flex-wrap items-center gap-3 text-[12px] font-bold text-[#38536f]">
+        <span>資料一覧 <span className="font-semibold text-[var(--brand-fg)]">{filtered.length}件</span></span>
+        {query.trim().length >= 2 && (
+          <button onClick={() => navigate('/search', { q: query.trim() })} className="text-[12px] font-semibold text-[var(--brand-fg)] hover:underline">「{query.trim()}」を資料の本文からも探す →</button>
+        )}
+      </p>
       {list.length === 0 && !pinned ? (
         <EmptyState title="資料が見つかりません" message="検索条件を変えてお試しください。" />
       ) : (
@@ -348,7 +353,7 @@ export function LibraryView({ data, navigate, params }: { data: BootstrapData; n
           {list.map((doc) => <DocCard key={doc.id} doc={doc} restricted={doc.visibleRoles.length > 0} />)}
         </div>
       )}
-      <p className="mt-6 text-[11px] leading-5 text-[#9aa7b5]">※ 資料はGoogle Driveに保存されています。開けない場合はDrive側の共有設定を担当者にご確認ください。</p>
+      <p className="mt-6 text-[11px] leading-5 text-[#5b6b7c]">※ 資料はGoogle Driveに保存されています。開けない場合はDrive側の共有設定を担当者にご確認ください。</p>
     </>
   )
 }
@@ -365,23 +370,57 @@ export function SearchView({ data, navigate, query }: { data: BootstrapData; nav
   const tools = data.tools.filter((t) => match(toolText(t), query))
   const docs = data.documents.filter((d) => match(docText(d), query)).sort(byDateDesc)
   const links = (data.links ?? []).filter((l) => match(`${l.title} ${l.description} ${l.category} ${l.url}`, query))
+  // 資料の本文検索（Google Drive の全文検索）。名前などで見つかったものは除いて表示する
+  const { run } = useAuth()
+  const [contentIds, setContentIds] = useState<string[] | null>(null)
+  const [contentError, setContentError] = useState('')
+  useEffect(() => {
+    setContentIds(null)
+    setContentError('')
+    if (query.trim().length < 2) return
+    let cancelled = false
+    run((t) => api.searchContent(t, query.trim()))
+      .then((r) => !cancelled && setContentIds(r.ids))
+      .catch((e: Error) => !cancelled && setContentError(e.message))
+    return () => {
+      cancelled = true
+    }
+  }, [query, run])
+  const contentDocs = (contentIds ?? []).map((id) => data.documents.find((d) => d.id === id)).filter((d): d is PortalDocument => !!d && !docs.some((x) => x.id === d.id))
   return (
     <>
       <div className="mb-6"><SearchBox large value={q} onChange={setQ} onSubmit={() => navigate('/search', { q })} placeholder="ツールや資料を検索" /></div>
-      <h2 className="mb-3 text-[15px] font-bold">ツール <span className="text-[12px] font-semibold text-[var(--brand)]">{tools.length}件</span></h2>
-      {tools.length === 0 ? <p className="mb-8 text-[12px] text-[#8a99a9]">該当するツールはありません。</p> : (
+      <h2 className="mb-3 text-[15px] font-bold">ツール <span className="text-[12px] font-semibold text-[var(--brand-fg)]">{tools.length}件</span></h2>
+      {tools.length === 0 ? <p className="mb-8 text-[12px] text-[#5b6b7c]">該当するツールはありません。</p> : (
         <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {tools.map((tool) => <ToolCard key={tool.id} tool={tool} docCount={counts[tool.name] ?? 0} restricted={tool.visibleRoles.length > 0} onDocs={() => navigate('/library', { tool: tool.name })} onMissingUrl={() => toast('このツールの接続先はまだ設定されていません')} />)}
         </div>
       )}
-      <h2 className="mb-3 text-[15px] font-bold">資料 <span className="text-[12px] font-semibold text-[var(--brand)]">{docs.length}件</span></h2>
-      {docs.length === 0 ? <p className="text-[12px] text-[#8a99a9]">該当する資料はありません。</p> : (
+      <h2 className="mb-3 text-[15px] font-bold">資料 <span className="text-[12px] font-semibold text-[var(--brand-fg)]">{docs.length}件</span></h2>
+      {docs.length === 0 ? <p className="text-[12px] text-[#5b6b7c]">該当する資料はありません。</p> : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {docs.map((doc) => <DocCard key={doc.id} doc={doc} restricted={doc.visibleRoles.length > 0} />)}
         </div>
       )}
-      <h2 className="mb-3 mt-8 text-[15px] font-bold">リンク <span className="text-[12px] font-semibold text-[var(--brand)]">{links.length}件</span></h2>
-      {links.length === 0 ? <p className="text-[12px] text-[#8a99a9]">該当するリンクはありません。</p> : (
+      {query.trim().length >= 2 && (
+        <section className="mt-6" aria-live="polite">
+          <h3 className="mb-3 flex items-center gap-2 text-[13px] font-bold text-[#38536f]">
+            資料の本文から見つかったもの
+            {contentIds === null && !contentError && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5b6b7c]"><LoaderCircle size={12} className="animate-spin" />Google Driveを検索中…</span>}
+            {contentIds !== null && <span className="text-[12px] font-semibold text-[var(--brand-fg)]">{contentDocs.length}件</span>}
+          </h3>
+          {contentError && <p className="text-[12px] text-[#b42318]">{contentError}</p>}
+          {contentIds !== null && contentDocs.length === 0 && <p className="text-[12px] text-[#5b6b7c]">本文だけに含まれる資料はありませんでした。</p>}
+          {contentDocs.length > 0 && (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {contentDocs.map((doc) => <DocCard key={doc.id} doc={doc} restricted={doc.visibleRoles.length > 0} />)}
+            </div>
+          )}
+          <p className="mt-2 text-[11px] text-[#5b6b7c]">Google Driveの全文検索を使っています。PDF・ドキュメント・スライドなどの本文が対象です（反映まで時間がかかることがあります）。</p>
+        </section>
+      )}
+      <h2 className="mb-3 mt-8 text-[15px] font-bold">リンク <span className="text-[12px] font-semibold text-[var(--brand-fg)]">{links.length}件</span></h2>
+      {links.length === 0 ? <p className="text-[12px] text-[#5b6b7c]">該当するリンクはありません。</p> : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {links.map((l) => <LinkCard key={l.id} link={l} restricted={l.visibleRoles.length > 0} />)}
         </div>

@@ -120,6 +120,41 @@ const TOPICS: Topic[] = [
     ),
   },
   {
+    title: 'カテゴリの名前をまとめて変える',
+    perm: null,
+    link: { label: 'カテゴリ整理を開く', path: '/admin/categories' },
+    body: (
+      <ul>
+        <li>「カテゴリ整理」で、ツールのカテゴリ・資料の種類・リンクのカテゴリの名前を、まとめて変更できます（自分が管理できるものだけ表示されます）。</li>
+        <li>既にある名前に変えると、2つのカテゴリが1つにまとまります。</li>
+        <li>名前を変えても、各項目にNEWは付きません。</li>
+      </ul>
+    ),
+  },
+  {
+    title: '本番で正しく動いているか確かめる',
+    perm: '*',
+    link: { label: 'バージョン確認を開く', path: '/admin/system' },
+    body: (
+      <ul>
+        <li>「バージョン確認」の下にある「動作チェックを実行」で、スプレッドシート・Drive・メール・Discord・毎朝の自動処理・バックアップが動くかを順に試せます。</li>
+        <li>問題があれば、何を直せばよいかが一緒に表示されます。GASを更新したあとに一度実行するのがおすすめです。</li>
+      </ul>
+    ),
+  },
+  {
+    title: '変更履歴から探す',
+    perm: 'logs.view',
+    link: { label: '変更履歴を開く', path: '/admin/logs' },
+    body: (
+      <ul>
+        <li>キーワード・操作者・種類・期間で絞り込めます。「誰がこの資料を消したか」などを調べるときに使います。</li>
+        <li>5000件より古い履歴は「古い履歴も探す」にチェックすると対象になります。</li>
+        <li>消してしまったものは「ゴミ箱」から30日以内なら元に戻せます。</li>
+      </ul>
+    ),
+  },
+  {
     title: 'どれくらい使われているかを見る',
     perm: 'logs.view',
     link: { label: '利用状況を開く', path: '/admin/stats' },
@@ -142,12 +177,12 @@ export function AdminGuide({ section, me, navigate }: { section: { label: string
           <details key={t.title} open={i === 0} className="group rounded-xl border border-[#e4e9f0]">
             <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-[14px] font-bold text-[#1b304b]">
               <span className="flex-1">{t.title}</span>
-              <ChevronDown size={16} className="text-[#9aa7b5] transition group-open:rotate-180" />
+              <ChevronDown size={16} className="text-[#5b6b7c] transition group-open:rotate-180" />
             </summary>
             <div className="border-t border-[#eef1f4] px-4 py-3 text-[13px] leading-7 text-[#38536f] [&_li]:mb-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5">
               {t.body}
               {t.link && (
-                <button onClick={() => navigate(t.link!.path)} className="mt-2 inline-flex items-center gap-1 text-[12px] font-bold text-[var(--brand)] hover:underline">
+                <button onClick={() => navigate(t.link!.path)} className="mt-2 inline-flex items-center gap-1 text-[12px] font-bold text-[var(--brand-fg)] hover:underline">
                   {t.link.label}<ArrowRight size={13} />
                 </button>
               )}

@@ -86,7 +86,7 @@ export function InstallGuide({ onClose }: { onClose: () => void }) {
           <ol className="mt-2 list-decimal pl-5 text-[13px] leading-7 text-[#52677d]">
             {guide.items.map((s) => <li key={s}>{s}</li>)}
           </ol>
-          {os === 'ios' && <p className="mt-2 text-[11px] text-[#8a99a9]">※ iPhoneでは Safari で開いているときだけ追加できます。</p>}
+          {os === 'ios' && <p className="mt-2 text-[11px] text-[#5b6b7c]">※ iPhoneでは Safari で開いているときだけ追加できます。</p>}
         </div>
       )}
     </Modal>

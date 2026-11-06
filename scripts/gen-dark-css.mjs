@@ -42,7 +42,7 @@ function darkText(hex) {
   const [h, s, l] = rgbToHsl(hexToRgb(hex))
   if (l > 0.7) return null // もともと明るい文字（暗い背景の上で使われている）
   if (s > 0.35) return hsl(h, Math.min(s, 0.75), Math.max(l, 0.7))
-  return hsl(h, Math.min(s, 0.2), clamp(0.95 - l * 0.6, 0.55, 0.92))
+  return hsl(h, Math.min(s, 0.2), clamp(0.95 - l * 0.6, 0.66, 0.92))
 }
 /** 枠線：明るいグレーは暗いグレーに */
 function darkBorder(hex) {
@@ -90,6 +90,7 @@ const css = `/* このファイルは scripts/gen-dark-css.mjs が自動で作�
 html.dark {
   color-scheme: dark;
   --brand-soft: color-mix(in srgb, var(--brand) 22%, hsl(220 20% 13%));
+  --brand-fg: color-mix(in srgb, var(--brand) 45%, white);
 }
 html.dark body { background-color: hsl(220 18% 8%); color: hsl(220 15% 88%); }
 /* サイトのアイコンは白い背景を前提に描かれていることが多いので、枠は白のままにする */

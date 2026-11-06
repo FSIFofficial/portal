@@ -51,6 +51,8 @@
   --brand: #1f6fba;
   --brand-dark: color-mix(in srgb, var(--brand) 82%, black);
   --brand-soft: color-mix(in srgb, var(--brand) 9%, white);
+  /* 文字・リンクに使うメインカラー（ダークモードでは明るくして読みやすくする） */
+  --brand-fg: var(--brand);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

@@ -1,32 +1,33 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AlertTriangle, Bell, BookOpen, Link2, Trash2, UserX, ChartColumn, CheckCircle2, ChevronRight, FileText, History, KeyRound, LifeBuoy, Link2Off, LoaderCircle, Plus, RefreshCcw, Settings2, ShieldCheck, UserCog, Users, Wrench, XCircle } from 'lucide-react'
+import { AlertTriangle, Bell, BookOpen, Link2, Tags, Trash2, UserX, ChartColumn, CheckCircle2, ChevronRight, FileText, History, KeyRound, LifeBuoy, Link2Off, LoaderCircle, Plus, RefreshCcw, Settings2, ShieldCheck, UserCog, Users, Wrench, XCircle } from 'lucide-react'
 import { DEMO_MODE, EXPECTED_GAS_VERSION } from '@/lib/config'
 import { ApiError, api } from '@/lib/api'
 import { downloadUrl, driveKindLabel, parseDriveUrl } from '@/lib/drive'
 import {
   PERMISSION_LABELS, can, type AdminData, type Announcement, type LogEntry, type Me, type Permission, type PortalDocument,
-  type Role, type Settings, type SystemCheck, type Tool, type User,
+  type LogFilter, type Role, type Settings, type SystemCheck, type Tool, type User,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from './auth-provider'
 import { ModalFooter, RowActions, SectionHeader, Table, confirmDelete, fmt, useEditor, type Mutate } from './admin-shared'
 import { AdminGuide } from './admin-guide'
 import { LinksAdmin } from './admin-links'
-import { AckStatusModal, BackupPanel, BrandingPanel, SecurityAlertsPanel, BulkImportModal, DiscordPanel, TrashAdmin, ErrorDigestPanel, NotifyCheckbox, HelpAdmin, UploadButton, UsageAdmin } from './admin-extra'
+import { AckStatusModal, BackupPanel, BrandingPanel, CategoryAdmin, SecurityAlertsPanel, SelfCheckPanel, BulkImportModal, DiscordPanel, TrashAdmin, ErrorDigestPanel, NotifyCheckbox, HelpAdmin, UploadButton, UsageAdmin } from './admin-extra'
 import type { Navigate } from './router'
 import {
   Button, Checkbox, EmptyState, Field, Modal, RoleBadges, RolePicker, Select, StatusBadge, TONES, TOOL_ICONS, TextArea, TextInput,
   ToolIcon, useToast,
 } from './ui'
 
-type Section = 'guide' | 'tools' | 'documents' | 'links' | 'announcements' | 'help' | 'users' | 'roles' | 'settings' | 'stats' | 'trash' | 'logs' | 'system'
+type Section = 'guide' | 'tools' | 'documents' | 'links' | 'categories' | 'announcements' | 'help' | 'users' | 'roles' | 'settings' | 'stats' | 'trash' | 'logs' | 'system'
 
 const SECTIONS: { id: Section; label: string; icon: typeof Wrench; allowed: (me: Me) => boolean; description: string }[] = [
   { id: 'tools', label: 'ツール管理', icon: Wrench, allowed: (me) => can(me, 'tools.manage'), description: 'ポータルに掲載するツールと接続先URL・公開範囲を管理します。' },
   { id: 'documents', label: '資料管理', icon: FileText, allowed: (me) => can(me, 'documents.manage'), description: '資料館に掲載するGoogle Driveの資料と公開範囲を管理します。' },
   { id: 'links', label: 'リンク管理', icon: Link2, allowed: (me) => can(me, 'links.manage'), description: 'リンク集に載せるWebサイト・フォームと、並び順・公開範囲を管理します。' },
+  { id: 'categories', label: 'カテゴリ整理', icon: Tags, allowed: (me) => can(me, 'tools.manage') || can(me, 'documents.manage') || can(me, 'links.manage'), description: 'ツールのカテゴリ・資料の種類・リンクのカテゴリの名前を、まとめて変更・統合します。' },
   { id: 'announcements', label: 'お知らせ', icon: Bell, allowed: (me) => can(me, 'announcements.manage'), description: 'ページ上部に表示するお知らせを管理します。' },
   { id: 'help', label: 'ヘルプ編集', icon: LifeBuoy, allowed: (me) => can(me, 'announcements.manage'), description: 'ヘルプ・問い合わせページの内容（問い合わせ先・よくある質問）を編集します。' },
   { id: 'users', label: 'アカウント', icon: UserCog, allowed: (me) => me.isSuper, description: 'ログインできるGoogleアカウントと、割り当てるロールを管理します。' },
@@ -82,12 +83,12 @@ export function AdminView({ me, section, navigate }: { me: Me; section: string; 
   return (
     <div className="grid gap-5 lg:grid-cols-[210px_1fr]">
       <nav className="flex gap-1 overflow-x-auto rounded-2xl border border-[#e4e9f0] bg-white p-2 lg:flex-col lg:self-start lg:p-3" aria-label="管理メニュー">
-        <p className="mb-2 hidden px-3 text-[11px] font-bold text-[#9aa8b8] lg:block">管理メニュー</p>
+        <p className="mb-2 hidden px-3 text-[11px] font-bold text-[#5b6b7c] lg:block">管理メニュー</p>
         {allowed.map((s) => {
           const Icon = s.icon
           const active = s.id === current.id
           return (
-            <button key={s.id} onClick={() => navigate(`/admin/${s.id}`)} className={cn('flex shrink-0 items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[12px] font-semibold', active ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#66788c] hover:bg-[#f6f8fa]')}>
+            <button key={s.id} onClick={() => navigate(`/admin/${s.id}`)} className={cn('flex shrink-0 items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[12px] font-semibold', active ? 'bg-[var(--brand-soft)] text-[var(--brand-fg)]' : 'text-[#66788c] hover:bg-[#f6f8fa]')}>
               <Icon size={15} />
               <span className="flex-1">{s.label}</span>
               {active && <ChevronRight size={14} className="hidden lg:block" />}
@@ -97,12 +98,13 @@ export function AdminView({ me, section, navigate }: { me: Me; section: string; 
       </nav>
       <div className="min-w-0 rounded-2xl border border-[#e4e9f0] bg-white">
         {!data ? (
-          <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-[#718096]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
+          <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-[#4f5f70]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
         ) : (
           <>
             {current.id === 'tools' && <ToolsAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'documents' && <DocumentsAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'links' && <LinksAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
+            {current.id === 'categories' && <CategoryAdmin section={current} data={data} me={me} mutate={mutate} loading={loading} onReload={reload} />}
             {current.id === 'announcements' && <AnnouncementsAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'users' && <UsersAdmin me={me} data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'roles' && <RolesAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
@@ -110,7 +112,7 @@ export function AdminView({ me, section, navigate }: { me: Me; section: string; 
             {current.id === 'help' && <HelpAdmin section={current} data={data} mutate={mutate} loading={loading} onReload={reload} />}
             {current.id === 'stats' && <UsageAdmin section={current} data={data} />}
             {current.id === 'logs' && <LogsAdmin section={current} />}
-            {current.id === 'system' && <SystemAdmin section={current} />}
+            {current.id === 'system' && <SystemAdmin section={current} me={me} />}
             {current.id === 'trash' && <TrashAdmin section={current} mutate={mutate} />}
             {current.id === 'guide' && <AdminGuide section={current} me={me} navigate={navigate} />}
           </>
@@ -143,16 +145,16 @@ function ToolsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate;
         {data.tools.map((tool) => (
           <tr key={tool.id} className="border-t border-[#edf0f3]">
             <td className="py-3 pl-5"><ToolIcon name={tool.icon} tone={tool.tone} src={tool.iconUrl} size={16} className="size-9" /></td>
-            <td className="px-5 py-3 font-semibold text-[#38536f]">{tool.name}<span className="block text-[11px] font-normal text-[#8a99a9]">{tool.description}</span></td>
-            <td className="px-5 py-3 text-[#718296]">{tool.category}</td>
+            <td className="px-5 py-3 font-semibold text-[#38536f]">{tool.name}<span className="block text-[11px] font-normal text-[#5b6b7c]">{tool.description}</span></td>
+            <td className="px-5 py-3 text-[#4f5f70]">{tool.category}</td>
             <td className="px-5 py-3"><StatusBadge status={tool.status} /></td>
-            <td className="px-5 py-3 text-[#9aa7b5]">{tool.url ? <a href={tool.url} target="_blank" rel="noopener noreferrer" className="text-[var(--brand)] hover:underline">設定済み</a> : '未設定'}</td>
+            <td className="px-5 py-3 text-[#5b6b7c]">{tool.url ? <a href={tool.url} target="_blank" rel="noopener noreferrer" className="text-[var(--brand-fg)] hover:underline">設定済み</a> : '未設定'}</td>
             <td className="px-5 py-3"><RoleBadges ids={tool.visibleRoles} roles={data.roles} /></td>
             <td className="px-5 py-3"><RowActions label={tool.name} onEdit={() => ed.open({ ...tool })} onDelete={() => confirmDelete(tool.name) && void mutate((t) => api.deleteTool(t, tool.id), 'ツールを削除しました')} /></td>
           </tr>
         ))}
       </Table>
-      <p className="px-5 py-4 text-[11px] text-[#8a99a9]">並び順は「ツール」画面の「並べ替え」から変更できます。</p>
+      <p className="px-5 py-4 text-[11px] text-[#5b6b7c]">並び順は「ツール」画面の「並べ替え」から変更できます。</p>
       {ed.draft && (
         <Modal title={ed.isNew ? 'ツールを追加' : 'ツールを編集'} onClose={ed.close} footer={<ModalFooter onCancel={ed.close} onSave={save} saving={ed.saving} />}>
           <Field label="ツール名" required><TextInput value={ed.draft.name} onChange={(e) => ed.set('name', e.target.value)} /></Field>
@@ -257,14 +259,14 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
         {docs.map((doc) => (
           <tr key={doc.id} className="border-t border-[#edf0f3]">
             <td className="px-5 py-3 font-semibold text-[#38536f]">{doc.pinned && <span className="mr-1 text-[#c2410c]">📌</span>}{doc.title}</td>
-            <td className="px-5 py-3 text-[#718296]">{doc.type}</td>
-            <td className="px-5 py-3 text-[#718296]">{doc.tool}</td>
-            <td className="px-5 py-3 text-[#9aa7b5]">
-              {doc.driveUrl ? <a href={doc.driveUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--brand)] hover:underline">{driveKindLabel(doc.driveUrl)}</a> : '未設定'}
+            <td className="px-5 py-3 text-[#4f5f70]">{doc.type}</td>
+            <td className="px-5 py-3 text-[#4f5f70]">{doc.tool}</td>
+            <td className="px-5 py-3 text-[#5b6b7c]">
+              {doc.driveUrl ? <a href={doc.driveUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--brand-fg)] hover:underline">{driveKindLabel(doc.driveUrl)}</a> : '未設定'}
               {doc.driveSync && <SyncBadge status={doc.driveSyncStatus ?? ''} />}
             </td>
             <td className="px-5 py-3"><RoleBadges ids={doc.visibleRoles} roles={data.roles} /></td>
-            <td className="whitespace-nowrap px-5 py-3 text-[#718296]">{doc.date}</td>
+            <td className="whitespace-nowrap px-5 py-3 text-[#4f5f70]">{doc.date}</td>
             <td className="px-5 py-3"><RowActions label={doc.title} onEdit={() => ed.open({ ...doc, tagsText: doc.tags.join(', ') })} onDelete={() => confirmDelete(doc.title) && void mutate((t) => api.deleteDocument(t, doc.id), '資料を削除しました')} /></td>
           </tr>
         ))}
@@ -284,7 +286,7 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
             {ed.draft.driveUrl && (
               <span className="mt-2 block rounded-lg bg-[#f5f8fc] px-3 py-2 text-[11px] leading-5 text-[#55708b]">
                 判定：<b>{driveKindLabel(ed.draft.driveUrl)}</b>
-                {drive && <> ／ ダウンロード：{autoDownload ? <a href={autoDownload} target="_blank" rel="noopener noreferrer" className="text-[var(--brand)] underline">自動生成されたリンクを確認</a> : 'この種類は直接ダウンロードできません（Driveで開いてダウンロード）'}</>}
+                {drive && <> ／ ダウンロード：{autoDownload ? <a href={autoDownload} target="_blank" rel="noopener noreferrer" className="text-[var(--brand-fg)] underline">自動生成されたリンクを確認</a> : 'この種類は直接ダウンロードできません（Driveで開いてダウンロード）'}</>}
                 {!drive && ' ／ Driveのリンクとして認識できませんでした（外部リンクとして開きます）'}
               </span>
             )}
@@ -312,7 +314,7 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
             </Field>
           </div>
           <div className="mb-4 rounded-xl border border-[#d9e8f3] bg-[#f7fafd] p-3">
-            <Checkbox checked={!!ed.draft.driveSync} onChange={(v) => ed.set('driveSync', v)} label={<><b>Driveの共有を公開範囲に合わせる</b><span className="block text-[11px] leading-5 text-[#8a99a9]">オンにすると、この資料を見られるアカウントをDriveの閲覧者に自動で追加し、見られなくなった人は外します（ポータルが追加した人だけ。手動で共有した相手には触れません）。アカウントやロールを変更したときも自動で合わせ直します。</span></>} />
+            <Checkbox checked={!!ed.draft.driveSync} onChange={(v) => ed.set('driveSync', v)} label={<><b>Driveの共有を公開範囲に合わせる</b><span className="block text-[11px] leading-5 text-[#5b6b7c]">オンにすると、この資料を見られるアカウントをDriveの閲覧者に自動で追加し、見られなくなった人は外します（ポータルが追加した人だけ。手動で共有した相手には触れません）。アカウントやロールを変更したときも自動で合わせ直します。</span></>} />
             {ed.draft.driveSyncStatus && (
               <div className="mt-2 border-t border-[#e4eef7] pt-2 text-[12px] leading-5">
                 <SyncBadge status={ed.draft.driveSyncStatus} block />
@@ -325,7 +327,7 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
           {ed.isNew && <NotifyCheckbox checked={ed.draft.notify !== false} onChange={(v) => ed.set('notify', v)} restricted={ed.draft.visibleRoles.length > 0} />}
           {!ed.isNew && ed.draft.visibleRoles.length === 0 && (
             <div className="mb-4">
-              <Checkbox checked={!!ed.draft.notifyUpdate} onChange={(v) => ed.set('notifyUpdate', v)} label={<>更新をDiscordに通知する<span className="block text-[11px] text-[#8a99a9]">資料を差し替えたときなど、知らせたい更新のときだけチェックしてください。Discordへの通知が設定されている場合に送られます。</span></>} />
+              <Checkbox checked={!!ed.draft.notifyUpdate} onChange={(v) => ed.set('notifyUpdate', v)} label={<>更新をDiscordに通知する<span className="block text-[11px] text-[#5b6b7c]">資料を差し替えたときなど、知らせたい更新のときだけチェックしてください。Discordへの通知が設定されている場合に送られます。</span></>} />
             </div>
           )}
           <details className="rounded-lg border border-[#edf0f3] px-3 py-2">
@@ -364,15 +366,15 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
       <Table head={['タイトル', '種別', '表示', '期間', '公開範囲', '確認状況', '']} empty={!data.announcements.length}>
         {data.announcements.map((a) => (
           <tr key={a.id} className="border-t border-[#edf0f3]">
-            <td className="px-5 py-3 font-semibold text-[#38536f]">{a.title}<span className="block text-[11px] font-normal text-[#8a99a9]">{a.body}</span></td>
+            <td className="px-5 py-3 font-semibold text-[#38536f]">{a.title}<span className="block text-[11px] font-normal text-[#5b6b7c]">{a.body}</span></td>
             <td className="px-5 py-3">{a.level === 'important' ? <span className="rounded bg-[#f7d8d6] px-1.5 py-0.5 text-[10px] font-bold text-[#a13b3b]">重要</span> : <span className="rounded bg-[#e6f0fa] px-1.5 py-0.5 text-[10px] font-bold text-[#285b82]">通常</span>}</td>
-            <td className="px-5 py-3 text-[#718296]">{a.active ? '表示中' : '非表示'}</td>
-            <td className="whitespace-nowrap px-5 py-3 text-[#718296]">{a.startDate || a.endDate ? `${a.startDate || '…'} 〜 ${a.endDate || '…'}` : '常時'}</td>
+            <td className="px-5 py-3 text-[#4f5f70]">{a.active ? '表示中' : '非表示'}</td>
+            <td className="whitespace-nowrap px-5 py-3 text-[#4f5f70]">{a.startDate || a.endDate ? `${a.startDate || '…'} 〜 ${a.endDate || '…'}` : '常時'}</td>
             <td className="px-5 py-3"><RoleBadges ids={a.visibleRoles} roles={data.roles} /></td>
             <td className="whitespace-nowrap px-5 py-3">
               {a.requireAck ? (
-                <button onClick={() => setAckOf(a)} className="font-semibold text-[var(--brand)] hover:underline">{data.ackCounts?.[a.id] ?? 0}人が確認 ›</button>
-              ) : <span className="text-[11px] text-[#9aa7b5]">不要</span>}
+                <button onClick={() => setAckOf(a)} className="font-semibold text-[var(--brand-fg)] hover:underline">{data.ackCounts?.[a.id] ?? 0}人が確認 ›</button>
+              ) : <span className="text-[11px] text-[#5b6b7c]">不要</span>}
             </td>
             <td className="px-5 py-3"><RowActions label={a.title} onEdit={() => ed.open({ ...a })} onDelete={() => confirmDelete(a.title) && void mutate((t) => api.deleteAnnouncement(t, a.id), 'お知らせを削除しました')} /></td>
           </tr>
@@ -392,7 +394,7 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
             <Field label="表示終了日"><TextInput type="date" value={ed.draft.endDate} onChange={(e) => ed.set('endDate', e.target.value)} /></Field>
           </div>
           <Checkbox checked={ed.draft.active} onChange={(v) => ed.set('active', v)} label="表示する" />
-          <Checkbox checked={!!ed.draft.requireAck} onChange={(v) => ed.set('requireAck', v)} label={<><b>確認を求める</b><span className="block text-[11px] leading-5 text-[#8a99a9]">「確認しました」ボタンを表示し、押すまでお知らせが消えなくなります。誰が確認したかを一覧で見られます。</span></>} />
+          <Checkbox checked={!!ed.draft.requireAck} onChange={(v) => ed.set('requireAck', v)} label={<><b>確認を求める</b><span className="block text-[11px] leading-5 text-[#5b6b7c]">「確認しました」ボタンを表示し、押すまでお知らせが消えなくなります。誰が確認したかを一覧で見られます。</span></>} />
           <div className="mt-3">
             <Field group label="公開範囲"><RolePicker roles={data.roles} value={ed.draft.visibleRoles} onChange={(v) => ed.set('visibleRoles', v)} exclude={['superadmin']} emptyLabel="未選択：ログインできる全員に表示" /></Field>
             {ed.isNew && <NotifyCheckbox checked={ed.draft.notify !== false} onChange={(v) => ed.set('notify', v)} restricted={ed.draft.visibleRoles.length > 0} />}
@@ -462,10 +464,10 @@ function UsersAdmin({ me, data, mutate, header }: { me: Me; data: AdminData; mut
       <Table head={['名前 / メールアドレス', 'ロール', '状態', '最終ログイン', '']} empty={!users.length}>
         {users.map((u) => (
           <tr key={u.email} className="border-t border-[#edf0f3]">
-            <td className="px-5 py-3 font-semibold text-[#38536f]">{u.name}{u.email === me.email && <span className="ml-1 text-[10px] text-[var(--brand)]">（自分）</span>}<span className="block text-[11px] font-normal text-[#8a99a9]">{u.email}</span></td>
+            <td className="px-5 py-3 font-semibold text-[#38536f]">{u.name}{u.email === me.email && <span className="ml-1 text-[10px] text-[var(--brand-fg)]">（自分）</span>}<span className="block text-[11px] font-normal text-[#5b6b7c]">{u.email}</span></td>
             <td className="px-5 py-3"><RoleBadges ids={u.roles} roles={data.roles} emptyLabel="なし" /></td>
             <td className="px-5 py-3">{u.active ? <span className="text-[#1c7a43]">有効</span> : <span className="text-[#b42318]">無効</span>}</td>
-            <td className="whitespace-nowrap px-5 py-3 text-[#718296]">{fmt(u.lastLoginAt)}</td>
+            <td className="whitespace-nowrap px-5 py-3 text-[#4f5f70]">{fmt(u.lastLoginAt)}</td>
             <td className="px-5 py-3"><RowActions label={u.email} onEdit={() => ed.open({ ...u })} onDelete={u.email === me.email ? undefined : () => confirmDelete(u.email) && void mutate((t) => api.deleteUser(t, u.email), 'アカウントを削除しました')} /></td>
           </tr>
         ))}
@@ -516,16 +518,16 @@ function RolesAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate;
         {data.roles.map((r) => (
           <tr key={r.id} className="border-t border-[#edf0f3]">
             <td className="px-5 py-3 font-semibold text-[#38536f]">
-              {r.name}{r.builtin && <span className="ml-1 rounded bg-[#eef1f5] px-1.5 py-0.5 text-[10px] text-[#6b7785]">標準</span>}
-              <span className="block text-[11px] font-normal text-[#8a99a9]">ID: {r.id}{r.description && ` · ${r.description}`}</span>
+              {r.name}{r.builtin && <span className="ml-1 rounded bg-[#eef1f5] px-1.5 py-0.5 text-[10px] text-[#4f5f70]">標準</span>}
+              <span className="block text-[11px] font-normal text-[#5b6b7c]">ID: {r.id}{r.description && ` · ${r.description}`}</span>
             </td>
             <td className="px-5 py-3 text-[#55708b]">
-              {r.permissions.includes('*') ? <b>すべての操作（アカウント・権限管理を含む）</b> : r.permissions.length ? r.permissions.map((p) => PERMISSION_LABELS[p as Exclude<Permission, '*'>] ?? p).join(' / ') : <span className="text-[#9aa7b5]">閲覧のみ</span>}
+              {r.permissions.includes('*') ? <b>すべての操作（アカウント・権限管理を含む）</b> : r.permissions.length ? r.permissions.map((p) => PERMISSION_LABELS[p as Exclude<Permission, '*'>] ?? p).join(' / ') : <span className="text-[#5b6b7c]">閲覧のみ</span>}
             </td>
-            <td className="px-5 py-3 text-[#718296]">{userCount(r.id)}人</td>
-            <td className="px-5 py-3 text-[#718296]">{visibleCount(r.id)}件</td>
+            <td className="px-5 py-3 text-[#4f5f70]">{userCount(r.id)}人</td>
+            <td className="px-5 py-3 text-[#4f5f70]">{visibleCount(r.id)}件</td>
             <td className="px-5 py-3">
-              {r.id === 'superadmin' ? <span className="block text-right text-[11px] text-[#9aa7b5]">変更不可</span> : (
+              {r.id === 'superadmin' ? <span className="block text-right text-[11px] text-[#5b6b7c]">変更不可</span> : (
                 <RowActions label={r.name} onEdit={() => ed.open({ ...r })} onDelete={r.builtin ? undefined : () => confirmDelete(r.name) && void mutate((t) => api.deleteRole(t, r.id), 'ロールを削除しました')} />
               )}
             </td>
@@ -572,7 +574,7 @@ function SettingsAdmin({ data, mutate, header }: { data: AdminData; mutate: Muta
     <>
       {header}
       <div className="max-w-[620px] p-5">
-        <Checkbox checked={draft.allowUnregistered} onChange={(v) => setDraft({ ...draft, allowUnregistered: v })} label={<><b>未登録のGoogleアカウントのログインを許可する</b><span className="block text-[11px] text-[#8a99a9]">オフ（推奨）の場合、「アカウント」に登録した人だけがログインできます。オンにすると初回ログイン時に自動登録されます。</span></>} />
+        <Checkbox checked={draft.allowUnregistered} onChange={(v) => setDraft({ ...draft, allowUnregistered: v })} label={<><b>未登録のGoogleアカウントのログインを許可する</b><span className="block text-[11px] text-[#5b6b7c]">オフ（推奨）の場合、「アカウント」に登録した人だけがログインできます。オンにすると初回ログイン時に自動登録されます。</span></>} />
         {draft.allowUnregistered && (
           <div className="mt-4 rounded-xl border border-[#edf0f3] p-4">
             <Field label="自動登録を許可するドメイン" hint="カンマ区切り（例：fsif.jp）。空欄だとすべてのGoogleアカウントが対象になるので注意してください。">
@@ -599,10 +601,12 @@ function SettingsAdmin({ data, mutate, header }: { data: AdminData; mutate: Muta
 // ---------------------------------------------------------------------------
 
 const ACTION_LABELS: Record<string, string> = {
-  create: '追加', update: '更新', delete: '削除', reorder: '並べ替え', autoRegister: '自動登録',
+  create: '追加', update: '更新', delete: '削除', reorder: '並べ替え', autoRegister: '自動登録', restore: '復元', purge: '完全削除',
+  renameCategory: 'カテゴリ名の変更', bulkCreate: '一括登録', bulkDisable: '一括無効化', bulkEnable: '一括有効化', error: 'エラー',
+  selfCheck: '動作チェック', upload: 'アップロード', driveSync: '共有の同期', restrictLink: 'リンク共有オフ',
 }
 const SHEET_LABELS: Record<string, string> = {
-  Tools: 'ツール', Documents: '資料', Announcements: 'お知らせ', Users: 'アカウント', Roles: 'ロール', Settings: '設定', user: 'アカウント',
+  Tools: 'ツール', Documents: '資料', Links: 'リンク', Announcements: 'お知らせ', Users: 'アカウント', Roles: 'ロール', Settings: '設定', Help: 'ヘルプ', user: 'アカウント',
 }
 const actionLabel = (action: string) => {
   const [sheet, op] = action.split('.')
@@ -614,31 +618,68 @@ function LogsAdmin({ section }: { section: (typeof SECTIONS)[number] }) {
   const toast = useToast()
   const [logs, setLogs] = useState<LogEntry[] | null>(null)
   const [loading, setLoading] = useState(false)
-  const load = useCallback(() => {
+  const [filter, setFilter] = useState<LogFilter>({})
+  const [emails, setEmails] = useState<string[]>([])
+  const active = !!(filter.q || filter.email || filter.kind || filter.from || filter.to)
+  const load = useCallback((f: LogFilter) => {
     setLoading(true)
-    run((t) => api.listLogs(t))
-      .then(setLogs)
+    run((t) => api.listLogs(t, f))
+      .then((rows) => {
+        setLogs(rows)
+        // 操作者の選択肢は、読み込んだ履歴から作る（増える一方にする）
+        setEmails((prev) => [...new Set([...prev, ...rows.map((r) => r.email)])].sort())
+      })
       .catch((e: Error) => {
         toast(e.message, 'error')
         setLogs([])
       })
       .finally(() => setLoading(false))
   }, [run, toast])
-  useEffect(load, [load])
+  useEffect(() => load({}), [load])
+  const set = (patch: Partial<LogFilter>) => setFilter((f) => ({ ...f, ...patch }))
   return (
     <>
-      <SectionHeader section={section} loading={loading} onReload={load} />
+      <SectionHeader section={section} loading={loading} onReload={() => load(filter)} />
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          load(filter)
+        }}
+        className="grid gap-2 border-b border-[#edf0f3] px-5 py-3 sm:grid-cols-2 lg:grid-cols-[1fr_180px_150px_150px_150px]"
+        role="search"
+        aria-label="変更履歴の絞り込み"
+      >
+        <TextInput aria-label="キーワード" placeholder="キーワード（対象・内容）" value={filter.q ?? ''} onChange={(e) => set({ q: e.target.value })} />
+        <Select aria-label="操作者" value={filter.email ?? ''} onChange={(e) => set({ email: e.target.value })}>
+          <option value="">すべての操作者</option>
+          {emails.map((m) => <option key={m} value={m}>{m}</option>)}
+        </Select>
+        <Select aria-label="種類" value={filter.kind ?? ''} onChange={(e) => set({ kind: e.target.value })}>
+          <option value="">すべての種類</option>
+          {Object.entries(SHEET_LABELS).filter(([k]) => k !== 'user').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          <option value="Drive">Drive</option>
+          <option value="System">システム</option>
+        </Select>
+        <TextInput type="date" aria-label="開始日" value={filter.from ?? ''} onChange={(e) => set({ from: e.target.value })} />
+        <TextInput type="date" aria-label="終了日" value={filter.to ?? ''} onChange={(e) => set({ to: e.target.value })} />
+        <div className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-5">
+          <Button type="submit" disabled={loading}>絞り込む</Button>
+          {active && <Button type="button" variant="secondary" onClick={() => { setFilter({}); load({}) }}>条件をクリア</Button>}
+          <Checkbox checked={!!filter.includeArchive} onChange={(v) => set({ includeArchive: v })} label="古い履歴（LogsArchive）も探す" />
+          {logs && <span className="ml-auto text-[11px] text-[#5b6b7c]">{logs.length}件{logs.length >= 300 ? '（新しい順に300件まで表示）' : ''}</span>}
+        </div>
+      </form>
       {!logs ? (
-        <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-[#718096]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
+        <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-[#4f5f70]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
       ) : (
         <Table head={['日時', '操作者', '操作', '対象', '内容']} empty={!logs.length}>
           {logs.map((l, i) => (
             <tr key={i} className="border-t border-[#edf0f3]">
-              <td className="whitespace-nowrap px-5 py-3 text-[#718296]">{fmt(l.timestamp)}</td>
+              <td className="whitespace-nowrap px-5 py-3 text-[#4f5f70]">{fmt(l.timestamp)}</td>
               <td className="px-5 py-3 text-[#38536f]">{l.email}</td>
               <td className="whitespace-nowrap px-5 py-3 font-semibold text-[#38536f]">{actionLabel(l.action)}</td>
-              <td className="max-w-[160px] truncate px-5 py-3 text-[#718296]">{l.target}</td>
-              <td className="max-w-[260px] truncate px-5 py-3 text-[#718296]" title={l.detail}>{l.detail}</td>
+              <td className="max-w-[160px] truncate px-5 py-3 text-[#4f5f70]" title={l.target}>{l.target}</td>
+              <td className="max-w-[260px] truncate px-5 py-3 text-[#4f5f70]" title={l.detail}>{l.detail}</td>
             </tr>
           ))}
         </Table>
@@ -663,7 +704,7 @@ function CheckRow({ ok, label, detail }: { ok: boolean; label: string; detail: R
   )
 }
 
-function SystemAdmin({ section }: { section: (typeof SECTIONS)[number] }) {
+function SystemAdmin({ section, me }: { section: (typeof SECTIONS)[number]; me: Me }) {
   const { run } = useAuth()
   const toast = useToast()
   const [info, setInfo] = useState<SystemCheck | null>(null)
@@ -691,7 +732,7 @@ function SystemAdmin({ section }: { section: (typeof SECTIONS)[number] }) {
     <>
       <SectionHeader section={section} loading={loading} onReload={load} />
       {!info && !error ? (
-        <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-[#718096]"><LoaderCircle size={18} className="animate-spin" />確認中…</div>
+        <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-[#4f5f70]"><LoaderCircle size={18} className="animate-spin" />確認中…</div>
       ) : (
         <div className="p-5">
           <div className={cn('mb-5 flex items-start gap-3 rounded-xl p-4 text-[13px] leading-6', allOk ? 'bg-[#eaf7ef] text-[#1c5c37]' : 'bg-[#fff5f4] text-[#9b2c2c]')}>
@@ -732,7 +773,7 @@ function SystemAdmin({ section }: { section: (typeof SECTIONS)[number] }) {
                     label="直近7日間のエラー"
                     detail={info.recentErrors.length ? (
                       <ul className="list-disc pl-4">
-                        {info.recentErrors.map((e, i) => <li key={i}><span className="text-[#8a99a9]">{fmt(e.timestamp)}</span> [{e.code}] {e.message}</li>)}
+                        {info.recentErrors.map((e, i) => <li key={i}><span className="text-[#5b6b7c]">{fmt(e.timestamp)}</span> [{e.code}] {e.message}</li>)}
                       </ul>
                     ) : 'エラーは記録されていません'}
                   />
@@ -740,7 +781,8 @@ function SystemAdmin({ section }: { section: (typeof SECTIONS)[number] }) {
               </>
             )}
           </div>
-          {info && <p className="mt-3 text-[11px] text-[#9aa7b5]">確認日時：{fmt(info.checkedAt)}</p>}
+          {info && <p className="mt-3 text-[11px] text-[#5b6b7c]">確認日時：{fmt(info.checkedAt)}</p>}
+          {me.isSuper && <SelfCheckPanel />}
         </div>
       )}
     </>

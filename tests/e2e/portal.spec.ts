@@ -161,6 +161,58 @@ test('ダークモードを選ぶと再読み込みしても保たれ、ログ�
   expect(await page.evaluate(() => localStorage.getItem('fsif-portal-data-cache'))).toBeNull()
 })
 
+test('NEWは開くと消え、「すべて既読にする」でまとめて消える', async ({ page }) => {
+  await login(page, 'メンバー 一郎')
+  const toolsCount = page.locator('aside button', { hasText: 'ツール' }).getByLabel(/新着/)
+  await expect(toolsCount).toBeVisible()
+  // NEW の付いたツール（サンプルツールE）を開くと、その NEW が消える
+  await page.goto('./#/tools')
+  const card = page.locator('article', { hasText: 'サンプルツールE' })
+  await expect(card.getByText('NEW', { exact: true })).toBeVisible()
+  // 接続先が未設定のデモツールなので、開いた扱いは資料で確認する
+  await page.goto('./#/links')
+  await expect(page.locator('aside button', { hasText: 'リンク集' }).getByLabel(/新着/)).toBeVisible()
+  const [popup] = await Promise.all([page.waitForEvent('popup').catch(() => null), page.getByRole('link', { name: /活動報告ブログ/ }).click()])
+  await popup?.close()
+  await expect(page.locator('aside button', { hasText: 'リンク集' }).getByLabel(/新着/)).toHaveCount(0)
+  // 残りはまとめて既読にする
+  await page.getByRole('button', { name: /すべて既読にする/ }).click()
+  await expect(page.getByText('NEWをすべて既読にしました')).toBeVisible()
+  await expect(page.locator('aside').getByLabel(/新着/)).toHaveCount(0)
+  await page.reload()
+  await expect(page.locator('aside').getByLabel(/新着/)).toHaveCount(0)
+})
+
+test('検索ページで資料の本文からも見つかる', async ({ page }) => {
+  await login(page, 'メンバー 一郎')
+  // デモには本文がないため、検索が動いて件数が表示されるところまでを確認する
+  await page.goto('./#/search?q=' + encodeURIComponent('探し方'))
+  await expect(page.getByRole('heading', { name: /資料の本文から見つかったもの/ })).toBeVisible()
+  // Drive 検索が終わると件数が出る
+  await expect(page.getByRole('heading', { name: /資料の本文から見つかったもの\s*\d+件/ })).toBeVisible()
+})
+
+test('管理：変更履歴の絞り込み・カテゴリ名の一括変更・動作チェック', async ({ page }) => {
+  page.on('dialog', (d) => d.accept())
+  await login(page, '管理 太郎')
+  // カテゴリ名を変える
+  await page.goto('./#/admin/categories')
+  await page.getByLabel('「公式」の新しい名前').fill('オフィシャル')
+  await page.locator('tr', { hasText: '公式' }).getByRole('button', { name: '変更' }).click()
+  await expect(page.getByText('「公式」を「オフィシャル」に変更しました')).toBeVisible()
+  await page.goto('./#/links')
+  await expect(page.getByRole('heading', { name: /オフィシャル/ })).toBeVisible()
+  // 変更履歴で絞り込む
+  await page.goto('./#/admin/logs')
+  await page.getByLabel('種類').selectOption('Links')
+  await page.getByRole('button', { name: '絞り込む' }).click()
+  await expect(page.locator('tbody tr').first()).toContainText('カテゴリ名の変更')
+  // 動作チェック
+  await page.goto('./#/admin/system')
+  await page.getByRole('button', { name: '動作チェックを実行' }).click()
+  await expect(page.getByText('すべて正常に動いています')).toBeVisible()
+})
+
 test('スマホ幅でも横にはみ出さない', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await login(page, 'メンバー 一郎')

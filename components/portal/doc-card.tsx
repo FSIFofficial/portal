@@ -47,7 +47,7 @@ export function DocActions({ doc, compact }: { doc: PortalDocument; compact?: bo
         }>
           <div className="flex h-full flex-col">
             <iframe src={embed} title={doc.title} className="min-h-[60vh] w-full flex-1 rounded-lg border border-[#e4e9f0] bg-[#f6f8fb]" allow="autoplay" referrerPolicy="no-referrer-when-downgrade" />
-            <p className="mt-2 text-[11px] text-[#8a99a9]">表示されないときは、ブラウザで閲覧権限のあるGoogleアカウントにログインしているか確認するか、「新しいタブで開く」を使ってください。</p>
+            <p className="mt-2 text-[11px] text-[#5b6b7c]">表示されないときは、ブラウザで閲覧権限のあるGoogleアカウントにログインしているか確認するか、「新しいタブで開く」を使ってください。</p>
           </div>
         </Modal>
       )}
@@ -56,7 +56,7 @@ export function DocActions({ doc, compact }: { doc: PortalDocument; compact?: bo
           資料を開く<ExternalLink size={12} />
         </a>
       ) : (
-        <span className={cn('inline-flex items-center rounded-lg bg-[#eef1f5] font-bold text-[#6b7785]', size)}>リンク未設定</span>
+        <span className={cn('inline-flex items-center rounded-lg bg-[#eef1f5] font-bold text-[#4f5f70]', size)}>リンク未設定</span>
       )}
       {dl && (
         <a href={dl} target="_blank" rel="noopener noreferrer" onClick={() => track('doc', doc.id)} className={cn('inline-flex items-center gap-1.5 rounded-lg border border-[#cfdeeb] bg-white font-bold text-[#285b82] hover:bg-[#f2f7fc]', size)}>
@@ -78,7 +78,7 @@ export function DocCard({ doc, restricted }: { doc: PortalDocument; restricted?:
           <h3 className="flex-1 text-[14px] font-bold leading-6 text-[#1b304b]">{doc.title}</h3>
           {isNew(doc, data?.me) && <span className="mt-1"><NewBadge /></span>}
         </div>
-        <p className="mt-1 text-[11px] text-[#8593a2]">{doc.date} · {doc.type}{doc.tool && doc.tool !== '共通' ? ` · ${doc.tool}` : ''}</p>
+        <p className="mt-1 text-[11px] text-[#5b6b7c]">{doc.date} · {doc.type}{doc.tool && doc.tool !== '共通' ? ` · ${doc.tool}` : ''}</p>
         <div className="mt-2 flex flex-wrap gap-1">
           {restricted && <span className="rounded bg-[#fff5df] px-1.5 py-0.5 text-[10px] font-semibold text-[#92400e]">限定公開</span>}
           {doc.tags.map((tag) => <span key={tag} className="rounded border border-[#d5e3ef] px-1.5 py-0.5 text-[10px] text-[#55708b]">{tag}</span>)}
@@ -86,7 +86,7 @@ export function DocCard({ doc, restricted }: { doc: PortalDocument; restricted?:
         <p className="mt-2 line-clamp-3 text-[12px] leading-5 text-[#52677d]">{doc.description}</p>
         <div className="mt-auto pt-4">
           <DocActions doc={doc} compact />
-          {doc.driveUrl && <p className="mt-2 text-[10px] text-[#a1acb8]">{driveKindLabel(doc.driveUrl)}</p>}
+          {doc.driveUrl && <p className="mt-2 text-[10px] text-[#5b6b7c]">{driveKindLabel(doc.driveUrl)}</p>}
         </div>
       </div>
     </article>

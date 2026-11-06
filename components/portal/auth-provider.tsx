@@ -19,6 +19,8 @@ interface AuthContextValue {
   refresh: () => Promise<void>
   /** 画面上のデータだけを書き換える（お気に入りの即時反映など） */
   patchData: (fn: (data: BootstrapData) => BootstrapData) => void
+  markSeen: (id: string, updatedAt: string) => void
+  markAllSeen: () => Promise<void>
   /** API呼び出しのラッパー。認証切れなら自動でログアウトする */
   run: <T>(fn: (token: string) => Promise<T>) => Promise<T>
 }
@@ -76,6 +78,31 @@ function writeDataCache(token: string, data: BootstrapData | null) {
   }
 }
 
+// 開いたもの（NEWを消すため）。アカウントごとにこのブラウザへ保存する
+const SEEN_KEY = 'fsif-portal-seen'
+
+function readSeen(email: string): Record<string, string> {
+  try {
+    const all = JSON.parse(window.localStorage.getItem(SEEN_KEY) ?? '{}') as Record<string, Record<string, string>>
+    return all[email] ?? {}
+  } catch {
+    return {}
+  }
+}
+
+function writeSeen(email: string, seen: Record<string, string>) {
+  try {
+    const all = JSON.parse(window.localStorage.getItem(SEEN_KEY) ?? '{}') as Record<string, Record<string, string>>
+    // 古い記録が増えすぎないよう、最新の300件だけ残す
+    all[email] = Object.fromEntries(Object.entries(seen).slice(-300))
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify(all))
+  } catch {
+    // 保存できなくても、次の日には自動で消える
+  }
+}
+
+const withSeen = (d: BootstrapData): BootstrapData => ({ ...d, me: { ...d.me, seen: readSeen(d.me.email) } })
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('loading')
   const [token, setToken] = useState('')
@@ -106,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     storeSession(session)
     setToken(session.token)
     setExpiresAt(session.expiresAt)
-    setData(result)
+    setData(withSeen(result))
     setError('')
     setStatus('signedIn')
   }, [])
@@ -190,16 +217,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     const result = await run((t) => api.bootstrap(t))
-    setData(result)
+    setData(withSeen(result))
   }, [run])
 
   const patchData = useCallback((fn: (data: BootstrapData) => BootstrapData) => {
     setData((d) => (d ? fn(d) : d))
   }, [])
 
+  /** 開いたものの NEW を消す */
+  const markSeen = useCallback((id: string, updatedAt: string) => {
+    setData((d) => {
+      if (!d || d.me.seen?.[id] === updatedAt) return d
+      const seen = { ...(d.me.seen ?? {}), [id]: updatedAt }
+      writeSeen(d.me.email, seen)
+      return { ...d, me: { ...d.me, seen } }
+    })
+  }, [])
+
+  /** すべての NEW を消す（アカウントに記録するので、ほかの端末でも消える） */
+  const markAllSeen = useCallback(async () => {
+    const res = await run((t) => api.markAllSeen(t))
+    setData((d) => (d ? { ...d, me: { ...d.me, newSince: res.newSince } } : d))
+  }, [run])
+
   const value = useMemo(
-    () => ({ status, token, data, error, signIn, signOut, refresh, patchData, run }),
-    [status, token, data, error, signIn, signOut, refresh, patchData, run],
+    () => ({ status, token, data, error, signIn, signOut, refresh, patchData, markSeen, markAllSeen, run }),
+    [status, token, data, error, signIn, signOut, refresh, patchData, markSeen, markAllSeen, run],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
@@ -212,8 +255,12 @@ export function useAuth() {
 
 /** 利用状況の記録（失敗しても画面には影響させない） */
 export function useTrack() {
-  const { run } = useAuth()
+  const { run, data, markSeen } = useAuth()
   return useCallback((kind: 'tool' | 'doc' | 'link', id: string) => {
     void run((t) => api.track(t, kind, id)).catch(() => {})
-  }, [run])
+    // 開いたので NEW を消す
+    const list: { id: string; updatedAt: string }[] = kind === 'tool' ? data?.tools ?? [] : kind === 'doc' ? data?.documents ?? [] : data?.links ?? []
+    const item = list.find((x) => x.id === id)
+    if (item) markSeen(item.id, item.updatedAt)
+  }, [run, data, markSeen])
 }

@@ -42,15 +42,15 @@ export function AnnouncementsView({ data }: { data: BootstrapData }) {
         const needsAck = a.requireAck && !acks.includes(a.id)
         const isNewItem = !!data.me.newSince && a.updatedAt > data.me.newSince
         return (
-          <article key={a.id} className={cn('rounded-2xl border bg-white p-5', a.level === 'important' && !ended ? 'border-[#f0c9c6]' : 'border-[#e4e9f0]', ended && 'opacity-75')}>
+          <article key={a.id} className={cn('rounded-2xl border bg-white p-5', a.level === 'important' && !ended ? 'border-[#f0c9c6]' : 'border-[#e4e9f0]')}>
             <div className="flex flex-wrap items-center gap-2 text-[11px]">
               {a.level === 'important' ? (
                 <span className="rounded bg-[#f7d8d6] px-1.5 py-0.5 font-bold text-[#a13b3b]">重要</span>
               ) : (
-                <span className="rounded bg-[var(--brand-soft)] px-1.5 py-0.5 font-bold text-[var(--brand)]">お知らせ</span>
+                <span className="rounded bg-[var(--brand-soft)] px-1.5 py-0.5 font-bold text-[var(--brand-fg)]">お知らせ</span>
               )}
-              <span className="text-[#8a99a9]">{date}</span>
-              {ended && <span className="rounded bg-[#eef1f5] px-1.5 py-0.5 font-semibold text-[#6b7785]">掲載終了</span>}
+              <span className="text-[#5b6b7c]">{date}</span>
+              {ended && <span className="rounded bg-[#eef1f5] px-1.5 py-0.5 font-semibold text-[#4f5f70]">掲載終了</span>}
               {isNewItem && <NewBadge />}
             </div>
             <h2 className="mt-2 text-[16px] font-bold text-[#1b304b]">{a.title}</h2>
