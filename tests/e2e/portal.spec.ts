@@ -121,7 +121,7 @@ test('リンク集：カテゴリごとに表示され、限定公開は対象�
   await page.getByRole('button', { name: '新規追加' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByPlaceholder('例：経費精算フォーム').fill('新しいリンク')
-  await dialog.getByPlaceholder('https://').fill('https://example.com/new')
+  await dialog.getByPlaceholder('https://', { exact: true }).fill('https://example.com/new')
   await dialog.getByRole('button', { name: '保存' }).click()
   await expect(page.getByText('リンクを追加しました')).toBeVisible()
   await page.goto('./#/links')
