@@ -6,6 +6,7 @@ import { ApiError, api } from '@/lib/api'
 import { can, isNew, type BootstrapData, type PortalDocument, type Tool } from '@/lib/types'
 import { useAuth } from './auth-provider'
 import { DocActions, DocCard, DocThumb } from './doc-card'
+import { LinkCard } from './links-view'
 import type { Navigate } from './router'
 import { DragHandle, ToolCard } from './tool-card'
 import { Button, EmptyState, Select, useToast } from './ui'
@@ -47,7 +48,7 @@ function SearchBox({ value, onChange, onSubmit, placeholder, large }: { value: s
       {value && !large && (
         <button type="button" onClick={() => onChange('')} aria-label="検索をクリア" className="rounded p-1 text-[#9aa8b8] hover:bg-[#f3f6f9]"><X size={14} /></button>
       )}
-      {large && <button type="submit" className="rounded-xl bg-[#1f6fba] px-4 py-2.5 text-[12px] font-bold text-white">検索</button>}
+      {large && <button type="submit" className="rounded-xl bg-[var(--brand)] px-4 py-2.5 text-[12px] font-bold text-white">検索</button>}
     </form>
   )
 }
@@ -78,7 +79,7 @@ export function HomeView({ data, navigate }: { data: BootstrapData; navigate: Na
           <h2 className="text-[17px] font-bold">よく使うツール</h2>
           <p className="mt-1 text-[12px] text-[#8998a8]">{favorites.length ? '☆を付けたお気に入りのツールが先頭に表示されます' : 'ツールの☆を押すと、お気に入りとしてここに固定できます'}</p>
         </div>
-        <button onClick={() => navigate('/tools')} className="flex items-center gap-1 text-[12px] font-bold text-[#1e6db8]">すべてのツール <ArrowRight size={14} /></button>
+        <button onClick={() => navigate('/tools')} className="flex items-center gap-1 text-[12px] font-bold text-[var(--brand)]">すべてのツール <ArrowRight size={14} /></button>
       </div>
       {data.tools.length === 0 ? (
         <EmptyState title="表示できるツールがありません" message="閲覧権限のあるツールが登録されるとここに表示されます。" />
@@ -190,7 +191,7 @@ export function ToolsView({ data, navigate, initialQuery }: { data: BootstrapDat
     <>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row">
         {editing ? (
-          <div className="flex flex-1 items-center gap-2 rounded-xl bg-[#edf5fc] px-4 py-2.5 text-[12px] font-semibold text-[#285b82]">
+          <div className="flex flex-1 items-center gap-2 rounded-xl bg-[var(--brand-soft)] px-4 py-2.5 text-[12px] font-semibold text-[#285b82]">
             <GripVertical size={15} />ドラッグ、または矢印ボタンで並べ替えて「保存」してください。ホームには上から6件が表示されます。
           </div>
         ) : (
@@ -327,7 +328,7 @@ export function LibraryView({ data, navigate, params }: { data: BootstrapData; n
           {hasFilter && <Button variant="secondary" onClick={() => { setOnlyNew(false); navigate('/library') }}>リセット</Button>}
         </div>
       </div>
-      <p className="mb-4 text-[12px] font-bold text-[#38536f]">資料一覧 <span className="font-semibold text-[#1e6db8]">{filtered.length}件</span></p>
+      <p className="mb-4 text-[12px] font-bold text-[#38536f]">資料一覧 <span className="font-semibold text-[var(--brand)]">{filtered.length}件</span></p>
       {list.length === 0 && !pinned ? (
         <EmptyState title="資料が見つかりません" message="検索条件を変えてお試しください。" />
       ) : (
@@ -351,19 +352,26 @@ export function SearchView({ data, navigate, query }: { data: BootstrapData; nav
   const counts = useDocCounts(data)
   const tools = data.tools.filter((t) => match(toolText(t), query))
   const docs = data.documents.filter((d) => match(docText(d), query)).sort(byDateDesc)
+  const links = (data.links ?? []).filter((l) => match(`${l.title} ${l.description} ${l.category} ${l.url}`, query))
   return (
     <>
       <div className="mb-6"><SearchBox large value={q} onChange={setQ} onSubmit={() => navigate('/search', { q })} placeholder="ツールや資料を検索" /></div>
-      <h2 className="mb-3 text-[15px] font-bold">ツール <span className="text-[12px] font-semibold text-[#1e6db8]">{tools.length}件</span></h2>
+      <h2 className="mb-3 text-[15px] font-bold">ツール <span className="text-[12px] font-semibold text-[var(--brand)]">{tools.length}件</span></h2>
       {tools.length === 0 ? <p className="mb-8 text-[12px] text-[#8a99a9]">該当するツールはありません。</p> : (
         <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {tools.map((tool) => <ToolCard key={tool.id} tool={tool} docCount={counts[tool.name] ?? 0} restricted={tool.visibleRoles.length > 0} onDocs={() => navigate('/library', { tool: tool.name })} onMissingUrl={() => toast('このツールの接続先はまだ設定されていません')} />)}
         </div>
       )}
-      <h2 className="mb-3 text-[15px] font-bold">資料 <span className="text-[12px] font-semibold text-[#1e6db8]">{docs.length}件</span></h2>
+      <h2 className="mb-3 text-[15px] font-bold">資料 <span className="text-[12px] font-semibold text-[var(--brand)]">{docs.length}件</span></h2>
       {docs.length === 0 ? <p className="text-[12px] text-[#8a99a9]">該当する資料はありません。</p> : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {docs.map((doc) => <DocCard key={doc.id} doc={doc} restricted={doc.visibleRoles.length > 0} />)}
+        </div>
+      )}
+      <h2 className="mb-3 mt-8 text-[15px] font-bold">リンク <span className="text-[12px] font-semibold text-[var(--brand)]">{links.length}件</span></h2>
+      {links.length === 0 ? <p className="text-[12px] text-[#8a99a9]">該当するリンクはありません。</p> : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {links.map((l) => <LinkCard key={l.id} link={l} restricted={l.visibleRoles.length > 0} />)}
         </div>
       )}
     </>

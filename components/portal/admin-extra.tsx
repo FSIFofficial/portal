@@ -1,15 +1,18 @@
 'use client'
 
-// 管理画面の追加機能：ヘルプ編集・利用状況・アカウント一括登録・バックアップ・Driveへのアップロード
+// 管理画面の追加機能：ヘルプ編集・利用状況・一括登録・バックアップ・アップロード・ゴミ箱・ポータルの見た目
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, BellRing, CheckCircle2, Circle, DatabaseBackup, ExternalLink, LoaderCircle, Plus, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, BellRing, MessageSquare, Palette, RotateCcw, CheckCircle2, Circle, DatabaseBackup, ExternalLink, LoaderCircle, Plus, Trash2, Upload } from 'lucide-react'
 import { api, fileToBase64 } from '@/lib/api'
 import { DEMO_MODE } from '@/lib/config'
-import type { AckStatus, AdminData, Announcement, BackupStatus, ErrorDigestStatus, BulkAddResult, HelpContent, UploadResult, UsageStats } from '@/lib/types'
+import {
+  DEFAULT_BRANDING, type AckStatus, type AdminData, type Announcement, type BackupStatus, type Branding, type BulkAddResult, type DiscordStatus,
+  type ErrorDigestStatus, type HelpContent, type TrashItem, type UploadResult, type UsageStats,
+} from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { SectionHeader, Table, fmt, type Mutate } from './admin-shared'
 import { useAuth } from './auth-provider'
-import { Button, Field, Modal, RolePicker, TextArea, TextInput, useToast } from './ui'
+import { Button, Checkbox, Field, Modal, RolePicker, TextArea, TextInput, useToast } from './ui'
 
 type SectionInfo = { label: string; description: string }
 
@@ -82,7 +85,7 @@ export function UsageAdmin({ section, data }: { section: SectionInfo; data: Admi
   const toast = useToast()
   const [stats, setStats] = useState<UsageStats | null>(null)
   const [loading, setLoading] = useState(false)
-  const [kind, setKind] = useState<'tool' | 'doc'>('tool')
+  const [kind, setKind] = useState<'tool' | 'doc' | 'link'>('tool')
   const load = useCallback(() => {
     setLoading(true)
     run((t) => api.usageStats(t))
@@ -95,7 +98,9 @@ export function UsageAdmin({ section, data }: { section: SectionInfo; data: Admi
   const rows = useMemo(() => {
     const items = kind === 'tool'
       ? data.tools.map((t) => ({ id: t.id, name: t.name, sub: t.category }))
-      : data.documents.map((d) => ({ id: d.id, name: d.title, sub: d.type }))
+      : kind === 'link'
+        ? (data.links ?? []).map((l) => ({ id: l.id, name: l.title, sub: l.category || 'その他' }))
+        : data.documents.map((d) => ({ id: d.id, name: d.title, sub: d.type }))
     return items
       .map((it) => {
         const s = stats?.rows.find((r) => r.kind === kind && r.id === it.id)
@@ -109,12 +114,12 @@ export function UsageAdmin({ section, data }: { section: SectionInfo; data: Admi
     <>
       <SectionHeader section={section} loading={loading} onReload={load} />
       <div className="flex flex-wrap items-center gap-2 border-b border-[#edf0f3] px-5 py-3">
-        {(['tool', 'doc'] as const).map((k) => (
-          <button key={k} onClick={() => setKind(k)} aria-pressed={kind === k} className={cn('rounded-full border px-3 py-1.5 text-[12px] font-semibold', kind === k ? 'border-[#1f6fba] bg-[#1f6fba] text-white' : 'border-[#dbe3ec] text-[#55708b]')}>
-            {k === 'tool' ? 'ツール' : '資料'}
+        {(['tool', 'doc', 'link'] as const).map((k) => (
+          <button key={k} onClick={() => setKind(k)} aria-pressed={kind === k} className={cn('rounded-full border px-3 py-1.5 text-[12px] font-semibold', kind === k ? 'border-[var(--brand)] bg-[var(--brand)] text-white' : 'border-[#dbe3ec] text-[#55708b]')}>
+            {k === 'tool' ? 'ツール' : k === 'doc' ? '資料' : 'リンク'}
           </button>
         ))}
-        {stats && unused > 0 && <span className="ml-auto text-[12px] text-[#92400e]">直近3か月で一度も使われていない{kind === 'tool' ? 'ツール' : '資料'}：{unused}件</span>}
+        {stats && unused > 0 && <span className="ml-auto text-[12px] text-[#92400e]">直近3か月で一度も使われていない{kind === 'tool' ? 'ツール' : kind === 'doc' ? '資料' : 'リンク'}：{unused}件</span>}
       </div>
       {!stats ? (
         <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-[#718096]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
@@ -128,7 +133,7 @@ export function UsageAdmin({ section, data }: { section: SectionInfo; data: Admi
               <td className="px-5 py-3">
                 <div className="flex items-center gap-2">
                   <span className="w-8 text-right font-bold text-[#1b304b]">{r.last3Months}</span>
-                  <span className="h-2 rounded-full bg-[#1f6fba]" style={{ width: `${Math.min(120, (r.last3Months / Math.max(1, rows[0]?.last3Months ?? 1)) * 120)}px` }} />
+                  <span className="h-2 rounded-full bg-[var(--brand)]" style={{ width: `${Math.min(120, (r.last3Months / Math.max(1, rows[0]?.last3Months ?? 1)) * 120)}px` }} />
                   {r.last3Months === 0 && <span className="rounded bg-[#fff5df] px-1.5 py-0.5 text-[10px] font-semibold text-[#92400e]">利用なし</span>}
                 </div>
               </td>
@@ -137,7 +142,7 @@ export function UsageAdmin({ section, data }: { section: SectionInfo; data: Admi
           ))}
         </Table>
       )}
-      <p className="px-5 py-4 text-[11px] text-[#8a99a9]">「開く」「資料を開く」「ダウンロード」が押された回数です（同じ人が何度押しても数えます）。</p>
+      <p className="px-5 py-4 text-[11px] text-[#8a99a9]">「開く」「資料を開く」「プレビュー」「ダウンロード」、リンク集のリンクが押された回数です（同じ人が何度押しても数えます）。</p>
     </>
   )
 }
@@ -268,9 +273,9 @@ export function BackupPanel({ initial, uploadFolderUrl }: { initial?: BackupStat
       <p className="mt-1 text-[12px] leading-5 text-[#8a99a9]">スプレッドシートのコピーをGoogle Driveの「FSIF Portal バックアップ」フォルダに保存します。新しいものから{status?.keep ?? 10}個を残し、古いものはゴミ箱に移します（30日間は復元できます）。</p>
       <div className="mt-3 text-[12px] leading-6 text-[#38536f]">
         <p>自動バックアップ：<b>{status?.enabled ? '毎週月曜 4時ごろ' : 'オフ'}</b></p>
-        <p>最後のバックアップ：{status?.lastAt ? <>{fmt(status.lastAt)}{status.lastUrl && <a href={status.lastUrl} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 text-[#1e6db8] hover:underline">開く<ExternalLink size={12} /></a>}</> : 'まだありません'}</p>
+        <p>最後のバックアップ：{status?.lastAt ? <>{fmt(status.lastAt)}{status.lastUrl && <a href={status.lastUrl} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 text-[var(--brand)] hover:underline">開く<ExternalLink size={12} /></a>}</> : 'まだありません'}</p>
         {status?.lastError && <p className="text-[#b42318]">前回のエラー：{status.lastError}</p>}
-        {status?.folderUrl && <a href={status.folderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#1e6db8] hover:underline">バックアップのフォルダを開く<ExternalLink size={12} /></a>}
+        {status?.folderUrl && <a href={status.folderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--brand)] hover:underline">バックアップのフォルダを開く<ExternalLink size={12} /></a>}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="secondary" disabled={busy} onClick={() => act((t) => api.backupNow(t), 'バックアップを作成しました', true)}>今すぐバックアップ</Button>
@@ -280,7 +285,7 @@ export function BackupPanel({ initial, uploadFolderUrl }: { initial?: BackupStat
       </div>
       {uploadFolderUrl && (
         <p className="mt-4 border-t border-[#edf0f3] pt-3 text-[12px] text-[#55708b]">
-          画面からアップロードしたファイルの保存先：<a href={uploadFolderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#1e6db8] hover:underline">FSIF Portal アップロード<ExternalLink size={12} /></a>
+          画面からアップロードしたファイルの保存先：<a href={uploadFolderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--brand)] hover:underline">FSIF Portal アップロード<ExternalLink size={12} /></a>
         </p>
       )}
     </div>
@@ -324,7 +329,7 @@ export function UploadButton({ purpose, onUploaded, label }: { purpose: 'documen
   return (
     <>
       <input ref={input} type="file" className="hidden" accept={purpose === 'icon' ? 'image/*' : undefined} onChange={(e) => void pick(e.target.files?.[0])} />
-      <Button variant="secondary" type="button" disabled={busy || DEMO_MODE} title={DEMO_MODE ? 'デモモードではアップロードできません' : undefined} onClick={() => input.current?.click()}>
+      <Button variant="secondary" type="button" className="shrink-0 whitespace-nowrap" disabled={busy || DEMO_MODE} title={DEMO_MODE ? 'デモモードではアップロードできません' : undefined} onClick={() => input.current?.click()}>
         {busy ? <LoaderCircle size={14} className="animate-spin" /> : <Upload size={14} />}{busy ? 'アップロード中…' : label}
       </Button>
     </>
@@ -412,6 +417,202 @@ export function ErrorDigestPanel({ initial }: { initial?: ErrorDigestStatus }) {
         <p>通知：<b>{status?.enabled ? '毎朝' : 'オフ'}</b>{status?.lastSentAt && <span className="ml-3 text-[#8a99a9]">最後に送った日時：{fmt(status.lastSentAt)}</span>}</p>
       </div>
       <Button variant="secondary" className="mt-3" disabled={busy} onClick={() => void toggle()}>{status?.enabled ? 'エラー通知をオフにする' : 'エラー通知をオンにする'}</Button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Discord への新着通知（設定画面の中に表示）
+// ---------------------------------------------------------------------------
+
+const DEFAULT_PORTAL_URL = 'https://fsifofficial.github.io/portal/'
+
+export function DiscordPanel({ initial }: { initial?: DiscordStatus }) {
+  const { run } = useAuth()
+  const toast = useToast()
+  const [status, setStatus] = useState<DiscordStatus | undefined>(initial)
+  const [hook, setHook] = useState('')
+  const [docs, setDocs] = useState(initial?.notifyDocuments ?? true)
+  const [anns, setAnns] = useState(initial?.notifyAnnouncements ?? true)
+  const [portalUrl, setPortalUrl] = useState(initial?.portalUrl || DEFAULT_PORTAL_URL)
+  const [busy, setBusy] = useState(false)
+
+  const save = async (clearWebhook = false) => {
+    if (clearWebhook && !window.confirm('Discordへの通知を止めて、保存しているWebhook URLを削除します。よろしいですか？')) return
+    setBusy(true)
+    try {
+      const s = await run((t) => api.saveDiscord(t, { webhookUrl: hook.trim() || undefined, clearWebhook, notifyDocuments: docs, notifyAnnouncements: anns, portalUrl }))
+      setStatus(s)
+      setHook('')
+      toast(clearWebhook ? 'Discordへの通知を止めました' : 'Discordの通知設定を保存しました')
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const test = async () => {
+    setBusy(true)
+    try {
+      await run((t) => api.testDiscord(t))
+      toast('Discordにテスト通知を送りました')
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-8 rounded-xl border border-[#edf0f3] p-4">
+      <h3 className="flex items-center gap-2 text-[14px] font-bold"><MessageSquare size={16} className="text-[#5865f2]" />Discordへの新着通知</h3>
+      <p className="mt-1 text-[12px] leading-5 text-[#8a99a9]">
+        資料やお知らせを新しく追加したとき、DiscordのチャンネルにWebhookで投稿します。<b>公開範囲が「全員」のものだけ</b>が対象です（限定公開の内容はDiscordに出しません）。更新や削除は通知しません。
+      </p>
+      <p className="mt-3 text-[12px] text-[#38536f]">状態：<b>{status?.configured ? `設定済み（URL末尾 ${status.webhookHint}）` : '未設定（通知は送られません）'}</b></p>
+      <div className="mt-3">
+        <Field label={status?.configured ? 'Webhook URL を変更する（変更しない場合は空欄）' : 'Webhook URL'} hint="Discordで チャンネルの編集 → 連携サービス → ウェブフック → 新しいウェブフック →「ウェブフックURLをコピー」したものを貼り付けます。このURLを知っていれば誰でも投稿できるので、ほかの人には共有しないでください。">
+          <TextInput type="url" placeholder="https://discord.com/api/webhooks/…" value={hook} onChange={(e) => setHook(e.target.value)} autoComplete="off" />
+        </Field>
+        <Field label="通知に載せるポータルのURL"><TextInput type="url" value={portalUrl} onChange={(e) => setPortalUrl(e.target.value)} /></Field>
+        <Checkbox checked={docs} onChange={setDocs} label="新しい資料を通知する" />
+        <Checkbox checked={anns} onChange={setAnns} label="新しいお知らせを通知する（掲載開始日が先のもの・非表示のものは送りません）" />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="secondary" disabled={busy} onClick={() => void save()}>保存</Button>
+        {status?.configured && <Button variant="secondary" disabled={busy} onClick={() => void test()}>テスト送信</Button>}
+        {status?.configured && <Button variant="danger" disabled={busy} onClick={() => void save(true)}>通知を止める</Button>}
+      </div>
+    </div>
+  )
+}
+
+/** 新規追加フォームの「Discordに通知する」チェック */
+export function NotifyCheckbox({ checked, onChange, restricted }: { checked: boolean; onChange: (v: boolean) => void; restricted: boolean }) {
+  if (restricted) return <p className="mb-4 text-[11px] text-[#8a99a9]">限定公開のため、Discordには通知されません。</p>
+  return (
+    <div className="mb-4">
+      <Checkbox checked={checked} onChange={onChange} label={<>Discordに通知する<span className="block text-[11px] text-[#8a99a9]">Discordへの通知が設定されている場合に、保存と同時に投稿されます。</span></>} />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ゴミ箱
+// ---------------------------------------------------------------------------
+
+const SHEET_LABELS: Record<TrashItem['sheet'], string> = { Tools: 'ツール', Documents: '資料', Announcements: 'お知らせ', Links: 'リンク', Users: 'アカウント' }
+
+export function TrashAdmin({ section, mutate }: { section: SectionInfo; mutate: Mutate }) {
+  const { run } = useAuth()
+  const toast = useToast()
+  const [items, setItems] = useState<TrashItem[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const load = useCallback(() => {
+    setLoading(true)
+    run((t) => api.listTrash(t))
+      .then(setItems)
+      .catch((e: Error) => {
+        toast(e.message, 'error')
+        setItems([])
+      })
+      .finally(() => setLoading(false))
+  }, [run, toast])
+  useEffect(load, [load])
+
+  const restore = async (t: TrashItem) => {
+    if (await mutate((tok) => api.restoreTrash(tok, t.key), `「${t.title}」を元に戻しました`)) load()
+  }
+  const purge = async (t: TrashItem) => {
+    if (!window.confirm(`「${t.title}」を完全に削除します。元に戻せなくなります。よろしいですか？`)) return
+    if (await mutate((tok) => api.purgeTrash(tok, t.key), '完全に削除しました')) load()
+  }
+  const daysLeft = (iso: string) => Math.max(0, 30 - Math.floor((Date.now() - Date.parse(iso)) / 86400000))
+
+  return (
+    <>
+      <SectionHeader section={section} loading={loading} onReload={load} />
+      {!items ? (
+        <div className="flex items-center justify-center gap-2 p-16 text-[13px] text-[#718096]"><LoaderCircle size={18} className="animate-spin" />読み込み中…</div>
+      ) : (
+        <Table head={['種類', '名前', '削除した日時', '削除した人', '']} empty={!items.length}>
+          {items.map((t) => (
+            <tr key={t.key} className="border-t border-[#edf0f3]">
+              <td className="whitespace-nowrap px-5 py-3"><span className="rounded bg-[#eef1f5] px-1.5 py-0.5 text-[11px] font-semibold text-[#55708b]">{SHEET_LABELS[t.sheet]}</span></td>
+              <td className="px-5 py-3 font-semibold text-[#38536f]">{t.title}{t.sheet === 'Users' && <span className="block text-[11px] font-normal text-[#8a99a9]">{t.itemKey}</span>}</td>
+              <td className="whitespace-nowrap px-5 py-3 text-[#718296]">{fmt(t.deletedAt)}<span className="block text-[11px] text-[#9aa7b5]">あと{daysLeft(t.deletedAt)}日で自動削除</span></td>
+              <td className="px-5 py-3 text-[#718296]">{t.deletedBy}</td>
+              <td className="px-5 py-3">
+                <div className="flex justify-end gap-2">
+                  <Button variant="secondary" onClick={() => void restore(t)}><RotateCcw size={14} />元に戻す</Button>
+                  <Button variant="danger" onClick={() => void purge(t)}><Trash2 size={14} />完全に削除</Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </Table>
+      )}
+      <p className="px-5 py-4 text-[11px] text-[#8a99a9]">元に戻すと、削除する前の内容（公開範囲・設定を含む）で復活します。ツールは並び順の最後に戻ります。</p>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ポータル名・ロゴ・色（設定画面の中に表示）
+// ---------------------------------------------------------------------------
+
+export function BrandingPanel({ initial }: { initial?: Branding }) {
+  const { run, refresh } = useAuth()
+  const toast = useToast()
+  const [draft, setDraft] = useState<Branding>({ ...DEFAULT_BRANDING, ...(initial ?? {}) })
+  const [busy, setBusy] = useState(false)
+  const validColor = /^#[0-9a-fA-F]{6}$/.test(draft.primaryColor)
+
+  const save = async (value: Branding, message: string) => {
+    setBusy(true)
+    try {
+      const saved = await run((t) => api.saveBranding(t, value))
+      setDraft(saved)
+      await refresh()
+      toast(message)
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-8 rounded-xl border border-[#edf0f3] p-4">
+      <h3 className="flex items-center gap-2 text-[14px] font-bold"><Palette size={16} className="text-[var(--brand)]" />ポータル名・ロゴ・色</h3>
+      <p className="mt-1 text-[12px] leading-5 text-[#8a99a9]">ヘッダーやログイン画面に表示される名前・ロゴと、ボタンなどのメインカラーを変えられます。ホーム画面に追加したときのアプリ名とアイコンは変わりません。</p>
+      <div className="mt-3 grid gap-x-4 sm:grid-cols-2">
+        <Field label="ポータル名" required><TextInput value={draft.portalName} maxLength={40} onChange={(e) => setDraft({ ...draft, portalName: e.target.value })} /></Field>
+        <Field label="キャッチコピー" hint="ロゴの下の小さな文字。空欄なら表示しません。"><TextInput value={draft.tagline} maxLength={40} onChange={(e) => setDraft({ ...draft, tagline: e.target.value })} /></Field>
+      </div>
+      <Field group label="ロゴ画像" hint="正方形の画像がおすすめです。空欄なら標準のロゴを使います。">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <TextInput type="url" aria-label="ロゴ画像のURL" placeholder="https://drive.google.com/file/d/… または画像のURL" value={draft.logoUrl} onChange={(e) => setDraft({ ...draft, logoUrl: e.target.value })} />
+          <UploadButton purpose="icon" label="画像をアップロード" onUploaded={(res) => setDraft((d) => ({ ...d, logoUrl: res.url }))} />
+        </div>
+      </Field>
+      <Field group label="メインカラー">
+        <div className="flex items-center gap-2">
+          <input type="color" aria-label="メインカラーを選ぶ" value={validColor ? draft.primaryColor : '#1f6fba'} onChange={(e) => setDraft({ ...draft, primaryColor: e.target.value })} className="h-10 w-14 cursor-pointer rounded-lg border border-[#dbe3ec] bg-white p-1" />
+          <TextInput aria-label="カラーコード" value={draft.primaryColor} onChange={(e) => setDraft({ ...draft, primaryColor: e.target.value })} className="w-[140px]" />
+          {!validColor && <span className="text-[11px] text-[#b42318]">#から始まる6桁で入力してください</span>}
+        </div>
+      </Field>
+      <div className="mb-4 flex items-center gap-3 rounded-xl border border-[#edf0f3] bg-[#f8fafc] p-3" style={validColor ? ({ ['--brand' as string]: draft.primaryColor } as React.CSSProperties) : undefined}>
+        <span className="text-[11px] font-bold text-[#8a99a9]">プレビュー</span>
+        <span className="rounded-lg bg-[var(--brand)] px-3 py-2 text-[12px] font-bold text-white">ボタン</span>
+        <span className="rounded-lg bg-[var(--brand-soft)] px-3 py-2 text-[12px] font-bold text-[var(--brand)]">選択中のメニュー</span>
+        <span className="text-[12px] font-bold text-[var(--brand)]">リンク</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button disabled={busy || !validColor || !draft.portalName.trim()} onClick={() => void save(draft, 'ポータルの見た目を保存しました')}>保存</Button>
+        <Button variant="secondary" disabled={busy} onClick={() => { if (window.confirm('ポータル名・ロゴ・色を最初の状態に戻します。よろしいですか？')) void save(DEFAULT_BRANDING, '最初の状態に戻しました') }}>最初の状態に戻す</Button>
+      </div>
     </div>
   )
 }

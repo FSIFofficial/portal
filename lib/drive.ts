@@ -39,6 +39,21 @@ export function viewUrl(doc: Pick<PortalDocument, 'driveUrl'>): string {
   return doc.driveUrl
 }
 
+/** ポータル内で表示するための埋め込みURL（Drive以外のリンクは空） */
+export function previewUrl(doc: Pick<PortalDocument, 'driveUrl'>): string {
+  const info = parseDriveUrl(doc.driveUrl)
+  if (!info) return ''
+  switch (info.kind) {
+    case 'file': return `https://drive.google.com/file/d/${info.id}/preview`
+    case 'document': return `https://docs.google.com/document/d/${info.id}/preview`
+    case 'spreadsheets': return `https://docs.google.com/spreadsheets/d/${info.id}/preview`
+    case 'presentation': return `https://docs.google.com/presentation/d/${info.id}/embed?start=false&loop=false`
+    case 'folder': return `https://drive.google.com/embeddedfolderview?id=${info.id}#grid`
+    case 'forms': return `https://docs.google.com/forms/d/${info.id}/viewform?embedded=true`
+    default: return ''
+  }
+}
+
 export function downloadUrl(doc: Pick<PortalDocument, 'driveUrl' | 'downloadUrl'>): string {
   if (doc.downloadUrl) return doc.downloadUrl
   const info = parseDriveUrl(doc.driveUrl)

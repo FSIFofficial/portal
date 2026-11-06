@@ -53,7 +53,7 @@ export function ToolCard({ tool, docCount, onDocs, onMissingUrl, dragHandle, res
   const track = useTrack()
   const { data } = useAuth()
   const disabled = tool.status !== '稼働中'
-  const openButtonClass = 'flex items-center gap-1.5 rounded-lg bg-[#1f6fba] px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-[#185c9d]'
+  const openButtonClass = 'flex items-center gap-1.5 rounded-lg bg-[var(--brand)] px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-[var(--brand-dark)]'
   return (
     <article className="group relative flex min-h-[230px] flex-col rounded-2xl border border-[#e4e9f0] bg-white p-5 shadow-[0_4px_16px_rgba(25,50,80,0.04)] transition hover:-translate-y-0.5 hover:border-[#c8d7e9] hover:shadow-[0_10px_28px_rgba(25,50,80,0.08)]">
       {dragHandle}
@@ -75,7 +75,7 @@ export function ToolCard({ tool, docCount, onDocs, onMissingUrl, dragHandle, res
         <span className="truncate rounded-md bg-[#f5f7fa] px-2 py-1 text-[11px] text-[#718096]">{tool.category || 'その他'}</span>
         <div className="flex shrink-0 items-center gap-2">
           {docCount > 0 && (
-            <button onClick={onDocs} className="text-[12px] font-semibold text-[#4f6b88] hover:text-[#1e6db8]">使い方</button>
+            <button onClick={onDocs} className="text-[12px] font-semibold text-[#4f6b88] hover:text-[var(--brand)]">使い方</button>
           )}
           {disabled ? (
             <span className="rounded-lg bg-[#dfe5eb] px-3 py-2 text-[12px] font-semibold text-[#6b7785]">{tool.status}</span>

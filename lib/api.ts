@@ -4,9 +4,10 @@
 import { DEMO_MODE, EXPECTED_GAS_VERSION, GAS_URL } from './config'
 import { createDemoDb, type DemoDb } from './demo-data'
 import type {
-  AckStatus, AdminData, Announcement, BackupStatus, ErrorDigestStatus, BootstrapData, BulkAddResult, HelpContent, LogEntry, Me, Permission, PortalDocument, Role,
+  AckStatus, AdminData, Announcement, BackupStatus, Branding, PortalLink, DiscordStatus, TrashItem, ErrorDigestStatus, BootstrapData, BulkAddResult, HelpContent, LogEntry, Me, Permission, PortalDocument, Role,
   Settings, SystemCheck, Tool, UploadResult, UsageStats, User,
 } from './types'
+import { DEFAULT_BRANDING } from './types'
 
 export class ApiError extends Error {
   constructor(public code: string, message: string) {
@@ -46,18 +47,31 @@ export const api = {
   logout: (token: string) => call('logout', token),
   bootstrap: (token: string) => call<BootstrapData>('bootstrap', token),
   setFavorites: (token: string, ids: string[]) => call<{ favorites: string[] }>('setFavorites', token, { ids }),
-  track: (token: string, kind: 'tool' | 'doc', id: string) => call('track', token, { kind, id }),
+  track: (token: string, kind: 'tool' | 'doc' | 'link', id: string) => call('track', token, { kind, id }),
+  saveLink: (token: string, item: Partial<PortalLink>, isNew: boolean) => call<PortalLink>('saveLink', token, { item, isNew }),
+  deleteLink: (token: string, id: string) => call('deleteLink', token, { id }),
+  reorderLinks: (token: string, ids: string[], baseIds: string[]) => call<PortalLink[]>('reorderLinks', token, { ids, baseIds }),
   ackAnnouncement: (token: string, id: string) => call('ackAnnouncement', token, { id }),
   announcementAcks: (token: string, id: string) => call<AckStatus>('announcementAcks', token, { id }),
   setErrorDigest: (token: string, enabled: boolean) => call<ErrorDigestStatus>('setErrorDigest', token, { enabled }),
+  saveDiscord: (token: string, item: { webhookUrl?: string; clearWebhook?: boolean; notifyDocuments: boolean; notifyAnnouncements: boolean; portalUrl: string }) =>
+    call<DiscordStatus>('saveDiscord', token, { item }),
+  testDiscord: (token: string) => call('testDiscord', token),
+  saveBranding: (token: string, item: Branding) => call<Branding>('saveBranding', token, { item }),
+  bulkSetActive: (token: string, emails: string[], active: boolean) =>
+    call<{ changed: string[]; skipped: { email: string; reason: string }[] }>('bulkSetActive', token, { emails, active }),
+  listTrash: (token: string) => call<TrashItem[]>('listTrash', token),
+  restoreTrash: (token: string, key: string) => call('restoreTrash', token, { key }),
+  purgeTrash: (token: string, key: string) => call('purgeTrash', token, { key }),
   adminData: (token: string) => call<AdminData>('adminData', token),
   // isNew=false のときは item.updatedAt（編集開始時点の値）で同時編集の衝突を検出する
   saveTool: (token: string, item: Partial<Tool>, isNew: boolean) => call<Tool>('saveTool', token, { item, isNew }),
   deleteTool: (token: string, id: string) => call('deleteTool', token, { id }),
   reorderTools: (token: string, ids: string[], baseIds: string[]) => call<Tool[]>('reorderTools', token, { ids, baseIds }),
-  saveDocument: (token: string, item: Partial<PortalDocument>, isNew: boolean) => call<PortalDocument>('saveDocument', token, { item, isNew }),
+  // notify=false のときは、新規追加でも Discord に通知しない
+  saveDocument: (token: string, item: Partial<PortalDocument>, isNew: boolean, notify = true) => call<PortalDocument>('saveDocument', token, { item, isNew, notify }),
   deleteDocument: (token: string, id: string) => call('deleteDocument', token, { id }),
-  saveAnnouncement: (token: string, item: Partial<Announcement>, isNew: boolean) => call<Announcement>('saveAnnouncement', token, { item, isNew }),
+  saveAnnouncement: (token: string, item: Partial<Announcement>, isNew: boolean, notify = true) => call<Announcement>('saveAnnouncement', token, { item, isNew, notify }),
   deleteAnnouncement: (token: string, id: string) => call('deleteAnnouncement', token, { id }),
   saveUser: (token: string, item: Partial<User>, isNew: boolean) => call<User>('saveUser', token, { item, isNew }),
   deleteUser: (token: string, email: string) => call('deleteUser', token, { email }),
@@ -92,7 +106,7 @@ export function fileToBase64(file: File): Promise<string> {
 // デモバックエンド（localStorage に保存）
 // ---------------------------------------------------------------------------
 
-const DEMO_KEY = 'fsif-portal-demo-db-v4'
+const DEMO_KEY = 'fsif-portal-demo-db-v6'
 const SUPER = 'superadmin'
 
 function loadDb(): DemoDb {
@@ -195,6 +209,21 @@ function demoPopularity(db: DemoDb) {
   return map
 }
 
+const TRASH_PERM: Record<string, Permission> = { Tools: 'tools.manage', Documents: 'documents.manage', Announcements: 'announcements.manage', Links: 'links.manage', Users: '*' }
+
+function demoCanManage(me: Me, sheet: string) {
+  const perm = TRASH_PERM[sheet]
+  return !!perm && (me.isSuper || me.permissions.includes(perm))
+}
+
+function demoSheet(db: DemoDb, sheet: string) {
+  return sheet === 'Tools' ? db.tools : sheet === 'Documents' ? db.documents : sheet === 'Announcements' ? db.announcements : sheet === 'Links' ? db.links : db.users
+}
+
+function toTrash(db: DemoDb, me: Me, sheet: TrashItem['sheet'], itemKey: string, title: string, data: unknown) {
+  db.trash.push({ key: newId(), sheet, itemKey, title, data, deletedAt: now(), deletedBy: me.email })
+}
+
 function upsert<T>(rows: T[], key: keyof T, record: T) {
   const i = rows.findIndex((r) => r[key] === record[key])
   if (i >= 0) rows[i] = record
@@ -205,6 +234,10 @@ function demoCall(action: string, token: string, p: Payload): unknown {
   const db = loadDb()
   db.acks ??= []
   db.errorDigest ??= { enabled: false, lastSentAt: '', recipients: 1 }
+  db.trash ??= []
+  db.links ??= []
+  db.branding ??= { ...DEFAULT_BRANDING }
+  db.discord ??= { configured: false, webhookHint: '', notifyDocuments: true, notifyAnnouncements: true, portalUrl: 'https://fsifofficial.github.io/portal/' }
   // デモではメールアドレスをそのままセッションとして使う
   if (action === 'login') {
     const data = demoCall('bootstrap', String(p.idToken ?? ''), {}) as BootstrapData
@@ -232,12 +265,14 @@ function demoCall(action: string, token: string, p: Payload): unknown {
       return commit<BootstrapData>({
         me: { ...me, newSince, acks: db.acks.filter((a) => a.email === me.email).map((a) => a.announcementId) },
         tools: db.tools.filter((x) => canSee(me, x)).sort((a, b) => a.order - b.order),
+        links: db.links.filter((x) => canSee(me, x)).sort((a, b) => a.order - b.order),
         documents: db.documents.filter((x) => canSee(me, x)),
         announcements: db.announcements.filter((a) => a.active && canSee(me, a) && (!a.startDate || a.startDate <= d) && (!a.endDate || a.endDate >= d)),
         roles: db.roles.map((r) => ({ id: r.id, name: r.name })),
         gasVersion: EXPECTED_GAS_VERSION,
         help: db.help,
         popularity: demoPopularity(db),
+        branding: db.branding,
       })
     }
     case 'logout':
@@ -259,6 +294,77 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         pending: targets.filter((u) => !acked.has(u.email)).map((u) => ({ email: u.email, name: u.name })),
       })
     }
+    case 'saveDiscord': {
+      requirePerm(me, '*')
+      const hook = String(item.webhookUrl ?? '').trim()
+      if (hook && !/^https:\/\/(?:canary\.|ptb\.)?(?:discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(hook)) fail('BAD_REQUEST', 'DiscordのWebhook URL（https://discord.com/api/webhooks/…）を入力してください')
+      const configured = item.clearWebhook ? false : hook ? true : db.discord.configured
+      db.discord = {
+        configured,
+        webhookHint: item.clearWebhook ? '' : hook ? `…${hook.slice(-6)}` : db.discord.webhookHint,
+        notifyDocuments: item.notifyDocuments !== false,
+        notifyAnnouncements: item.notifyAnnouncements !== false,
+        portalUrl: url(item.portalUrl) || 'https://fsifofficial.github.io/portal/',
+      }
+      return commit(db.discord)
+    }
+    case 'saveBranding': {
+      requirePerm(me, '*')
+      const color = String(item.primaryColor || '#1f6fba')
+      if (!/^#[0-9a-fA-F]{6}$/.test(color)) fail('BAD_REQUEST', '色は #1f6fba のような6桁のカラーコードで入力してください')
+      db.branding = {
+        portalName: required(item.portalName, 'ポータル名').slice(0, 40),
+        tagline: String(item.tagline ?? '').slice(0, 40),
+        logoUrl: url(item.logoUrl),
+        primaryColor: color.toLowerCase(),
+      }
+      return commit(db.branding)
+    }
+    case 'bulkSetActive': {
+      requirePerm(me, '*')
+      const emails = list(p.emails)
+      const changed: string[] = []
+      const skipped: { email: string; reason: string }[] = []
+      db.users.forEach((u) => {
+        if (!emails.includes(u.email)) return
+        if (!p.active && u.email === me.email) return skipped.push({ email: u.email, reason: '自分自身は無効化できません' })
+        if (u.active === !!p.active) return
+        u.active = !!p.active
+        u.updatedAt = now()
+        changed.push(u.email)
+      })
+      return commit({ changed, skipped })
+    }
+    case 'listTrash': {
+      requirePerm(me, 'any-manager')
+      return commit(db.trash.filter((t) => demoCanManage(me, t.sheet)).map(({ data: _data, ...t }) => t).sort((a, b) => b.deletedAt.localeCompare(a.deletedAt)))
+    }
+    case 'restoreTrash': {
+      const t = db.trash.find((x) => x.key === p.key)
+      if (!t) fail('NOT_FOUND', 'ゴミ箱に見つかりません')
+      if (!demoCanManage(me, t.sheet)) fail('FORBIDDEN', 'この操作を行う権限がありません')
+      const target = demoSheet(db, t.sheet) as unknown as { [k: string]: unknown }[]
+      const keyCol = t.sheet === 'Users' ? 'email' : 'id'
+      if (target.some((x) => x[keyCol] === t.itemKey)) fail('CONFLICT', '同じ項目がすでにあるため元に戻せません')
+      const record = { ...(t.data as object), updatedAt: now() } as { [k: string]: unknown }
+      if (t.sheet === 'Tools') record.order = Math.max(0, ...db.tools.map((x) => x.order)) + 1
+      if (t.sheet === 'Links') record.order = Math.max(0, ...db.links.map((x) => x.order)) + 1
+      target.push(record)
+      db.trash = db.trash.filter((x) => x.key !== t.key)
+      log(`${t.sheet}.restore`, t.itemKey, t.title)
+      return commit({ sheet: t.sheet, itemKey: t.itemKey })
+    }
+    case 'purgeTrash': {
+      const t = db.trash.find((x) => x.key === p.key)
+      if (!t) fail('NOT_FOUND', 'ゴミ箱に見つかりません')
+      if (!demoCanManage(me, t.sheet)) fail('FORBIDDEN', 'この操作を行う権限がありません')
+      db.trash = db.trash.filter((x) => x.key !== t.key)
+      if (t.sheet === 'Announcements') db.acks = db.acks.filter((a) => a.announcementId !== t.itemKey)
+      return commit({ key: t.key })
+    }
+    case 'testDiscord':
+      requirePerm(me, '*')
+      fail('DEMO', 'デモモードではDiscordに送信しません（GASに接続すると送信できます）')
     case 'setErrorDigest': {
       requirePerm(me, '*')
       db.errorDigest = { ...db.errorDigest, enabled: !!p.enabled }
@@ -272,8 +378,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
       return commit({ favorites: ids })
     }
     case 'track': {
-      const kind = p.kind === 'doc' ? 'doc' : 'tool'
-      const target = (kind === 'doc' ? db.documents : db.tools).find((x) => x.id === p.id)
+      const kind = p.kind === 'doc' ? 'doc' : p.kind === 'link' ? 'link' : 'tool'
+      const target = (kind === 'doc' ? db.documents : kind === 'link' ? db.links : db.tools).find((x: { id: string }) => x.id === p.id) as { visibleRoles: string[] } | undefined
       if (!target || !canSee(me, target)) return {}
       const key = `${today().slice(0, 7)}|${kind}|${String(p.id)}`
       const row = db.stats[key] ?? { month: today().slice(0, 7), kind, itemId: String(p.id), count: 0, lastAt: '' }
@@ -288,7 +394,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
       const rows: Record<string, UsageStats['rows'][number]> = {}
       Object.values(db.stats).forEach((r) => {
         const k = `${r.kind}:${r.itemId}`
-        const row = (rows[k] ??= { kind: r.kind as 'tool' | 'doc', id: r.itemId, thisMonth: 0, lastMonth: 0, last3Months: 0, total: 0, lastAt: '' })
+        const row = (rows[k] ??= { kind: r.kind as 'tool' | 'doc' | 'link', id: r.itemId, thisMonth: 0, lastMonth: 0, last3Months: 0, total: 0, lastAt: '' })
         row.total += r.count
         if (r.month === months[0]) row.thisMonth += r.count
         if (r.month === months[1]) row.lastMonth += r.count
@@ -347,6 +453,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
       requirePerm(me, 'any-manager')
       const data: AdminData = {
         tools: [...db.tools].sort((a, b) => a.order - b.order),
+        links: [...db.links].sort((a, b) => a.order - b.order),
         documents: db.documents,
         announcements: db.announcements,
         roles: db.roles,
@@ -358,6 +465,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         data.settings = db.settings
         data.backup = db.backup
         data.errorDigest = db.errorDigest
+        data.discord = db.discord
+        data.branding = db.branding
         data.uploadFolderUrl = ''
       }
       return commit(data)
@@ -384,8 +493,50 @@ function demoCall(action: string, token: string, p: Payload): unknown {
       log(existing ? 'Tools.update' : 'Tools.create', record.id, record.name)
       return commit(record)
     }
+    case 'saveLink': {
+      requirePerm(me, 'links.manage')
+      const existing = p.isNew ? undefined : db.links.find((x) => x.id === item.id)
+      checkConflict(existing, p, '項目')
+      const link = url(item.url)
+      if (!link) fail('BAD_REQUEST', 'URLを入力してください')
+      const record: PortalLink = {
+        id: existing?.id ?? newId(),
+        title: required(item.title, 'リンク名'),
+        url: link,
+        description: String(item.description ?? ''),
+        category: String(item.category ?? ''),
+        visibleRoles: validRoles(db, item.visibleRoles),
+        order: existing?.order ?? Math.max(0, ...db.links.map((x) => x.order)) + 1,
+        updatedAt: now(),
+      }
+      upsert(db.links, 'id', record)
+      log(existing ? 'Links.update' : 'Links.create', record.id, record.title)
+      return commit(record)
+    }
+    case 'deleteLink': {
+      requirePerm(me, 'links.manage')
+      const removedLink = db.links.find((x) => x.id === p.id)
+      if (removedLink) toTrash(db, me, 'Links', removedLink.id, removedLink.title, removedLink)
+      db.links = db.links.filter((x) => x.id !== p.id)
+      log('Links.delete', String(p.id))
+      return commit({ id: p.id })
+    }
+    case 'reorderLinks': {
+      requirePerm(me, 'links.manage')
+      const ids = list(p.ids)
+      if (p.baseIds) {
+        const current = [...db.links].sort((a, b) => a.order - b.order).filter((x) => canSee(me, x)).map((x) => x.id)
+        if (current.join(',') !== list(p.baseIds).join(',')) fail('CONFLICT', '並べ替えの間に他の人がリンクを変更しました。最新の並び順を読み込んだので、もう一度並べ替えてください')
+      }
+      db.links.sort((a, b) => (ids.indexOf(a.id) + 1 || 999 + a.order) - (ids.indexOf(b.id) + 1 || 999 + b.order))
+      db.links.forEach((x, i) => (x.order = i + 1))
+      log('Links.reorder', '', ids.join(','))
+      return commit(db.links)
+    }
     case 'deleteTool': {
       requirePerm(me, 'tools.manage')
+      const removedTool = db.tools.find((x) => x.id === p.id)
+      if (removedTool) toTrash(db, me, 'Tools', removedTool.id, removedTool.name, removedTool)
       db.tools = db.tools.filter((x) => x.id !== p.id)
       log('Tools.delete', String(p.id))
       return commit({ id: p.id })
@@ -433,6 +584,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     }
     case 'deleteDocument': {
       requirePerm(me, 'documents.manage')
+      const removedDoc = db.documents.find((x) => x.id === p.id)
+      if (removedDoc) toTrash(db, me, 'Documents', removedDoc.id, removedDoc.title, removedDoc)
       db.documents = db.documents.filter((x) => x.id !== p.id)
       log('Documents.delete', String(p.id))
       return commit({ id: p.id })
@@ -459,8 +612,9 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     }
     case 'deleteAnnouncement': {
       requirePerm(me, 'announcements.manage')
+      const removedAnn = db.announcements.find((x) => x.id === p.id)
+      if (removedAnn) toTrash(db, me, 'Announcements', removedAnn.id, removedAnn.title, removedAnn)
       db.announcements = db.announcements.filter((x) => x.id !== p.id)
-      db.acks = db.acks.filter((a) => a.announcementId !== p.id)
       log('Announcements.delete', String(p.id))
       return commit({ id: p.id })
     }
@@ -490,6 +644,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     case 'deleteUser': {
       requirePerm(me, '*')
       if (p.email === me.email) fail('BAD_REQUEST', '自分自身は削除できません')
+      const removedUser = db.users.find((u) => u.email === p.email)
+      if (removedUser) toTrash(db, me, 'Users', removedUser.email, removedUser.name, removedUser)
       db.users = db.users.filter((u) => u.email !== p.email)
       log('Users.delete', String(p.email))
       return commit({ email: p.email })
@@ -535,8 +691,8 @@ function demoCall(action: string, token: string, p: Payload): unknown {
     }
     case 'systemCheck': {
       requirePerm(me, 'any-manager')
-      const sheets = ['Users', 'Roles', 'Tools', 'Documents', 'Announcements', 'Settings', 'Logs', 'Stats', 'Acks'].map((name) => ({ name, ok: true, missing: [], extra: [] }))
-      return commit<SystemCheck>({ version: EXPECTED_GAS_VERSION, sheets, clientIdSet: true, superAdminCount: 1, recentErrors: [], checkedAt: now() })
+      const sheets = ['Users', 'Roles', 'Tools', 'Documents', 'Announcements', 'Settings', 'Logs', 'Stats', 'Acks', 'Links', 'Trash'].map((name) => ({ name, ok: true, missing: [], extra: [] }))
+      return commit<SystemCheck>({ version: EXPECTED_GAS_VERSION, sheets, clientIdSet: true, superAdminCount: 1, recentErrors: [], dailyJobs: true, checkedAt: now() })
     }
     case 'listLogs': {
       requirePerm(me, 'logs.view')

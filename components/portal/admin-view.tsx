@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AlertTriangle, Bell, ChartColumn, CheckCircle2, ChevronRight, FileText, History, KeyRound, LifeBuoy, Link2Off, LoaderCircle, Plus, RefreshCcw, Settings2, ShieldCheck, UserCog, Users, Wrench, XCircle } from 'lucide-react'
+import { AlertTriangle, Bell, BookOpen, Link2, Trash2, UserX, ChartColumn, CheckCircle2, ChevronRight, FileText, History, KeyRound, LifeBuoy, Link2Off, LoaderCircle, Plus, RefreshCcw, Settings2, ShieldCheck, UserCog, Users, Wrench, XCircle } from 'lucide-react'
 import { DEMO_MODE, EXPECTED_GAS_VERSION } from '@/lib/config'
 import { ApiError, api } from '@/lib/api'
 import { downloadUrl, driveKindLabel, parseDriveUrl } from '@/lib/drive'
@@ -12,26 +12,31 @@ import {
 import { cn } from '@/lib/utils'
 import { useAuth } from './auth-provider'
 import { ModalFooter, RowActions, SectionHeader, Table, confirmDelete, fmt, useEditor, type Mutate } from './admin-shared'
-import { AckStatusModal, BackupPanel, BulkImportModal, ErrorDigestPanel, HelpAdmin, UploadButton, UsageAdmin } from './admin-extra'
+import { AdminGuide } from './admin-guide'
+import { LinksAdmin } from './admin-links'
+import { AckStatusModal, BackupPanel, BrandingPanel, BulkImportModal, DiscordPanel, TrashAdmin, ErrorDigestPanel, NotifyCheckbox, HelpAdmin, UploadButton, UsageAdmin } from './admin-extra'
 import type { Navigate } from './router'
 import {
   Button, Checkbox, EmptyState, Field, Modal, RoleBadges, RolePicker, Select, StatusBadge, TONES, TOOL_ICONS, TextArea, TextInput,
   ToolIcon, useToast,
 } from './ui'
 
-type Section = 'tools' | 'documents' | 'announcements' | 'help' | 'users' | 'roles' | 'settings' | 'stats' | 'logs' | 'system'
+type Section = 'guide' | 'tools' | 'documents' | 'links' | 'announcements' | 'help' | 'users' | 'roles' | 'settings' | 'stats' | 'trash' | 'logs' | 'system'
 
 const SECTIONS: { id: Section; label: string; icon: typeof Wrench; allowed: (me: Me) => boolean; description: string }[] = [
   { id: 'tools', label: 'ツール管理', icon: Wrench, allowed: (me) => can(me, 'tools.manage'), description: 'ポータルに掲載するツールと接続先URL・公開範囲を管理します。' },
   { id: 'documents', label: '資料管理', icon: FileText, allowed: (me) => can(me, 'documents.manage'), description: '資料館に掲載するGoogle Driveの資料と公開範囲を管理します。' },
+  { id: 'links', label: 'リンク管理', icon: Link2, allowed: (me) => can(me, 'links.manage'), description: 'リンク集に載せるWebサイト・フォームと、並び順・公開範囲を管理します。' },
   { id: 'announcements', label: 'お知らせ', icon: Bell, allowed: (me) => can(me, 'announcements.manage'), description: 'ページ上部に表示するお知らせを管理します。' },
   { id: 'help', label: 'ヘルプ編集', icon: LifeBuoy, allowed: (me) => can(me, 'announcements.manage'), description: 'ヘルプ・問い合わせページの内容（問い合わせ先・よくある質問）を編集します。' },
   { id: 'users', label: 'アカウント', icon: UserCog, allowed: (me) => me.isSuper, description: 'ログインできるGoogleアカウントと、割り当てるロールを管理します。' },
   { id: 'roles', label: 'ロールと権限', icon: KeyRound, allowed: (me) => me.isSuper, description: 'ロール（権限のまとまり）を作成し、できる操作を設定します。' },
   { id: 'settings', label: '設定', icon: Settings2, allowed: (me) => me.isSuper, description: '未登録アカウントの扱いなど、ポータル全体の設定です。' },
   { id: 'stats', label: '利用状況', icon: ChartColumn, allowed: (me) => can(me, 'logs.view'), description: 'ツールと資料がどれくらい使われているかを月ごとに集計しています。' },
+  { id: 'trash', label: 'ゴミ箱', icon: Trash2, allowed: () => true, description: '削除したものは30日間ここに残り、元に戻せます。30日を過ぎると自動で完全に削除されます。' },
   { id: 'logs', label: '変更履歴', icon: History, allowed: (me) => can(me, 'logs.view'), description: '画面から行われた変更の履歴です（新しい順・最大300件）。' },
   { id: 'system', label: 'バージョン確認', icon: ShieldCheck, allowed: () => true, description: '画面とGASの版名・シート構成・初期設定が合っているかを確認します。' },
+  { id: 'guide', label: '使い方ガイド', icon: BookOpen, allowed: () => true, description: '管理画面でできることと、よく使う作業の手順です。' },
 ]
 
 export function AdminView({ me, section, navigate }: { me: Me; section: string; navigate: Navigate }) {
@@ -82,7 +87,7 @@ export function AdminView({ me, section, navigate }: { me: Me; section: string; 
           const Icon = s.icon
           const active = s.id === current.id
           return (
-            <button key={s.id} onClick={() => navigate(`/admin/${s.id}`)} className={cn('flex shrink-0 items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[12px] font-semibold', active ? 'bg-[#edf5fc] text-[#1e6db8]' : 'text-[#66788c] hover:bg-[#f6f8fa]')}>
+            <button key={s.id} onClick={() => navigate(`/admin/${s.id}`)} className={cn('flex shrink-0 items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[12px] font-semibold', active ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#66788c] hover:bg-[#f6f8fa]')}>
               <Icon size={15} />
               <span className="flex-1">{s.label}</span>
               {active && <ChevronRight size={14} className="hidden lg:block" />}
@@ -97,6 +102,7 @@ export function AdminView({ me, section, navigate }: { me: Me; section: string; 
           <>
             {current.id === 'tools' && <ToolsAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'documents' && <DocumentsAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
+            {current.id === 'links' && <LinksAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'announcements' && <AnnouncementsAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'users' && <UsersAdmin me={me} data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'roles' && <RolesAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
@@ -105,6 +111,8 @@ export function AdminView({ me, section, navigate }: { me: Me; section: string; 
             {current.id === 'stats' && <UsageAdmin section={current} data={data} />}
             {current.id === 'logs' && <LogsAdmin section={current} />}
             {current.id === 'system' && <SystemAdmin section={current} />}
+            {current.id === 'trash' && <TrashAdmin section={current} mutate={mutate} />}
+            {current.id === 'guide' && <AdminGuide section={current} me={me} navigate={navigate} />}
           </>
         )}
       </div>
@@ -138,7 +146,7 @@ function ToolsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate;
             <td className="px-5 py-3 font-semibold text-[#38536f]">{tool.name}<span className="block text-[11px] font-normal text-[#8a99a9]">{tool.description}</span></td>
             <td className="px-5 py-3 text-[#718296]">{tool.category}</td>
             <td className="px-5 py-3"><StatusBadge status={tool.status} /></td>
-            <td className="px-5 py-3 text-[#9aa7b5]">{tool.url ? <a href={tool.url} target="_blank" rel="noopener noreferrer" className="text-[#1e6db8] hover:underline">設定済み</a> : '未設定'}</td>
+            <td className="px-5 py-3 text-[#9aa7b5]">{tool.url ? <a href={tool.url} target="_blank" rel="noopener noreferrer" className="text-[var(--brand)] hover:underline">設定済み</a> : '未設定'}</td>
             <td className="px-5 py-3"><RoleBadges ids={tool.visibleRoles} roles={data.roles} /></td>
             <td className="px-5 py-3"><RowActions label={tool.name} onEdit={() => ed.open({ ...tool })} onDelete={() => confirmDelete(tool.name) && void mutate((t) => api.deleteTool(t, tool.id), 'ツールを削除しました')} /></td>
           </tr>
@@ -172,7 +180,7 @@ function ToolsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate;
           <Field group label={ed.draft.iconUrl ? 'アイコン（画像が表示できないときの代わり）' : 'アイコン'}>
             <div className="flex flex-wrap gap-2">
               {Object.keys(TOOL_ICONS).map((name) => (
-                <button type="button" key={name} onClick={() => ed.set('icon', name)} aria-label={name} aria-pressed={ed.draft!.icon === name} className={cn('rounded-xl p-0.5 ring-2', ed.draft!.icon === name ? 'ring-[#1f6fba]' : 'ring-transparent')}>
+                <button type="button" key={name} onClick={() => ed.set('icon', name)} aria-label={name} aria-pressed={ed.draft!.icon === name} className={cn('rounded-xl p-0.5 ring-2', ed.draft!.icon === name ? 'ring-[var(--brand)]' : 'ring-transparent')}>
                   <ToolIcon name={name} tone={ed.draft!.tone} size={16} className="size-9" />
                 </button>
               ))}
@@ -181,7 +189,7 @@ function ToolsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate;
           <Field group label="色">
             <div className="flex flex-wrap gap-2">
               {Object.keys(TONES).map((tone) => (
-                <button type="button" key={tone} onClick={() => ed.set('tone', tone)} aria-label={tone} aria-pressed={ed.draft!.tone === tone} className={cn('size-8 rounded-lg ring-2', TONES[tone], ed.draft!.tone === tone ? 'ring-[#1f6fba]' : 'ring-transparent')} />
+                <button type="button" key={tone} onClick={() => ed.set('tone', tone)} aria-label={tone} aria-pressed={ed.draft!.tone === tone} className={cn('size-8 rounded-lg ring-2', TONES[tone], ed.draft!.tone === tone ? 'ring-[var(--brand)]' : 'ring-transparent')} />
               ))}
             </div>
           </Field>
@@ -212,7 +220,7 @@ const emptyDoc = (): PortalDocument => ({
 })
 
 function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate; header: (action: ReactNode) => ReactNode }) {
-  const ed = useEditor<PortalDocument & { tagsText?: string }>()
+  const ed = useEditor<PortalDocument & { tagsText?: string; notify?: boolean }>()
   const [query, setQuery] = useState('')
   const types = useMemo(() => [...new Set(['オンボーディング', 'マニュアル', ...data.documents.map((d) => d.type)].filter(Boolean))], [data.documents])
   const toolNames = useMemo(() => [...new Set(['共通', ...data.tools.map((t) => t.name), ...data.documents.map((d) => d.tool)].filter(Boolean))], [data.tools, data.documents])
@@ -220,10 +228,10 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
 
   const save = async () => {
     if (!ed.draft) return
-    const { tagsText, ...item } = ed.draft
+    const { tagsText, notify, ...item } = ed.draft
     const payload = { ...item, tags: (tagsText ?? item.tags.join(', ')).split(/[,、]/).map((s) => s.trim()).filter(Boolean) }
     ed.setSaving(true)
-    const ok = await mutate((t) => api.saveDocument(t, payload, ed.isNew), ed.isNew ? '資料を追加しました' : '資料を更新しました')
+    const ok = await mutate((t) => api.saveDocument(t, payload, ed.isNew, notify !== false), ed.isNew ? '資料を追加しました' : '資料を更新しました')
     ed.setSaving(false)
     if (ok) ed.close()
   }
@@ -241,7 +249,7 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
       {header(
         <>
           {syncCount > 0 && <Button variant="secondary" onClick={() => void mutate((t) => api.syncDrive(t), 'Driveの共有を同期しました')} title="共有を同期する資料すべてを、今の公開範囲に合わせ直します"><RefreshCcw size={15} />共有を同期</Button>}
-          <Button onClick={() => ed.open(emptyDoc(), true)}><Plus size={15} />新規追加</Button>
+          <Button onClick={() => ed.open({ ...emptyDoc(), notify: true }, true)}><Plus size={15} />新規追加</Button>
         </>,
       )}
       <div className="border-b border-[#edf0f3] px-5 py-3"><TextInput placeholder="資料名・種類・ツールで絞り込み" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
@@ -252,7 +260,7 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
             <td className="px-5 py-3 text-[#718296]">{doc.type}</td>
             <td className="px-5 py-3 text-[#718296]">{doc.tool}</td>
             <td className="px-5 py-3 text-[#9aa7b5]">
-              {doc.driveUrl ? <a href={doc.driveUrl} target="_blank" rel="noopener noreferrer" className="text-[#1e6db8] hover:underline">{driveKindLabel(doc.driveUrl)}</a> : '未設定'}
+              {doc.driveUrl ? <a href={doc.driveUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--brand)] hover:underline">{driveKindLabel(doc.driveUrl)}</a> : '未設定'}
               {doc.driveSync && <SyncBadge status={doc.driveSyncStatus ?? ''} />}
             </td>
             <td className="px-5 py-3"><RoleBadges ids={doc.visibleRoles} roles={data.roles} /></td>
@@ -276,7 +284,7 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
             {ed.draft.driveUrl && (
               <span className="mt-2 block rounded-lg bg-[#f5f8fc] px-3 py-2 text-[11px] leading-5 text-[#55708b]">
                 判定：<b>{driveKindLabel(ed.draft.driveUrl)}</b>
-                {drive && <> ／ ダウンロード：{autoDownload ? <a href={autoDownload} target="_blank" rel="noopener noreferrer" className="text-[#1e6db8] underline">自動生成されたリンクを確認</a> : 'この種類は直接ダウンロードできません（Driveで開いてダウンロード）'}</>}
+                {drive && <> ／ ダウンロード：{autoDownload ? <a href={autoDownload} target="_blank" rel="noopener noreferrer" className="text-[var(--brand)] underline">自動生成されたリンクを確認</a> : 'この種類は直接ダウンロードできません（Driveで開いてダウンロード）'}</>}
                 {!drive && ' ／ Driveのリンクとして認識できませんでした（外部リンクとして開きます）'}
               </span>
             )}
@@ -314,6 +322,7 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
               </div>
             )}
           </div>
+          {ed.isNew && <NotifyCheckbox checked={ed.draft.notify !== false} onChange={(v) => ed.set('notify', v)} restricted={ed.draft.visibleRoles.length > 0} />}
           <details className="rounded-lg border border-[#edf0f3] px-3 py-2">
             <summary className="cursor-pointer text-[12px] font-bold text-[#55708b]">詳細設定（通常は空欄のままでOK）</summary>
             <div className="mt-3">
@@ -334,18 +343,18 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
 const emptyAnnouncement: Announcement = { id: '', title: '', body: '', level: 'info', active: true, startDate: '', endDate: '', visibleRoles: [], updatedAt: '' }
 
 function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate; header: (action: ReactNode) => ReactNode }) {
-  const ed = useEditor<Announcement>()
+  const ed = useEditor<Announcement & { notify?: boolean }>()
   const [ackOf, setAckOf] = useState<Announcement | null>(null)
   const save = async () => {
     if (!ed.draft) return
     ed.setSaving(true)
-    const ok = await mutate((t) => api.saveAnnouncement(t, ed.draft!, ed.isNew), ed.isNew ? 'お知らせを追加しました' : 'お知らせを更新しました')
+    const ok = await mutate((t) => api.saveAnnouncement(t, ed.draft!, ed.isNew, ed.draft!.notify !== false), ed.isNew ? 'お知らせを追加しました' : 'お知らせを更新しました')
     ed.setSaving(false)
     if (ok) ed.close()
   }
   return (
     <>
-      {header(<Button onClick={() => ed.open({ ...emptyAnnouncement }, true)}><Plus size={15} />新規追加</Button>)}
+      {header(<Button onClick={() => ed.open({ ...emptyAnnouncement, notify: true }, true)}><Plus size={15} />新規追加</Button>)}
       {ackOf && <AckStatusModal announcement={ackOf} onClose={() => setAckOf(null)} />}
       <Table head={['タイトル', '種別', '表示', '期間', '公開範囲', '確認状況', '']} empty={!data.announcements.length}>
         {data.announcements.map((a) => (
@@ -357,7 +366,7 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
             <td className="px-5 py-3"><RoleBadges ids={a.visibleRoles} roles={data.roles} /></td>
             <td className="whitespace-nowrap px-5 py-3">
               {a.requireAck ? (
-                <button onClick={() => setAckOf(a)} className="font-semibold text-[#1e6db8] hover:underline">{data.ackCounts?.[a.id] ?? 0}人が確認 ›</button>
+                <button onClick={() => setAckOf(a)} className="font-semibold text-[var(--brand)] hover:underline">{data.ackCounts?.[a.id] ?? 0}人が確認 ›</button>
               ) : <span className="text-[11px] text-[#9aa7b5]">不要</span>}
             </td>
             <td className="px-5 py-3"><RowActions label={a.title} onEdit={() => ed.open({ ...a })} onDelete={() => confirmDelete(a.title) && void mutate((t) => api.deleteAnnouncement(t, a.id), 'お知らせを削除しました')} /></td>
@@ -381,6 +390,7 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
           <Checkbox checked={!!ed.draft.requireAck} onChange={(v) => ed.set('requireAck', v)} label={<><b>確認を求める</b><span className="block text-[11px] leading-5 text-[#8a99a9]">「確認しました」ボタンを表示し、押すまでお知らせが消えなくなります。誰が確認したかを一覧で見られます。</span></>} />
           <div className="mt-3">
             <Field group label="公開範囲"><RolePicker roles={data.roles} value={ed.draft.visibleRoles} onChange={(v) => ed.set('visibleRoles', v)} exclude={['superadmin']} emptyLabel="未選択：ログインできる全員に表示" /></Field>
+            {ed.isNew && <NotifyCheckbox checked={ed.draft.notify !== false} onChange={(v) => ed.set('notify', v)} restricted={ed.draft.visibleRoles.length > 0} />}
           </div>
         </Modal>
       )}
@@ -392,6 +402,8 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
 // アカウント（全権管理者のみ）
 // ---------------------------------------------------------------------------
 
+const INACTIVE_DAYS = 90
+
 const emptyUser: User = { email: '', name: '', roles: ['member'], active: true, note: '', createdAt: '', updatedAt: '', lastLoginAt: '' }
 
 function UsersAdmin({ me, data, mutate, header }: { me: Me; data: AdminData; mutate: Mutate; header: (action: ReactNode) => ReactNode }) {
@@ -399,7 +411,17 @@ function UsersAdmin({ me, data, mutate, header }: { me: Me; data: AdminData; mut
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [bulk, setBulk] = useState(false)
-  const users = (data.users ?? []).filter((u) => `${u.email} ${u.name} ${u.note}`.toLowerCase().includes(query.toLowerCase()) && (!roleFilter || u.roles.includes(roleFilter)))
+  const [inactiveOnly, setInactiveOnly] = useState(false)
+  // 90日以上ログインしていない（一度もログインしていない人を含む）有効なアカウント
+  const limit = new Date(Date.now() - INACTIVE_DAYS * 86400000).toISOString()
+  const isInactive = (u: User) => u.active && u.email !== me.email && (!u.lastLoginAt || new Date(u.lastLoginAt).toISOString() < limit)
+  const inactiveCount = (data.users ?? []).filter(isInactive).length
+  const users = (data.users ?? []).filter((u) => `${u.email} ${u.name} ${u.note}`.toLowerCase().includes(query.toLowerCase()) && (!roleFilter || u.roles.includes(roleFilter)) && (!inactiveOnly || isInactive(u)))
+  const disableShown = async () => {
+    if (!window.confirm(`表示中の${users.length}人のアカウントを無効にします（ログインできなくなります。あとで1人ずつ有効に戻せます）。よろしいですか？`)) return
+    await mutate((t) => api.bulkSetActive(t, users.map((u) => u.email), false), `${users.length}人を無効にしました`)
+    setInactiveOnly(false)
+  }
   const save = async () => {
     if (!ed.draft) return
     ed.setSaving(true)
@@ -422,11 +444,20 @@ function UsersAdmin({ me, data, mutate, header }: { me: Me; data: AdminData; mut
           <option value="">すべてのロール</option>
           {data.roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </Select>
+        <button onClick={() => setInactiveOnly(!inactiveOnly)} aria-pressed={inactiveOnly} className={cn('flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[12px] font-bold', inactiveOnly ? 'border-[#92400e] bg-[#92400e] text-white' : 'border-[#f0d9b5] bg-white text-[#92400e]')}>
+          <UserX size={14} />しばらくログインなし（{inactiveCount}）
+        </button>
       </div>
+      {inactiveOnly && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-[#edf0f3] bg-[#fffbf2] px-5 py-3 text-[12px] text-[#92400e]">
+          <span>{INACTIVE_DAYS}日以上ログインしていない（または一度もログインしていない）有効なアカウントです。退会した人がいれば無効にしてください。</span>
+          {users.length > 0 && <Button variant="danger" className="ml-auto" onClick={() => void disableShown()}>表示中の{users.length}人を無効にする</Button>}
+        </div>
+      )}
       <Table head={['名前 / メールアドレス', 'ロール', '状態', '最終ログイン', '']} empty={!users.length}>
         {users.map((u) => (
           <tr key={u.email} className="border-t border-[#edf0f3]">
-            <td className="px-5 py-3 font-semibold text-[#38536f]">{u.name}{u.email === me.email && <span className="ml-1 text-[10px] text-[#1e6db8]">（自分）</span>}<span className="block text-[11px] font-normal text-[#8a99a9]">{u.email}</span></td>
+            <td className="px-5 py-3 font-semibold text-[#38536f]">{u.name}{u.email === me.email && <span className="ml-1 text-[10px] text-[var(--brand)]">（自分）</span>}<span className="block text-[11px] font-normal text-[#8a99a9]">{u.email}</span></td>
             <td className="px-5 py-3"><RoleBadges ids={u.roles} roles={data.roles} emptyLabel="なし" /></td>
             <td className="px-5 py-3">{u.active ? <span className="text-[#1c7a43]">有効</span> : <span className="text-[#b42318]">無効</span>}</td>
             <td className="whitespace-nowrap px-5 py-3 text-[#718296]">{fmt(u.lastLoginAt)}</td>
@@ -548,6 +579,8 @@ function SettingsAdmin({ data, mutate, header }: { data: AdminData; mutate: Muta
           </div>
         )}
         <div className="mt-6"><Button onClick={save} disabled={saving}>{saving ? '保存中…' : '設定を保存'}</Button></div>
+        <BrandingPanel initial={data.branding} />
+        <DiscordPanel initial={data.discord} />
         <ErrorDigestPanel initial={data.errorDigest} />
         <BackupPanel initial={data.backup} uploadFolderUrl={data.uploadFolderUrl} />
       </div>
@@ -684,6 +717,9 @@ function SystemAdmin({ section }: { section: (typeof SECTIONS)[number] }) {
                 />
                 <CheckRow ok={info.clientIdSet} label="GoogleログインのクライアントID" detail={info.clientIdSet ? 'スクリプトプロパティ GOOGLE_CLIENT_ID が設定されています' : 'スクリプトプロパティ GOOGLE_CLIENT_ID が未設定です'} />
                 <CheckRow ok={info.superAdminCount > 0} label="全権管理者（固定）" detail={info.superAdminCount > 0 ? `SUPER_ADMIN_EMAILS に ${info.superAdminCount} 件登録されています` : 'スクリプトプロパティ SUPER_ADMIN_EMAILS が未設定です（ロックアウト防止のため設定を推奨）'} />
+                {info.dailyJobs !== undefined && (
+                  <CheckRow ok={info.dailyJobs} label="毎朝の自動処理" detail={info.dailyJobs ? '登録済み（掲載開始日のお知らせのDiscord通知・ゴミ箱の整理）' : '未登録です。GASのエディタで setup() を実行してください'} />
+                )}
                 {info.recentErrors && (
                   <CheckRow
                     ok={!info.recentErrors.length}

@@ -1,6 +1,6 @@
 // デモモード（GAS未接続）で使う架空のサンプルデータ。実際の組織データは含めないこと（このファイルはGitHubで公開される）。
 
-import type { Announcement, BackupStatus, ErrorDigestStatus, HelpContent, PortalDocument, Role, Settings, Tool, User } from './types'
+import type { Announcement, BackupStatus, Branding, PortalLink, DiscordStatus, ErrorDigestStatus, HelpContent, PortalDocument, Role, Settings, Tool, User } from './types'
 
 export interface DemoDb {
   users: User[]
@@ -15,6 +15,10 @@ export interface DemoDb {
   backup: BackupStatus
   acks: { announcementId: string; email: string; ackAt: string }[]
   errorDigest: ErrorDigestStatus
+  discord: DiscordStatus
+  trash: { key: string; sheet: 'Tools' | 'Documents' | 'Announcements' | 'Links' | 'Users'; itemKey: string; title: string; data: unknown; deletedAt: string; deletedBy: string }[]
+  branding: Branding
+  links: PortalLink[]
 }
 
 // 日付は開いた日を基準にする（NEW表示が分かるよう、一部だけ最近更新したことにする）
@@ -31,7 +35,7 @@ export function createDemoDb(): DemoDb {
   return {
     roles: [
       { id: 'superadmin', name: '全権管理者', description: 'すべての操作とアカウント・権限の管理ができます', permissions: ['*'], builtin: true },
-      { id: 'editor', name: '掲載担当者', description: 'ツール・資料・お知らせを編集できます', permissions: ['tools.manage', 'documents.manage', 'announcements.manage', 'logs.view'], builtin: true },
+      { id: 'editor', name: '掲載担当者', description: 'ツール・資料・お知らせを編集できます', permissions: ['tools.manage', 'documents.manage', 'announcements.manage', 'links.manage', 'logs.view'], builtin: true },
       { id: 'member', name: 'メンバー', description: '公開されているツールと資料を閲覧できます', permissions: [], builtin: true },
       { id: 'contract', name: '契約担当', description: '契約関連のツール・資料を閲覧できます', permissions: [], builtin: false },
     ],
@@ -80,5 +84,15 @@ export function createDemoDb(): DemoDb {
     backup: { enabled: false, lastAt: '', lastUrl: '', lastError: '', keep: 10, folderUrl: '' },
     acks: [],
     errorDigest: { enabled: false, lastSentAt: '', recipients: 1 },
+    trash: [],
+    links: [
+      { id: 'l1', title: '公式ウェブサイト（サンプル）', url: 'https://example.com/', description: '団体の公式サイト', category: '公式', visibleRoles: [], order: 1, updatedAt: t },
+      { id: 'l2', title: '活動報告ブログ（サンプル）', url: 'https://example.org/blog', description: '活動の記録をまとめたブログ', category: '公式', visibleRoles: [], order: 2, updatedAt: daysAgo(1) },
+      { id: 'l3', title: '公式SNS（サンプル）', url: 'https://example.net/sns', description: '最新情報はこちら', category: '広報', visibleRoles: [], order: 3, updatedAt: t },
+      { id: 'l4', title: '経費精算フォーム（サンプル）', url: 'https://example.com/form', description: '立て替えた経費の申請', category: '事務手続き', visibleRoles: [], order: 4, updatedAt: t },
+      { id: 'l5', title: '契約書テンプレート置き場（サンプル）', url: 'https://example.com/contracts', description: '契約担当のみ', category: '事務手続き', visibleRoles: ['contract'], order: 5, updatedAt: t },
+    ],
+    branding: { portalName: 'FSIF Portal', tagline: 'CONNECT THE DOTS', logoUrl: '', primaryColor: '#1f6fba' },
+    discord: { configured: false, webhookHint: '', notifyDocuments: true, notifyAnnouncements: true, portalUrl: 'https://fsifofficial.github.io/portal/' },
   }
 }

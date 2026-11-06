@@ -2,12 +2,13 @@
 // GASコード（リポジトリ外で管理）の SCHEMA と対応しているので、項目を増やす場合は両方を更新すること。
 
 /** 権限キー。'*' は全権管理者（ユーザー・ロール・設定の管理を含むすべて） */
-export type Permission = '*' | 'tools.manage' | 'documents.manage' | 'announcements.manage' | 'logs.view'
+export type Permission = '*' | 'tools.manage' | 'documents.manage' | 'announcements.manage' | 'links.manage' | 'logs.view'
 
 export const PERMISSION_LABELS: Record<Exclude<Permission, '*'>, string> = {
   'tools.manage': 'ツールの追加・編集・並べ替え',
   'documents.manage': '資料の追加・編集',
   'announcements.manage': 'お知らせの追加・編集',
+  'links.manage': 'リンク集の追加・編集・並べ替え',
   'logs.view': '変更履歴の閲覧',
 }
 
@@ -79,6 +80,17 @@ export interface PortalDocument {
   driveSyncStatus?: string
 }
 
+export interface PortalLink {
+  id: string
+  title: string
+  url: string
+  description: string
+  category: string
+  visibleRoles: string[]
+  order: number
+  updatedAt: string
+}
+
 export interface Announcement {
   id: string
   title: string
@@ -91,6 +103,8 @@ export interface Announcement {
   updatedAt: string
   /** 「確認しました」ボタンを出して、誰が確認したかを記録する */
   requireAck?: boolean
+  /** Discordに通知した日時（'skip' は通知しない） */
+  notifiedAt?: string
 }
 
 export interface Settings {
@@ -143,6 +157,8 @@ export interface BootstrapData {
   /** login のときだけ返る */
   session?: string
   sessionExpiresAt?: string
+  branding?: Branding
+  links?: PortalLink[]
 }
 
 export interface AdminData {
@@ -158,6 +174,9 @@ export interface AdminData {
   errorDigest?: ErrorDigestStatus
   /** お知らせID → 確認済み人数 */
   ackCounts?: Record<string, number>
+  discord?: DiscordStatus
+  branding?: Branding
+  links?: PortalLink[]
 }
 
 export interface HelpContent {
@@ -176,7 +195,7 @@ export interface BackupStatus {
 }
 
 export interface UsageRow {
-  kind: 'tool' | 'doc'
+  kind: 'tool' | 'doc' | 'link'
   id: string
   thisMonth: number
   lastMonth: number
@@ -200,6 +219,33 @@ export interface UploadResult {
 export interface BulkAddResult {
   added: string[]
   skipped: { email: string; reason: string }[]
+}
+
+export interface Branding {
+  portalName: string
+  tagline: string
+  logoUrl: string
+  primaryColor: string
+}
+
+export const DEFAULT_BRANDING: Branding = { portalName: 'FSIF Portal', tagline: 'CONNECT THE DOTS', logoUrl: '', primaryColor: '#1f6fba' }
+
+export interface TrashItem {
+  key: string
+  sheet: 'Tools' | 'Documents' | 'Announcements' | 'Links' | 'Users'
+  itemKey: string
+  title: string
+  deletedAt: string
+  deletedBy: string
+}
+
+export interface DiscordStatus {
+  configured: boolean
+  /** Webhook URL の末尾だけ（URLを知っていれば誰でも投稿できるため、全体は返さない） */
+  webhookHint: string
+  notifyDocuments: boolean
+  notifyAnnouncements: boolean
+  portalUrl: string
 }
 
 export interface ErrorDigestStatus {
@@ -232,6 +278,8 @@ export interface SystemCheck {
   superAdminCount: number
   checkedAt: string
   recentErrors?: { timestamp: string; code: string; message: string }[]
+  /** 毎朝の自動処理（掲載開始日のお知らせの通知・ゴミ箱の整理）が登録されているか */
+  dailyJobs?: boolean
 }
 
 export function can(me: Me | null | undefined, perm: Permission): boolean {

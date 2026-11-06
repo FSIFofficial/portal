@@ -1,18 +1,20 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, BookOpen, CheckCircle2, Smartphone, ChevronDown, ChevronRight, LayoutDashboard, LifeBuoy, LoaderCircle, LogOut, Menu, Search, Settings2, Sparkles, X, Zap } from 'lucide-react'
+import { AlertTriangle, BookOpen, CheckCircle2, Link2, Smartphone, ChevronDown, ChevronRight, LayoutDashboard, LifeBuoy, LoaderCircle, LogOut, Menu, Search, Settings2, Sparkles, X, Zap } from 'lucide-react'
 import { DEMO_MODE, EXPECTED_GAS_VERSION, asset } from '@/lib/config'
-import { isAnyManager, isNew, type BootstrapData } from '@/lib/types'
+import { DEFAULT_BRANDING, isAnyManager, isNew, type BootstrapData } from '@/lib/types'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { AdminView } from './admin-view'
 import { AuthProvider, useAuth } from './auth-provider'
 import { LoginScreen } from './login-screen'
 import { useHashRoute, type Navigate } from './router'
+import { BrandLogo, useApplyBranding } from './branding'
 import { InstallGuide } from './install'
 import { ToastProvider, useToast } from './ui'
 import { HelpView } from './help-view'
+import { LinksView } from './links-view'
 import { HomeView, LibraryView, SearchView, ToolsView } from './views'
 
 export function PortalApp() {
@@ -42,6 +44,7 @@ const NAV = [
   { path: '/', label: 'ホーム', icon: LayoutDashboard },
   { path: '/tools', label: 'ツール', icon: Zap },
   { path: '/library', label: '資料館', icon: BookOpen },
+  { path: '/links', label: 'リンク集', icon: Link2 },
 ] as const
 
 const DISMISS_KEY = 'fsif-portal-dismissed'
@@ -61,6 +64,8 @@ function Portal({ data }: { data: BootstrapData }) {
   const [headerQuery, setHeaderQuery] = useState('')
   const me = data.me
   const manager = isAnyManager(me)
+  const branding = { ...DEFAULT_BRANDING, ...(data.branding ?? {}) }
+  useApplyBranding(data.branding)
   // 管理者には、画面とGASの版がずれていたら常に知らせる
   const versionMismatch = !DEMO_MODE && data.gasVersion !== EXPECTED_GAS_VERSION
 
@@ -87,6 +92,7 @@ function Portal({ data }: { data: BootstrapData }) {
   const newCounts: Record<string, number> = {
     '/tools': data.tools.filter((t) => isNew(t, me)).length,
     '/library': data.documents.filter((d) => isNew(d, me)).length,
+    '/links': (data.links ?? []).filter((l) => isNew(l, me)).length,
   }
 
   const dismiss = (key: string) => {
@@ -109,6 +115,7 @@ function Portal({ data }: { data: BootstrapData }) {
   const meta: Record<string, { title: string; description: string }> = {
     home: { title: 'ホーム', description: '今日も必要な情報へ、すばやくアクセスできます。' },
     tools: { title: 'ツール', description: '業務に使うツールをまとめています。' },
+    links: { title: 'リンク集', description: 'よく使うWebサイトやフォームへのリンクをまとめています。' },
     library: { title: '資料館', description: 'マニュアルやオンボーディング資料を探せます。資料はGoogle Driveで開く・ダウンロードできます。' },
     search: { title: '検索結果', description: `「${route.params.get('q') ?? ''}」の検索結果` },
     admin: { title: '管理画面', description: 'ポータルの掲載情報・アカウント・権限を管理します。' },
@@ -148,15 +155,15 @@ function Portal({ data }: { data: BootstrapData }) {
       <header className="sticky top-0 z-20 border-b border-[#e7ecf2] bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1320px] items-center gap-6 px-4 py-3.5 lg:px-8">
           <button onClick={() => navigate('/')} className="flex items-center gap-3" aria-label="ホームへ">
-            <img src={asset('/fsif-logo.png')} alt="" className="size-10 rounded-xl" />
+            <BrandLogo branding={branding} className="size-10 rounded-xl" />
             <span className="text-left">
-              <span className="block text-[17px] font-bold tracking-[-0.03em] text-[#132b4f]">FSIF Portal</span>
-              <span className="block text-[10px] font-medium tracking-[0.18em] text-[#7b8da5]">CONNECT THE DOTS</span>
+              <span className="block text-[17px] font-bold tracking-[-0.03em] text-[#132b4f]">{branding.portalName}</span>
+              {branding.tagline && <span className="block text-[10px] font-medium tracking-[0.18em] text-[#7b8da5]">{branding.tagline}</span>}
             </span>
           </button>
           <nav className="hidden items-center gap-1 md:flex">
             {NAV.map((n) => (
-              <button key={n.path} onClick={() => navigate(n.path)} className={cn('rounded-lg px-4 py-2 text-[13px] font-semibold transition', activePath === n.path ? 'bg-[#edf5fc] text-[#1e6db8]' : 'text-[#718096] hover:bg-[#f5f7fa] hover:text-[#1b304b]')}>{n.label}<NewCount n={newCounts[n.path]} /></button>
+              <button key={n.path} onClick={() => navigate(n.path)} className={cn('rounded-lg px-4 py-2 text-[13px] font-semibold transition', activePath === n.path ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096] hover:bg-[#f5f7fa] hover:text-[#1b304b]')}>{n.label}<NewCount n={newCounts[n.path]} /></button>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-3">
@@ -175,13 +182,13 @@ function Portal({ data }: { data: BootstrapData }) {
           </div>
         </div>
         {mobileMenu && (
-          <nav className="flex gap-1 border-t border-[#eef1f5] px-4 py-2 md:hidden">
+          <nav className="grid grid-cols-3 gap-1 border-t border-[#eef1f5] px-4 py-2 md:hidden">
             {NAV.map((n) => (
-              <button key={n.path} onClick={() => { navigate(n.path); setMobileMenu(false) }} className={cn('flex-1 rounded-lg py-2 text-[13px] font-semibold', activePath === n.path ? 'bg-[#edf5fc] text-[#1e6db8]' : 'text-[#718096]')}>{n.label}</button>
+              <button key={n.path} onClick={() => { navigate(n.path); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', activePath === n.path ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>{n.label}</button>
             ))}
-            <button onClick={() => { navigate('/help'); setMobileMenu(false) }} className={cn('flex-1 rounded-lg py-2 text-[13px] font-semibold', tab === 'help' ? 'bg-[#edf5fc] text-[#1e6db8]' : 'text-[#718096]')}>ヘルプ</button>
+            <button onClick={() => { navigate('/help'); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', tab === 'help' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>ヘルプ</button>
             {manager && (
-              <button onClick={() => { navigate('/admin'); setMobileMenu(false) }} className={cn('flex-1 rounded-lg py-2 text-[13px] font-semibold', tab === 'admin' ? 'bg-[#edf5fc] text-[#1e6db8]' : 'text-[#718096]')}>管理</button>
+              <button onClick={() => { navigate('/admin'); setMobileMenu(false) }} className={cn('rounded-lg py-2 text-[13px] font-semibold', tab === 'admin' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#718096]')}>管理</button>
             )}
           </nav>
         )}
@@ -195,23 +202,23 @@ function Portal({ data }: { data: BootstrapData }) {
               {NAV.map((n) => {
                 const Icon = n.icon
                 return (
-                  <button key={n.path} onClick={() => navigate(n.path)} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', activePath === n.path ? 'bg-[#eaf3fb] text-[#1e6db8]' : 'text-[#647589] hover:bg-white')}>
+                  <button key={n.path} onClick={() => navigate(n.path)} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', activePath === n.path ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#647589] hover:bg-white')}>
                     <Icon size={17} /><span className="flex-1">{n.label}</span><NewCount n={newCounts[n.path]} />
                   </button>
                 )
               })}
               <div className="my-4 border-t border-[#e4eaf0]" />
               {manager && (
-                <button onClick={() => navigate('/admin')} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', tab === 'admin' ? 'bg-[#eaf3fb] text-[#1e6db8]' : 'text-[#647589] hover:bg-white')}>
+                <button onClick={() => navigate('/admin')} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', tab === 'admin' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#647589] hover:bg-white')}>
                   <Settings2 size={17} />管理画面
                 </button>
               )}
-              <button onClick={() => navigate('/help')} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', tab === 'help' ? 'bg-[#eaf3fb] text-[#1e6db8]' : 'text-[#647589] hover:bg-white')}>
+              <button onClick={() => navigate('/help')} className={cn('flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold', tab === 'help' ? 'bg-[var(--brand-soft)] text-[var(--brand)]' : 'text-[#647589] hover:bg-white')}>
                 <LifeBuoy size={17} />ヘルプ・問い合わせ
               </button>
             </div>
             {DEMO_MODE && (
-              <div className="mt-10 rounded-2xl bg-[#edf5fb] p-4">
+              <div className="mt-10 rounded-2xl bg-[var(--brand-soft)] p-4">
                 <div className="mb-2 flex size-8 items-center justify-center rounded-lg bg-white text-[#3986be]"><Sparkles size={16} /></div>
                 <p className="text-[12px] font-bold text-[#285b82]">デモモード</p>
                 <p className="mt-1 text-[11px] leading-5 text-[#6a879d]">GAS未接続のため、サンプルデータで動いています。変更はこのブラウザにだけ保存されます。</p>
@@ -222,9 +229,9 @@ function Portal({ data }: { data: BootstrapData }) {
 
         <section className="min-w-0 flex-1">
           <div className="mb-7">
-            <div className="mb-2 flex items-center gap-2 text-[12px] text-[#8a99a9]"><span>FSIF Portal</span><ChevronRight size={13} /><span>{page.title}</span></div>
+            <div className="mb-2 flex items-center gap-2 text-[12px] text-[#8a99a9]"><span>{branding.portalName}</span><ChevronRight size={13} /><span>{page.title}</span></div>
             <h1 className="text-[27px] font-bold tracking-[-0.04em] text-[#1b304b]">
-              {tab === 'home' || !meta[tab] ? <>おかえりなさい、<span className="text-[#1e6db8]">{firstName}さん</span></> : page.title}
+              {tab === 'home' || !meta[tab] ? <>おかえりなさい、<span className="text-[var(--brand)]">{firstName}さん</span></> : page.title}
             </h1>
             <p className="mt-2 text-[13px] text-[#7d8c9d]">{page.description}</p>
           </div>
@@ -243,6 +250,8 @@ function Content({ tab, segments, params, data, navigate }: { tab: string; segme
       return <LibraryView data={data} navigate={navigate} params={params} />
     case 'help':
       return <HelpView data={data} navigate={navigate} />
+    case 'links':
+      return <LinksView data={data} navigate={navigate} />
     case 'search':
       return <SearchView data={data} navigate={navigate} query={params.get('q') ?? ''} />
     case 'admin':
@@ -274,7 +283,7 @@ function UserMenu({ data }: { data: BootstrapData }) {
         {me.picture ? (
           <img src={me.picture} alt="" referrerPolicy="no-referrer" className="size-8 rounded-full" />
         ) : (
-          <span className="grid size-8 place-items-center rounded-full bg-[#dcecf8] text-[12px] font-bold text-[#1e6db8]">{me.name.slice(0, 1)}</span>
+          <span className="grid size-8 place-items-center rounded-full bg-[#dcecf8] text-[12px] font-bold text-[var(--brand)]">{me.name.slice(0, 1)}</span>
         )}
         <span className="hidden text-left sm:block">
           <span className="block max-w-[140px] truncate text-[12px] font-bold text-[#334b67]">{me.name}</span>
@@ -288,7 +297,7 @@ function UserMenu({ data }: { data: BootstrapData }) {
             <p className="text-[13px] font-bold text-[#1b304b]">{me.name}</p>
             <p className="truncate text-[11px] text-[#8796a7]">{me.email}</p>
             <div className="mt-2 flex flex-wrap gap-1">
-              {roleNames.map((r) => <span key={r} className="rounded bg-[#edf5fc] px-1.5 py-0.5 text-[10px] font-semibold text-[#1e6db8]">{r}</span>)}
+              {roleNames.map((r) => <span key={r} className="rounded bg-[var(--brand-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--brand)]">{r}</span>)}
             </div>
           </div>
           <button onClick={() => { setOpen(false); setInstall(true) }} className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[12px] font-semibold text-[#55708b] hover:bg-[#f6f8fa]">

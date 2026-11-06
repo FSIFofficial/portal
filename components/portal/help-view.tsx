@@ -10,10 +10,10 @@ const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 /** 問い合わせ先の値を、メールならメール作成、URLならリンクとして表示する */
 export function ContactValue({ value }: { value: string }) {
   if (EMAIL.test(value)) {
-    return <a href={`mailto:${value}`} className="inline-flex items-center gap-1.5 font-semibold text-[#1e6db8] hover:underline"><Mail size={14} />{value}</a>
+    return <a href={`mailto:${value}`} className="inline-flex items-center gap-1.5 font-semibold text-[var(--brand)] hover:underline"><Mail size={14} />{value}</a>
   }
   if (/^https?:\/\//i.test(value)) {
-    return <a href={value} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 break-all font-semibold text-[#1e6db8] hover:underline">{value}<ExternalLink size={13} /></a>
+    return <a href={value} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 break-all font-semibold text-[var(--brand)] hover:underline">{value}<ExternalLink size={13} /></a>
   }
   return <span className="font-semibold text-[#38536f]">{value}</span>
 }
