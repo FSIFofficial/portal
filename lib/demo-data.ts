@@ -97,6 +97,6 @@ export function createDemoDb(): DemoDb {
       { id: 'l5', title: '契約書テンプレート置き場（サンプル）', url: 'https://example.com/contracts', description: '契約担当のみ', category: '事務手続き', visibleRoles: ['contract'], order: 5, updatedAt: t },
     ],
     branding: { portalName: 'FSIF Portal', tagline: 'CONNECT THE DOTS', logoUrl: '', primaryColor: '#1f6fba' },
-    discord: { configured: false, webhookHint: '', notifyDocuments: true, notifyAnnouncements: true, portalUrl: 'https://fsifofficial.github.io/portal/' },
+    discord: { configured: false, webhookHint: '', notifyDocuments: true, notifyAnnouncements: true, portalUrl: 'https://admin.fsif.jp/' },
   }
 }

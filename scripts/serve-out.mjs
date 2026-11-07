@@ -4,7 +4,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { extname, join, normalize, resolve } from 'node:path'
 
 const ROOT = resolve('out')
-const BASE = process.env.NEXT_PUBLIC_BASE_PATH || '/portal'
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? '/portal'
 const PORT = Number(process.env.PORT || 4173)
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
