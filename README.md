@@ -83,7 +83,7 @@ Googleでログインすると、GASが専用のセッションを発行しま�
 2. 「APIとサービス > OAuth同意画面」を設定（外部 / 内部はご利用のアカウントに合わせて）
 3. 「認証情報 > 認証情報を作成 > OAuthクライアントID」
    - 種類：**ウェブアプリケーション**
-   - 承認済みの JavaScript 生成元：`https://fsifofficial.github.io`（ローカル確認用に `http://localhost:3000` も追加可）
+   - 承認済みの JavaScript 生成元：`https://admin.fsif.jp`（ローカル確認用に `http://localhost:3000` も追加可）
 4. 発行されたクライアントIDを、GASのスクリプトプロパティ `GOOGLE_CLIENT_ID` と、次のGitHub変数の両方に設定
 
 ### 3. GitHub Pages
@@ -96,7 +96,11 @@ Googleでログインすると、GASが専用のセッションを発行しま�
    | `GOOGLE_CLIENT_ID` | 手順2のクライアントID |
 
    **Secrets ではなく Variables タブ** に登録してください。未設定のままだと公開処理がエラーで止まります（本番サイトがデモ画面になるのを防ぐため）。デモとして公開したい場合だけ `ALLOW_DEMO` = `true` を追加します。
-3. `main` ブランチにpushすると `.github/workflows/deploy.yml` が動き、`https://fsifofficial.github.io/portal/` に公開されます
+3. 独自ドメイン `admin.fsif.jp` で公開する設定：
+   - DNS（fsif.jp を管理しているサービス）に CNAME レコードを追加：名前 `admin` → 値 `fsifofficial.github.io`
+   - 「Settings > Pages > Custom domain」に `admin.fsif.jp` を入れて Save。DNSの確認が通ったら **Enforce HTTPS** にチェック
+   - 公開処理はドメインに合わせて自動でパスを切り替えます（独自ドメインでは `/portal` が付きません）
+4. `main` ブランチにpushすると `.github/workflows/deploy.yml` が動き、`https://admin.fsif.jp/` に公開されます
 
 ### 4. 初回ログイン後
 

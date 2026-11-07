@@ -509,7 +509,7 @@ export function ErrorDigestPanel({ initial }: { initial?: ErrorDigestStatus }) {
 // Discord への新着通知（設定画面の中に表示）
 // ---------------------------------------------------------------------------
 
-const DEFAULT_PORTAL_URL = 'https://fsifofficial.github.io/portal/'
+const DEFAULT_PORTAL_URL = 'https://admin.fsif.jp/'
 
 export function DiscordPanel({ initial }: { initial?: DiscordStatus }) {
   const { run } = useAuth()

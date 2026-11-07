@@ -248,7 +248,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
   db.securityAlerts ??= { enabled: true, recipients: 1 }
   db.uploadFolders ??= { document: { url: '', name: '', custom: false }, icon: { url: '', name: '', custom: false } }
   db.branding ??= { ...DEFAULT_BRANDING }
-  db.discord ??= { configured: false, webhookHint: '', notifyDocuments: true, notifyAnnouncements: true, portalUrl: 'https://fsifofficial.github.io/portal/' }
+  db.discord ??= { configured: false, webhookHint: '', notifyDocuments: true, notifyAnnouncements: true, portalUrl: 'https://admin.fsif.jp/' }
   // デモではメールアドレスをそのままセッションとして使う
   if (action === 'login') {
     const data = demoCall('bootstrap', String(p.idToken ?? ''), {}) as BootstrapData
@@ -318,7 +318,7 @@ function demoCall(action: string, token: string, p: Payload): unknown {
         webhookHint: item.clearWebhook ? '' : hook ? `…${hook.slice(-6)}` : db.discord.webhookHint,
         notifyDocuments: item.notifyDocuments !== false,
         notifyAnnouncements: item.notifyAnnouncements !== false,
-        portalUrl: url(item.portalUrl) || 'https://fsifofficial.github.io/portal/',
+        portalUrl: url(item.portalUrl) || 'https://admin.fsif.jp/',
       }
       return commit(db.discord)
     }
