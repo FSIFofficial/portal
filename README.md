@@ -55,6 +55,49 @@ Googleでログインすると、GASが専用のセッションを発行しま�
 
 ---
 
+## アクセス権限管理（/access/）
+
+FSIFのツール（kodama・quiz manager など）を「誰が使えるか」「ツールの中でどの役割か」をまとめて管理する画面です。
+ポータルと同じサイトの `/access/`（本番は `https://admin.fsif.jp/access/`）で動きます。
+
+- **使える人**：ポータルの**全権管理者だけ**。ログインはポータルと共通（ポータルでログインしていればそのまま開ける）
+- **メンバー**：FSIFメンバーはここで追加・管理します。追加するとポータルのアカウントも作られ、ポータルに入れるようになります。
+  退会にするとポータルのアカウントを無効にし、退会から戻すと有効に戻します（ポータルのロール・メモは変えません）。
+  既存のアカウントは「メンバー > ポータルから取り込む」でまとめて取り込めます
+- **ツール**：一覧はポータルの「ツール」から同期します（「停止中」は無効扱い）。ツールの中の役割（閲覧者・編集者など）と連携状態は、この画面の「ツール・同期 > 役割・連携を設定」で定義します
+- **付与の仕組み**：部署・役職ごとのテンプレートによる自動付与、手動のON/OFF、申請・承認、変更履歴（画面の中に説明があります）
+- **各ツールからの問い合わせ**：保存のたびに「メンバー×ツールの利用可否と役割」（実効権限）を計算して GAS に保存します。
+  各ツールの GAS は、権限管理の GAS に次のように問い合わせます（キーはツールごと）
+
+  ```js
+  // ツールの GAS 側（利用者の Google の ID トークンは、ツールの GAS で検証してから email を渡す）
+  const res = UrlFetchApp.fetch(ACCESS_GAS_URL, {
+    method: 'post',
+    contentType: 'text/plain',
+    payload: JSON.stringify({ action: 'checkAccess', payload: { toolId: 'ポータルのツールID', key: 'ツールのキー', email } }),
+  })
+  // → { ok: true, data: { allowed: true, roleKey: 'editor', roleLabel: '編集者', rank: 2, name: '…', reason: '' } }
+  ```
+
+  `listAccess`（`{ toolId, key }`）で、そのツールを使える人の一覧も取れます。
+
+### セットアップ
+
+1. 権限管理用のスプレッドシートを新しく作り（管理メンバーだけで共有）、「拡張機能 > Apps Script」に、管理者から受け取った
+   アクセス権限管理の `Code.gs` と `appsscript.json` を貼る（**GitHubには置きません**。ポータルのGASとは別のプロジェクト）
+2. スクリプト プロパティに `PORTAL_GAS_URL`（ポータルのGASのURL）を追加し、関数 `setup` を実行
+3. 「デプロイ > 新しいデプロイ > ウェブアプリ」（実行：自分／アクセス：全員）で発行された URL を、
+   GitHub の Variables に `ACCESS_GAS_URL` として登録し、`main` に push（またはデプロイを再実行）
+4. ポータルの「ツール管理」でツールを追加：URL `https://admin.fsif.jp/access/`、公開範囲は全権管理者
+5. 画面で「ツール・同期 > ポータルから同期」→ 各ツールの役割を定義 →「所属・自動付与」で部署とテンプレート →「メンバー」で取り込み・所属を設定
+6. ツールを連携するときは、GASエディタで関数 `issueToolKeys` を実行し、ログに出たツールIDとキーをそのツールの GAS に設定する
+
+> ログインの確認は、受け取ったセッションでポータルの GAS の `bootstrap` を呼んで行います（5分キャッシュ）。
+> `ACCESS_GAS_URL` が未設定のまま公開すると、`/access/` は「未設定」の案内を出します（ポータル自体には影響しません）。
+> ポータルがデモモードのとき（手元の `pnpm dev` など）は、`/access/` もブラウザ内のサンプルデータで動きます。
+
+---
+
 ## セットアップ手順
 
 ### 1. スプレッドシートとGAS
@@ -81,6 +124,9 @@ Googleでログインすると、GASが専用のセッションを発行しま�
 
 1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを作成（GASと同じアカウントでOK）
 2. 「APIとサービス > OAuth同意画面」を設定（外部 / 内部はご利用のアカウントに合わせて）
+   - 「外部」の場合は、公開ステータスを「テスト」から**「本番環境」に公開**しておく（テスト中は登録したテストユーザーしかログインできない）。
+     使うのはメールアドレスとプロフィールだけなので、Google の審査は不要です
+   - このクライアントIDは、quiz manager・イベント特設ページ作成の管理画面のGoogleログインでも共通で使う（各ツールのドメインを下の「生成元」に追加する）
 3. 「認証情報 > 認証情報を作成 > OAuthクライアントID」
    - 種類：**ウェブアプリケーション**
    - 承認済みの JavaScript 生成元：`https://admin.fsif.jp`（ローカル確認用に `http://localhost:3000` も追加可）
@@ -129,7 +175,8 @@ NEXT_PUBLIC_GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
 ### ディレクトリ
 
 ```
-app/                      ページ（中身は components/portal/）
+app/(portal)/             ポータルのページ（中身は components/portal/）
+app/(access)/access/      アクセス権限管理のページ（中身は components/access/。ポータルとは別のルートレイアウト）
 components/portal/
   portal-app.tsx          全体レイアウト・ヘッダー・ルーティング（#/tools など）
   views.tsx               ホーム / ツール / 資料館 / 検索
@@ -139,6 +186,8 @@ components/portal/
   help-view.tsx           ヘルプ・問い合わせページ
   login-screen.tsx        Googleログイン（デモモード時はユーザー選択）
   auth-provider.tsx       ログイン状態とAPI呼び出し
+components/access/        アクセス権限管理の画面（components/ui/ はその部品）
+lib/access/               アクセス権限管理の判定ルール・操作（rules.ts / commands.ts）・本番接続（live.ts）
 lib/
   api.ts                  GAS呼び出し＋デモ用バックエンド
   drive.ts                Driveリンク → 閲覧/ダウンロード/サムネイルURL変換

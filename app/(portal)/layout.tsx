@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
-import './globals.css'
-import './dark.css'
+import '../globals.css'
+import '../dark.css'
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
 
