@@ -4,6 +4,7 @@ import { ChevronDown, ExternalLink, Mail, MessageCircleQuestion, Pencil } from '
 import { can, type BootstrapData } from '@/lib/types'
 import type { Navigate } from './router'
 import { EmptyState } from './ui'
+import { LegalFooter } from './legal-page'
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
@@ -68,6 +69,7 @@ export function HelpView({ data, navigate }: { data: BootstrapData; navigate: Na
           )}
         </>
       )}
+      <LegalFooter className="mt-2 justify-start" />
     </div>
   )
 }

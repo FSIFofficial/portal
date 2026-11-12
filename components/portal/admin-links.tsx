@@ -78,8 +78,8 @@ export function LinksAdmin({ data, mutate, header }: { data: AdminData; mutate: 
             <TextInput list="link-categories" value={ed.draft.category} onChange={(e) => ed.set('category', e.target.value)} />
             <datalist id="link-categories">{categories.map((c) => <option key={c} value={c} />)}</datalist>
           </Field>
-          <Field group label="公開範囲" hint="選んだロールを持つアカウントだけに表示されます。">
-            <RolePicker roles={data.roles} value={ed.draft.visibleRoles} onChange={(v) => ed.set('visibleRoles', v)} exclude={['superadmin']} emptyLabel="未選択：ログインできる全員に表示" />
+          <Field group label="公開範囲" hint="選んだロールを持つアカウントだけに表示されます。全権管理者はいつでもすべて見られるので、全権管理者だけに見せたいときは「全権管理者」だけを選びます。">
+            <RolePicker roles={data.roles} value={ed.draft.visibleRoles} onChange={(v) => ed.set('visibleRoles', v)} emptyLabel="未選択：ログインできる全員に表示" />
           </Field>
         </Modal>
       )}

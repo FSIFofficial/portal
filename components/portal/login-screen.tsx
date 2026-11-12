@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ChevronRight, LoaderCircle, RotateCcw } from 'lucide-react'
 import { demoUsers, resetDemoDb } from '@/lib/api'
 import { DEMO_MODE, GOOGLE_CLIENT_ID, asset } from '@/lib/config'
+import { LegalFooter } from './legal-page'
 import { initGoogleIdentity, loadGoogleIdentity, promptGoogleOneTap, renderGoogleButton } from '@/lib/google'
 import type { User } from '@/lib/types'
 import { useAuth } from './auth-provider'
@@ -72,6 +73,7 @@ export function LoginScreen() {
           </div>
         </div>
         <p className="mt-6 text-center text-[11px] text-[#5b6b7c]">アカウントの追加・権限の変更は全権管理者にお問い合わせください。</p>
+        <LegalFooter className="mt-4" />
       </div>
     </main>
   )

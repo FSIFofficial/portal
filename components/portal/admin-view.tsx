@@ -196,8 +196,8 @@ function ToolsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate;
               ))}
             </div>
           </Field>
-          <Field group label="公開範囲" hint="選んだロールを持つアカウントだけに表示されます。">
-            <RolePicker roles={data.roles} value={ed.draft.visibleRoles} onChange={(v) => ed.set('visibleRoles', v)} exclude={['superadmin']} emptyLabel="未選択：ログインできる全員に表示" />
+          <Field group label="公開範囲" hint="選んだロールを持つアカウントだけに表示されます。全権管理者はいつでもすべて見られるので、全権管理者だけに見せたいときは「全権管理者」だけを選びます。">
+            <RolePicker roles={data.roles} value={ed.draft.visibleRoles} onChange={(v) => ed.set('visibleRoles', v)} emptyLabel="未選択：ログインできる全員に表示" />
           </Field>
         </Modal>
       )}
@@ -310,8 +310,8 @@ function DocumentsAdmin({ data, mutate, header }: { data: AdminData; mutate: Mut
           </div>
           <Checkbox checked={ed.draft.pinned} onChange={(v) => ed.set('pinned', v)} label="ピックアップに表示する（資料館の先頭・ホームの「はじめての方へ」）" />
           <div className="mt-3">
-            <Field group label="公開範囲" hint="選んだロールを持つアカウントだけに表示されます。">
-              <RolePicker roles={data.roles} value={ed.draft.visibleRoles} onChange={(v) => ed.set('visibleRoles', v)} exclude={['superadmin']} emptyLabel="未選択：ログインできる全員に表示" />
+            <Field group label="公開範囲" hint="選んだロールを持つアカウントだけに表示されます。全権管理者はいつでもすべて見られるので、全権管理者だけに見せたいときは「全権管理者」だけを選びます。">
+              <RolePicker roles={data.roles} value={ed.draft.visibleRoles} onChange={(v) => ed.set('visibleRoles', v)} emptyLabel="未選択：ログインできる全員に表示" />
             </Field>
           </div>
           <div className="mb-4 rounded-xl border border-[#d9e8f3] bg-[#f7fafd] p-3">
@@ -397,7 +397,7 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
           <Checkbox checked={ed.draft.active} onChange={(v) => ed.set('active', v)} label="表示する" />
           <Checkbox checked={!!ed.draft.requireAck} onChange={(v) => ed.set('requireAck', v)} label={<><b>確認を求める</b><span className="block text-[11px] leading-5 text-[#5b6b7c]">「確認しました」ボタンを表示し、押すまでお知らせが消えなくなります。誰が確認したかを一覧で見られます。</span></>} />
           <div className="mt-3">
-            <Field group label="公開範囲"><RolePicker roles={data.roles} value={ed.draft.visibleRoles} onChange={(v) => ed.set('visibleRoles', v)} exclude={['superadmin']} emptyLabel="未選択：ログインできる全員に表示" /></Field>
+            <Field group label="公開範囲"><RolePicker roles={data.roles} value={ed.draft.visibleRoles} onChange={(v) => ed.set('visibleRoles', v)} emptyLabel="未選択：ログインできる全員に表示" /></Field>
             {ed.isNew && <NotifyCheckbox checked={ed.draft.notify !== false} onChange={(v) => ed.set('notify', v)} restricted={ed.draft.visibleRoles.length > 0} />}
           </div>
         </Modal>
