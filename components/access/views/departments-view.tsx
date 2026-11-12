@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { applyTemplate, previewTemplateApplication, removeDepartment, saveDepartment, type DepartmentInput, type TemplateRow } from "@/lib/access/commands"
-import { departmentHead, findMember, findTool, findToolRole, hasFullAccess } from "@/lib/access/rules"
+import { departmentDescendants, departmentHead, departmentPath, departmentTree, findMember, findTool, findToolRole, hasFullAccess } from "@/lib/access/rules"
 import type { TemplatePosition } from "@/lib/access/types"
 import { cn } from "@/lib/utils"
 import { Callout, EmptyState, Field, NativeSelect, PageHeader, Panel, Tag } from "../shared"
@@ -30,7 +30,7 @@ export function DepartmentsView() {
         description="部署と役職ごとのテンプレート。所属・任命時に、ここで指定したツールと初期役割が付与されます。"
         actions={
           rep && (
-            <Button size="lg" onClick={() => setEditing({ name: "", description: "" })}>
+            <Button size="lg" onClick={() => setEditing({ name: "", description: "", parentId: null })}>
               <Plus className="size-4" />
               部署を追加
             </Button>
@@ -45,8 +45,8 @@ export function DepartmentsView() {
       <div className="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <Panel className="h-fit">
           <ul className="flex flex-col p-1.5" aria-label="部署">
-            {data.departments.map((d) => (
-              <li key={d.id}>
+            {departmentTree(data).map(({ dept: d, depth }) => (
+              <li key={d.id} style={{ paddingLeft: `${depth * 1}rem` }}>
                 <button
                   type="button"
                   onClick={() => setDeptId(d.id)}
@@ -70,9 +70,10 @@ export function DepartmentsView() {
             <Panel className="flex flex-col gap-1 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-base font-bold">{dept.name}</h2>
+                {dept.parentId && <span className="text-xs text-muted-foreground">{departmentPath(data, dept.id)}</span>}
                 {rep && (
                   <div className="ml-auto flex gap-1">
-                    <Button variant="outline" size="sm" onClick={() => setEditing({ id: dept.id, name: dept.name, description: dept.description })}>
+                    <Button variant="outline" size="sm" onClick={() => setEditing({ id: dept.id, name: dept.name, description: dept.description, parentId: dept.parentId ?? null })}>
                       <Pencil className="size-3.5" />
                       編集
                     </Button>
@@ -124,8 +125,10 @@ export function DepartmentsView() {
 }
 
 function DepartmentDialog({ initial, onClose, onSaved }: { initial: DepartmentInput; onClose: () => void; onSaved: (id?: string) => void }) {
-  const { actor, run } = useStore()
+  const { data, actor, run } = useStore()
   const [form, setForm] = useState(initial)
+  // 自分自身と配下は親にできない
+  const blocked = initial.id ? departmentDescendants(data, initial.id) : []
   const [busy, setBusy] = useState(false)
   const submit = async () => {
     setBusy(true)
@@ -161,6 +164,19 @@ function DepartmentDialog({ initial, onClose, onSaved }: { initial: DepartmentIn
         >
           <Field label="部署名" htmlFor="d-name">
             <Input id="d-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="h-9" required />
+          </Field>
+          <Field label="親の部署" htmlFor="d-parent" hint="事業部長は、自分の部署の配下の部署のメンバーも管理できます。">
+            <NativeSelect id="d-parent" value={form.parentId ?? ""} onChange={(e) => setForm({ ...form, parentId: e.target.value || null })}>
+              <option value="">なし（最上位）</option>
+              {departmentTree(data)
+                .filter(({ dept }) => !blocked.includes(dept.id))
+                .map(({ dept, depth }) => (
+                  <option key={dept.id} value={dept.id}>
+                    {"　".repeat(depth)}
+                    {dept.name}
+                  </option>
+                ))}
+            </NativeSelect>
           </Field>
           <Field label="説明" htmlFor="d-desc">
             <Input id="d-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="h-9" />

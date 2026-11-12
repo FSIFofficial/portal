@@ -1,4 +1,4 @@
-import { resolveEffectiveAccess } from "./rules"
+import { memberEmails, resolveEffectiveAccess } from "./rules"
 import type { AppData } from "./types"
 
 /** 各ツールが問い合わせる「実効権限」の1行（GAS の「実効権限」シートに書き出す） */
@@ -27,14 +27,15 @@ const REASON: Record<string, string> = {
  * 全メンバー×全ツールの利用可否と役割を計算する。画面の権限一覧と同じ resolveEffectiveAccess を使う。
  * 保存のたびに画面が計算して GAS へ送り、各ツールは GAS の checkAccess でこの結果を引く。
  * 退会者・利用不可の行も残す（ツール側で「なぜ使えないか」を出せるように）。
+ * メールアドレスを複数持つメンバーは、アドレスごとに同じ内容の行を作る（どのアカウントでログインしても同じ権限）。
  */
 export function computeEffectiveRows(data: AppData): EffectiveRow[] {
   const rows: EffectiveRow[] = []
   for (const m of data.members) {
     for (const t of data.tools) {
       const ea = resolveEffectiveAccess(data, m.id, t.id)
-      rows.push({
-        email: m.email.toLowerCase(),
+      for (const email of memberEmails(m)) rows.push({
+        email,
         name: m.name,
         memberId: m.id,
         toolId: t.id,

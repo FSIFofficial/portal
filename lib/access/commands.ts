@@ -3,6 +3,12 @@ import { toolFromPortal } from "./portal"
 import {
   activeGrants,
   hasFullAccess,
+  isOrgAccount,
+  departmentAncestors,
+  departmentDescendants,
+  findMemberByEmail,
+  managedDepartmentIds,
+  memberEmails,
   applyDepartmentRoleGrants,
   canAssignToolRole,
   canManageTarget,
@@ -235,6 +241,7 @@ export function appointDivisionHead(data: AppData, actorId: string, memberId: st
   if (!hasFullAccess(data, actorId)) fail("事業部長の任命は代表のみ行えます")
   const m = findMember(data, memberId) ?? fail("メンバーが見つかりません")
   if (m.status !== "active") fail("在籍中のメンバーのみ任命できます")
+  if (isOrgAccount(data, memberId)) fail("団体垢は事業部長にできません")
   if (!memberDepartmentIds(data, memberId).includes(departmentId)) fail("対象部署に所属しているメンバーのみ任命できます")
   if (data.orgRoles.some((r) => r.kind === "division_head" && r.departmentId === departmentId)) {
     fail("この部署には既に事業部長がいます。先に解除してください")
@@ -302,8 +309,10 @@ export interface TransferPreview {
 export function previewTransfer(data: AppData, actorId: string, roleId: string, toId: string): TransferPreview {
   const role = data.orgRoles.find((r) => r.id === roleId)
   if (!role) return { roleLabel: "", scopesMoving: [], successorGrants: [], youLose: [] }
-  const remainingHeads = headDepartmentIds(data, actorId).filter((x) => x !== role.departmentId)
-  const scopesMoving = role.kind === "division_head" && remainingHeads.length === 0 ? data.scopes.filter((s) => s.grantedTo === actorId) : []
+  // 失うもの・移るものは「役割を持っている人」基準（代表が他人の事業部長を譲渡する場合もある）
+  const holderId = role.memberId
+  const remainingHeads = headDepartmentIds(data, holderId).filter((x) => x !== role.departmentId)
+  const scopesMoving = role.kind === "division_head" && remainingHeads.length === 0 ? data.scopes.filter((s) => s.grantedTo === holderId) : []
   const roleLabel = role.kind === "representative" ? "代表" : `${deptName(data, role.departmentId!)} 事業部長`
   const youLose =
     role.kind === "representative"
@@ -323,10 +332,13 @@ export function previewTransfer(data: AppData, actorId: string, roleId: string, 
 
 export function transferOrganizationRole(data: AppData, actorId: string, roleId: string, toId: string): AppData {
   const role = data.orgRoles.find((r) => r.id === roleId) ?? fail("役割が見つかりません")
-  if (role.memberId !== actorId) fail("役割を持つ本人のみ譲渡できます")
-  if (toId === actorId) fail("自分自身には譲渡できません")
+  if (role.kind === "org_account") fail("団体垢は譲渡できません")
+  if (role.memberId !== actorId && !hasFullAccess(data, actorId)) fail("役割を持つ本人か代表のみ譲渡できます")
+  const fromId = role.memberId
+  if (toId === fromId) fail("今の担当者には譲渡できません")
   const to = findMember(data, toId) ?? fail("後任が見つかりません")
   if (to.status !== "active") fail("在籍中のメンバーのみ後任にできます")
+  if (isOrgAccount(data, toId)) fail("団体垢は後任にできません")
   if (role.kind === "division_head" && !memberDepartmentIds(data, toId).includes(role.departmentId!)) {
     fail("事業部長は自部署のメンバーにのみ譲渡できます")
   }
@@ -337,32 +349,35 @@ export function transferOrganizationRole(data: AppData, actorId: string, roleId:
   r.assignedAt = nowIso()
   for (const s of d.scopes) if (preview.scopesMoving.some((m) => m.id === s.id)) s.grantedTo = toId
   if (role.kind === "division_head") addGrantsFromPreview(d, applyDepartmentRoleGrants(d, toId, role.departmentId!, "division_head"))
-  d.transfers.unshift({ id: newId("tr"), kind: role.kind, departmentId: role.departmentId, fromId: actorId, toId, at: nowIso() })
+  d.transfers.unshift({ id: newId("tr"), kind: role.kind, departmentId: role.departmentId, fromId, toId, at: nowIso() })
   const diff = diffForMembers(data, d, [toId])
+  const byOther = fromId !== actorId
   audit(d, {
     actorId,
     source: "transfer",
-    summary: `${preview.roleLabel} を ${memberName(d, actorId)} から ${to.name} へ譲渡`,
-    memberIds: [actorId, toId],
+    summary: `${preview.roleLabel} を ${memberName(d, fromId)} から ${to.name} へ譲渡`,
+    memberIds: [fromId, toId],
     toolIds: [],
     items: [
-      { memberId: actorId, label: memberName(d, actorId), before: preview.roleLabel, after: "—" },
+      { memberId: fromId, label: memberName(d, fromId), before: preview.roleLabel, after: "—" },
       { memberId: toId, label: to.name, before: "—", after: preview.roleLabel },
       ...(diff.get(toId) ?? []),
     ],
   })
   notify(d, {
-    recipientId: actorId,
+    recipientId: fromId,
     kind: "transfer",
-    title: `${preview.roleLabel} を譲渡しました`,
-    body: `${to.name} さんへ ${preview.roleLabel} を譲渡しました。あなたの当該権限は解除されています。`,
+    title: byOther ? `${preview.roleLabel} が ${to.name} さんへ移りました` : `${preview.roleLabel} を譲渡しました`,
+    body: byOther
+      ? `${memberName(d, actorId)} さんの操作で、${preview.roleLabel} が ${to.name} さんへ移りました。あなたの当該権限は解除されています。`
+      : `${to.name} さんへ ${preview.roleLabel} を譲渡しました。あなたの当該権限は解除されています。`,
     actorId,
   })
   notify(d, {
     recipientId: toId,
     kind: "transfer",
     title: `${preview.roleLabel} を引き継ぎました`,
-    body: `${memberName(d, actorId)} さんから ${preview.roleLabel} を引き継ぎました。`,
+    body: `${memberName(d, fromId)} さんから ${preview.roleLabel} を引き継ぎました。`,
     items: diff.get(toId) ?? [],
     actorId,
   })
@@ -432,6 +447,7 @@ export function removeScope(data: AppData, actorId: string, scopeId: string): Ap
 export function saveRoute(data: AppData, actorId: string, input: Omit<ApprovalRoute, "id"> & { id?: string }): AppData {
   if (!hasFullAccess(data, actorId)) fail("申請先を設定できるのは代表のみです")
   if (input.alternateId && input.alternateId === input.approverId) fail("担当者と代替担当者は別の人を選んでください")
+  if (isOrgAccount(data, input.approverId) || (input.alternateId && isOrgAccount(data, input.alternateId))) fail("団体垢は申請先にできません")
   const d = clone(data)
   const entry = { ...input, id: input.id ?? newId("rt") }
   const idx = d.routes.findIndex((r) => r.id === entry.id)
@@ -455,9 +471,13 @@ export interface MemberInput {
   id?: string
   name: string
   email: string
+  /** 追加のメールアドレス */
+  altEmails?: string[]
   departmentIds: string[]
   status: EmploymentStatus
 }
+
+const cleanEmails = (list: string[] | undefined) => [...new Set((list ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean))]
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -466,7 +486,13 @@ export function validateMemberInput(data: AppData, actorId: string, input: Membe
   if (!input.name.trim()) errors.name = "氏名を入力してください"
   const email = input.email.trim().toLowerCase()
   if (!EMAIL_RE.test(email)) errors.email = "メールアドレスの形式が正しくありません"
-  else if (data.members.some((m) => m.email.toLowerCase() === email && m.id !== input.id)) errors.email = "このメールアドレスは既に登録されています"
+  else if (data.members.some((m) => m.id !== input.id && memberEmails(m).includes(email))) errors.email = "このメールアドレスは既に登録されています"
+  const alts = cleanEmails(input.altEmails)
+  const badAlt = alts.find((e) => !EMAIL_RE.test(e))
+  const dupAlt = alts.find((e) => data.members.some((m) => m.id !== input.id && memberEmails(m).includes(e)))
+  if (badAlt) errors.altEmails = `「${badAlt}」はメールアドレスの形式が正しくありません`
+  else if (dupAlt) errors.altEmails = `「${dupAlt}」は他のメンバーに登録されています`
+  else if (alts.includes(email)) errors.altEmails = "主なメールアドレスと同じアドレスが入っています"
 
   const rep = hasFullAccess(data, actorId)
   if (!rep) {
@@ -478,7 +504,7 @@ export function validateMemberInput(data: AppData, actorId: string, input: Membe
         if (!p.ok) errors.form = p.reason ?? "このメンバーは編集できません"
       }
       if (input.departmentIds.length === 0) errors.departmentIds = "所属未設定にできるのは代表のみです"
-      else if (input.departmentIds.some((x) => !heads.includes(x))) errors.departmentIds = "管理範囲外の所属は設定できません"
+      else if (input.departmentIds.some((x) => !managedDepartmentIds(data, actorId).includes(x))) errors.departmentIds = "管理範囲外の所属は設定できません"
     }
   }
   if (input.id) {
@@ -516,14 +542,20 @@ export function saveMember(data: AppData, actorId: string, input: MemberInput): 
   const items: ChangeItem[] = []
 
   if (isNew) {
-    d.members.push({ id, name: input.name.trim(), email: input.email.trim().toLowerCase(), status: input.status, joinedAt: at })
+    const alts = cleanEmails(input.altEmails)
+    d.members.push({ id, name: input.name.trim(), email: input.email.trim().toLowerCase(), ...(alts.length ? { altEmails: alts } : {}), status: input.status, joinedAt: at })
     items.push({ memberId: id, label: "メンバー追加", before: "—", after: input.name.trim() })
   } else {
     const m = d.members.find((x) => x.id === id)!
     if (m.name !== input.name.trim()) items.push({ memberId: id, label: "氏名", before: m.name, after: input.name.trim() })
     if (m.email !== input.email.trim().toLowerCase()) items.push({ memberId: id, label: "メール", before: m.email, after: input.email.trim().toLowerCase() })
+    const alts = cleanEmails(input.altEmails)
+    const prevAlts = m.altEmails ?? []
+    if (alts.join(",") !== prevAlts.join(",")) items.push({ memberId: id, label: "追加のメール", before: prevAlts.join("、") || "なし", after: alts.join("、") || "なし" })
     m.name = input.name.trim()
     m.email = input.email.trim().toLowerCase()
+    if (alts.length) m.altEmails = alts
+    else delete m.altEmails
   }
 
   const before = isNew ? [] : memberDepartmentIds(data, id)
@@ -853,25 +885,38 @@ export interface DepartmentInput {
   id?: string
   name: string
   description: string
+  /** 親の部署。null は最上位 */
+  parentId?: string | null
 }
 
 export function saveDepartment(data: AppData, actorId: string, input: DepartmentInput): AppData {
   if (!hasFullAccess(data, actorId)) fail("部署を追加・編集できるのは代表のみです")
   const name = input.name.trim()
   if (!name) fail("部署名を入力してください")
-  if (data.departments.some((x) => x.name === name && x.id !== input.id)) fail("同じ名前の部署があります")
+  const parentId = input.parentId || null
+  // 同じ親の中で名前が重ならないようにする（別の事業本部に同じ名前の部があるのはよい）
+  if (data.departments.some((x) => x.name === name && (x.parentId || null) === parentId && x.id !== input.id)) fail("同じ階層に同じ名前の部署があります")
+  if (parentId) {
+    if (!findDepartment(data, parentId)) fail("親の部署が見つかりません")
+    if (input.id && departmentDescendants(data, input.id).includes(parentId)) fail("自分自身や配下の部署を親にはできません")
+  }
   const d = clone(data)
   const prev = input.id ? d.departments.find((x) => x.id === input.id) : undefined
   if (input.id && !prev) fail("部署が見つかりません")
+  const parentName = (id: string | null | undefined) => (id ? deptName(d, id) : "最上位")
   if (prev) {
-    if (prev.name === name && prev.description === input.description.trim()) fail("変更はありません")
+    if (prev.name === name && prev.description === input.description.trim() && (prev.parentId || null) === parentId) fail("変更はありません")
+    const items: ChangeItem[] = []
+    if (prev.name !== name) items.push({ label: "部署名", before: prev.name, after: name })
+    if ((prev.parentId || null) !== parentId) items.push({ label: "親の部署", before: parentName(prev.parentId), after: parentName(parentId) })
     const before = prev.name
     prev.name = name
     prev.description = input.description.trim()
-    audit(d, { actorId, source: "member", summary: `部署「${before}」を更新`, memberIds: [], toolIds: [], items: [{ label: "部署名", before, after: name }] })
+    prev.parentId = parentId
+    audit(d, { actorId, source: "member", summary: `部署「${before}」を更新`, memberIds: [], toolIds: [], items })
   } else {
-    d.departments.push({ id: newId("d"), name, description: input.description.trim() })
-    audit(d, { actorId, source: "member", summary: `部署「${name}」を追加`, memberIds: [], toolIds: [], items: [{ label: "部署", before: "—", after: name }] })
+    d.departments.push({ id: newId("d"), name, description: input.description.trim(), parentId })
+    audit(d, { actorId, source: "member", summary: `部署「${name}」を追加`, memberIds: [], toolIds: [], items: [{ label: "部署", before: "—", after: parentId ? `${parentName(parentId)} / ${name}` : name }] })
   }
   d.version += 1
   return d
@@ -880,6 +925,7 @@ export function saveDepartment(data: AppData, actorId: string, input: Department
 export function removeDepartment(data: AppData, actorId: string, departmentId: string): AppData {
   if (!hasFullAccess(data, actorId)) fail("部署を削除できるのは代表のみです")
   const dept = findDepartment(data, departmentId) ?? fail("部署が見つかりません")
+  if (data.departments.some((x) => x.parentId === departmentId)) fail("配下に部署がある部署は削除できません。先に配下の部署を移すか削除してください")
   if (data.memberships.some((ms) => ms.departmentId === departmentId)) fail("所属メンバーがいる部署は削除できません。先にメンバーの所属を外してください")
   if (data.orgRoles.some((r) => r.departmentId === departmentId)) fail("事業部長がいる部署は削除できません。先に解除してください")
   const d = clone(data)
@@ -958,7 +1004,7 @@ export interface ImportMemberInput {
 export function importMembers(data: AppData, actorId: string, list: ImportMemberInput[]): { data: AppData; added: number } {
   if (!hasFullAccess(data, actorId)) fail("メンバーを取り込めるのは代表のみです")
   const d = clone(data)
-  const known = new Set(d.members.map((m) => m.email.toLowerCase()))
+  const known = new Set(d.members.flatMap(memberEmails))
   const at = nowIso()
   const items: ChangeItem[] = []
   for (const u of list) {
@@ -982,7 +1028,7 @@ export function importMembers(data: AppData, actorId: string, list: ImportMember
  */
 export function ensureOperatorMember(data: AppData, input: { name: string; email: string }): { data: AppData; memberId: string; created: boolean } {
   const email = input.email.trim().toLowerCase()
-  const existing = data.members.find((m) => m.email.toLowerCase() === email)
+  const existing = findMemberByEmail(data, email)
   if (existing) return { data, memberId: existing.id, created: false }
   const d = clone(data)
   const id = newId("m")
@@ -991,4 +1037,78 @@ export function ensureOperatorMember(data: AppData, input: { name: string; email
   audit(d, { actorId: id, source: "member", summary: `${name} を追加（ポータルの全権管理者として初回ログイン）`, memberIds: [id], toolIds: [], items: [{ memberId: id, label: "メンバー追加", before: "—", after: name }] })
   d.version += 1
   return { data: d, memberId: id, created: true }
+}
+
+/* ---------- 代表の任命・解除、団体垢 ---------- */
+
+/**
+ * 代表を任命する。代表がいなければ新しく任命し、いれば任命した人へ移す（代表は1人）。
+ * 本番では、ポータルの全権管理者（data.operators）が任命する。
+ */
+export function appointRepresentative(data: AppData, actorId: string, memberId: string): AppData {
+  if (!hasFullAccess(data, actorId)) fail("代表を任命できるのは代表・全権管理者のみです")
+  const m = findMember(data, memberId) ?? fail("メンバーが見つかりません")
+  if (m.status !== "active") fail("在籍中のメンバーのみ任命できます")
+  if (isOrgAccount(data, memberId)) fail("団体垢は代表にできません")
+  const current = data.orgRoles.find((r) => r.kind === "representative")
+  if (current?.memberId === memberId) fail(`${m.name} さんは既に代表です`)
+  if (current) return transferOrganizationRole(data, actorId, current.id, memberId)
+  const d = clone(data)
+  d.orgRoles.push({ id: newId("or"), memberId, kind: "representative", assignedAt: nowIso() })
+  audit(d, {
+    actorId,
+    source: "appointment",
+    summary: `${m.name} を代表に任命`,
+    memberIds: [memberId],
+    toolIds: [],
+    items: [{ memberId, label: "組織役割", before: "—", after: "代表" }],
+  })
+  notify(d, { recipientId: memberId, kind: "org", title: "代表に任命されました", body: "全メンバー・全ツールの権限を管理できるようになりました。", actorId })
+  d.version += 1
+  return d
+}
+
+export function dismissRepresentative(data: AppData, actorId: string): AppData {
+  if (!hasFullAccess(data, actorId)) fail("代表を解除できるのは代表・全権管理者のみです")
+  const role = data.orgRoles.find((r) => r.kind === "representative") ?? fail("代表は任命されていません")
+  // デモ（全権管理者のいない状態）で解除すると、誰も代表を任命できなくなるため止める
+  if (!(data.operators ?? []).length) fail("代表を解除すると全体を管理できる人がいなくなります。解除ではなく譲渡してください")
+  const d = clone(data)
+  d.orgRoles = d.orgRoles.filter((r) => r.id !== role.id)
+  audit(d, {
+    actorId,
+    source: "appointment",
+    summary: `${memberName(d, role.memberId)} の代表を解除`,
+    memberIds: [role.memberId],
+    toolIds: [],
+    items: [{ memberId: role.memberId, label: "組織役割", before: "代表", after: "—" }],
+  })
+  notify(d, { recipientId: role.memberId, kind: "org", title: "代表が解除されました", body: "代表が解除されました。ツール権限はそのまま保持されています。", actorId })
+  d.version += 1
+  return d
+}
+
+/** 団体垢（団体・部署で共用するアカウント）にする／個人に戻す */
+export function setOrgAccount(data: AppData, actorId: string, memberId: string, on: boolean): AppData {
+  if (!hasFullAccess(data, actorId)) fail("団体垢を設定できるのは代表・全権管理者のみです")
+  const m = findMember(data, memberId) ?? fail("メンバーが見つかりません")
+  const current = data.orgRoles.find((r) => r.kind === "org_account" && r.memberId === memberId)
+  if (on && current) fail(`${m.name} は既に団体垢です`)
+  if (!on && !current) fail(`${m.name} は団体垢ではありません`)
+  if (on && (isRepresentative(data, memberId) || isDivisionHead(data, memberId))) fail("代表・事業部長は団体垢にできません。先に譲渡・解除してください")
+  if (on && data.requests.some((r) => r.approverId === memberId && r.status === "pending")) fail("承認待ちの申請の担当者になっているため、団体垢にできません")
+  if (on && data.routes.some((r) => r.approverId === memberId || r.alternateId === memberId)) fail("申請先（承認者・代替承認者）に設定されているため、団体垢にできません。先に申請先を変更してください")
+  const d = clone(data)
+  if (on) d.orgRoles.push({ id: newId("or"), memberId, kind: "org_account", assignedAt: nowIso() })
+  else d.orgRoles = d.orgRoles.filter((r) => r.id !== current!.id)
+  audit(d, {
+    actorId,
+    source: "appointment",
+    summary: on ? `${m.name} を団体垢に設定` : `${m.name} の団体垢を解除`,
+    memberIds: [memberId],
+    toolIds: [],
+    items: [{ memberId, label: "アカウントの種類", before: on ? "個人" : "団体垢", after: on ? "団体垢" : "個人" }],
+  })
+  d.version += 1
+  return d
 }

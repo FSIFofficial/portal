@@ -11,6 +11,8 @@ import {
   orgRoleLabels,
   resolveEffectiveAccess,
   toolStatus,
+  departmentDescendants,
+  departmentTree,
 } from "@/lib/access/rules"
 import type { EmploymentStatus } from "@/lib/access/types"
 import { cn } from "@/lib/utils"
@@ -70,7 +72,8 @@ export function MatrixView() {
       if (q && !m.name.toLowerCase().includes(q) && !m.email.toLowerCase().includes(q)) return false
       if (status !== "all" && m.status !== status) return false
       const depts = memberDepartmentIds(data, m.id)
-      if (dept === "none" ? depts.length > 0 : dept !== "all" && !depts.includes(dept)) return false
+      // 上の部署を選ぶと、配下の部署のメンバーも出す
+      if (dept === "none" ? depts.length > 0 : dept !== "all" && !depts.some((d) => departmentDescendants(data, dept).includes(d))) return false
       if (accessFilter !== "all" || onlyDirty) {
         const hit = tools.some((t) => {
           if (onlyDirty && !isDirty(m.id, t.id)) return false
@@ -126,8 +129,9 @@ export function MatrixView() {
           </div>
           <NativeSelect aria-label="所属" value={dept} onChange={(e) => setDept(e.target.value)}>
             <option value="all">すべての所属</option>
-            {data.departments.map((d) => (
+            {departmentTree(data).map(({ dept: d, depth }) => (
               <option key={d.id} value={d.id}>
+                {"　".repeat(depth)}
                 {d.name}
               </option>
             ))}

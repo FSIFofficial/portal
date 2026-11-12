@@ -3,7 +3,10 @@ export type EmploymentStatus = "active" | "suspended" | "withdrawn"
 export interface Member {
   id: string
   name: string
+  /** 主なメールアドレス（通知・表示に使う） */
   email: string
+  /** 追加のメールアドレス（別の Google アカウントなど）。どれでログインしても同じ人として扱う */
+  altEmails?: string[]
   status: EmploymentStatus
   joinedAt: string
 }
@@ -12,6 +15,8 @@ export interface Department {
   id: string
   name: string
   description: string
+  /** 親の部署（階層）。null・未設定は最上位 */
+  parentId?: string | null
 }
 
 export interface Membership {
@@ -20,8 +25,12 @@ export interface Membership {
   since: string
 }
 
-/** 組織上の役割。ツール内部の役割（ToolRole）とは別の型として扱う。 */
-export type OrganizationRoleKind = "representative" | "division_head"
+/**
+ * 組織上の役割。ツール内部の役割（ToolRole）とは別の型として扱う。
+ * org_account（団体垢）は、個人ではなく団体・部署で共用するアカウントの印。
+ * ツール権限は付与できるが、代表・事業部長・申請の承認者にはなれない。
+ */
+export type OrganizationRoleKind = "representative" | "division_head" | "org_account"
 
 export interface OrganizationRole {
   id: string

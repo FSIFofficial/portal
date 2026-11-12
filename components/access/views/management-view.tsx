@@ -1,12 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   appointDivisionHead,
+  appointRepresentative,
   dismissDivisionHead,
+  dismissRepresentative,
+  setOrgAccount,
   previewPositionGrants,
   previewTransfer,
   removeRoute,
@@ -17,7 +20,7 @@ import {
 } from "@/lib/access/commands"
 import { DISMISS_NOTICE, TRANSFER_WARNING } from "@/lib/access/assumptions"
 import { formatDate } from "@/lib/access/format"
-import { findDepartment, findMember, findTool, findToolRole, hasFullAccess } from "@/lib/access/rules"
+import { departmentPath, departmentTree, findDepartment, findMember, findTool, findToolRole, hasFullAccess, isDivisionHead, isOrgAccount, isRepresentative } from "@/lib/access/rules"
 import type { ScopeAction } from "@/lib/access/types"
 import { Callout, EmptyState, Field, NativeSelect, PageHeader, Panel, Tag } from "../shared"
 import { useStore } from "../store"
@@ -44,42 +47,62 @@ export function ManagementView() {
   const [dismissRoleId, setDismissRoleId] = useState<string | null>(null)
   const [scopeOpen, setScopeOpen] = useState(false)
   const [routeOpen, setRouteOpen] = useState(false)
-  const { run } = useStore()
+  const [repOpen, setRepOpen] = useState(false)
+  const [orgOpen, setOrgOpen] = useState(false)
+  const { run, live } = useStore()
+  const orgAccounts = data.orgRoles.filter((r) => r.kind === "org_account")
 
   const repRole = data.orgRoles.find((r) => r.kind === "representative")
   const visibleScopes = rep ? data.scopes : data.scopes.filter((s) => s.grantedTo === actor.id)
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="管理権限設定" description="代表・事業部長の任命と譲渡、他部署への管理範囲の拡張、申請先の設定。" />
+      <PageHeader title="管理権限設定" description="代表・事業部長の任命と譲渡、団体垢、他部署への管理範囲の拡張、申請先の設定。" />
 
       <Panel>
         <SectionHeader title="組織上の役割" description="代表と各部署の事業部長。譲渡すると管理範囲も後任へ移ります。" />
         <ul className="divide-y">
-          {repRole && (
-            <li className="flex flex-wrap items-center gap-3 p-4">
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="flex items-center gap-1.5 text-sm font-bold">
-                  代表 <Tag tone="primary">全体管理</Tag>
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {findMember(data, repRole.memberId)?.name} ／ {formatDate(repRole.assignedAt)}〜
-                </span>
-              </div>
-              {repRole.memberId === actor.id && (
+          <li className="flex flex-wrap items-center gap-3 p-4">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="flex items-center gap-1.5 text-sm font-bold">
+                代表 <Tag tone="primary">全体管理</Tag>
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {repRole ? `${findMember(data, repRole.memberId)?.name} ／ ${formatDate(repRole.assignedAt)}〜` : "未任命"}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {repRole && (rep || repRole.memberId === actor.id) && (
                 <Button variant="outline" size="lg" onClick={() => setTransferRoleId(repRole.id)}>
-                  代表を譲渡
+                  {repRole.memberId === actor.id ? "代表を譲渡" : "代表を変更"}
                 </Button>
               )}
-            </li>
-          )}
-          {data.departments.map((d) => {
+              {repRole && rep && live && (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => {
+                    if (window.confirm(`${findMember(data, repRole.memberId)?.name} さんの代表を解除しますか？（ツール権限はそのまま残ります）`))
+                      run("代表の解除", (d) => dismissRepresentative(d, actor.id), "代表を解除しました")
+                  }}
+                >
+                  解除
+                </Button>
+              )}
+              {!repRole && rep && (
+                <Button size="lg" onClick={() => setRepOpen(true)}>
+                  任命
+                </Button>
+              )}
+            </div>
+          </li>
+          {departmentTree(data).map(({ dept: d }) => {
             const role = data.orgRoles.find((r) => r.kind === "division_head" && r.departmentId === d.id)
             const holder = role ? findMember(data, role.memberId) : undefined
             return (
               <li key={d.id} className="flex flex-wrap items-center gap-3 p-4">
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="text-sm font-bold">{d.name} 事業部長</span>
+                  <span className="text-sm font-bold">{departmentPath(data, d.id)} 事業部長</span>
                   <span className="text-xs text-muted-foreground">
                     {holder ? `${holder.name} ／ ${formatDate(role!.assignedAt)}〜` : "未任命"}
                   </span>
@@ -105,6 +128,49 @@ export function ManagementView() {
             )
           })}
         </ul>
+      </Panel>
+
+      <Panel>
+        <SectionHeader
+          title="団体垢"
+          description="団体・部署で共用するアカウント（例：広報用の共用アカウント）。ツール権限は付与できますが、代表・事業部長・申請の承認者にはなれません。"
+          action={
+            rep && (
+              <Button size="lg" onClick={() => setOrgOpen(true)}>
+                <Plus className="size-4" />
+                追加
+              </Button>
+            )
+          }
+        />
+        {orgAccounts.length === 0 ? (
+          <EmptyState title="団体垢はありません" icon={<Users className="size-5" aria-hidden />} />
+        ) : (
+          <ul className="divide-y">
+            {orgAccounts.map((r) => {
+              const m = findMember(data, r.memberId)
+              return (
+                <li key={r.id} className="flex flex-wrap items-center gap-3 p-4">
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="text-sm font-bold">{m?.name}</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {m?.email} ／ {formatDate(r.assignedAt)}〜
+                    </span>
+                  </div>
+                  {rep && (
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      onClick={() => run("団体垢の解除", (d) => setOrgAccount(d, actor.id, r.memberId, false), "個人のアカウントに戻しました")}
+                    >
+                      個人に戻す
+                    </Button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </Panel>
 
       <Panel>
@@ -206,7 +272,86 @@ export function ManagementView() {
       {dismissRoleId && <DismissDialog roleId={dismissRoleId} onClose={() => setDismissRoleId(null)} />}
       {scopeOpen && <ScopeDialog onClose={() => setScopeOpen(false)} />}
       {routeOpen && <RouteDialog onClose={() => setRouteOpen(false)} />}
+      {repOpen && (
+        <PickMemberDialog
+          title="代表を任命"
+          description="代表は全メンバー・全ツールの権限を管理できます（1人だけ）。"
+          label="任命するメンバー"
+          candidates={data.members.filter((m) => m.status === "active" && !isOrgAccount(data, m.id))}
+          submitLabel="任命する"
+          onSubmit={(memberId) => run("代表の任命", (d) => appointRepresentative(d, actor.id, memberId), "代表を任命しました")}
+          onClose={() => setRepOpen(false)}
+        />
+      )}
+      {orgOpen && (
+        <PickMemberDialog
+          title="団体垢を追加"
+          description="団体・部署で共用しているアカウントを選びます。メンバーにいない場合は、先に「メンバー」で追加してください。"
+          label="アカウント"
+          candidates={data.members.filter((m) => m.status !== "withdrawn" && !isOrgAccount(data, m.id) && !isRepresentative(data, m.id) && !isDivisionHead(data, m.id))}
+          submitLabel="団体垢にする"
+          onSubmit={(memberId) => run("団体垢の設定", (d) => setOrgAccount(d, actor.id, memberId, true), "団体垢にしました")}
+          onClose={() => setOrgOpen(false)}
+        />
+      )}
     </div>
+  )
+}
+
+function PickMemberDialog({
+  title,
+  description,
+  label,
+  candidates,
+  submitLabel,
+  onSubmit,
+  onClose,
+}: {
+  title: string
+  description: string
+  label: string
+  candidates: { id: string; name: string; email: string }[]
+  submitLabel: string
+  onSubmit: (memberId: string) => Promise<boolean>
+  onClose: () => void
+}) {
+  const [memberId, setMemberId] = useState("")
+  const [busy, setBusy] = useState(false)
+  return (
+    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <Field label={label} htmlFor="pick-member">
+          <NativeSelect id="pick-member" value={memberId} onChange={(e) => setMemberId(e.target.value)}>
+            <option value="">選択してください</option>
+            {candidates.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}（{m.email}）
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            キャンセル
+          </Button>
+          <Button
+            disabled={!memberId || busy}
+            onClick={async () => {
+              setBusy(true)
+              const ok = await onSubmit(memberId)
+              setBusy(false)
+              if (ok) onClose()
+            }}
+          >
+            {busy ? "処理中…" : submitLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -229,6 +374,7 @@ function TransferDialog({ roleId, onClose }: { roleId: string; onClose: () => vo
     (m) =>
       m.status === "active" &&
       m.id !== role.memberId &&
+      !isOrgAccount(data, m.id) &&
       (role.kind === "representative" || data.memberships.some((x) => x.memberId === m.id && x.departmentId === role.departmentId)),
   )
   const [toId, setToId] = useState("")
@@ -320,7 +466,7 @@ function AppointDialog({ departmentId, onClose }: { departmentId: string; onClos
   const [memberId, setMemberId] = useState("")
   const { busy, exec } = useBusyRun()
   const candidates = data.members.filter(
-    (m) => m.status === "active" && data.memberships.some((x) => x.memberId === m.id && x.departmentId === departmentId),
+    (m) => m.status === "active" && !isOrgAccount(data, m.id) && data.memberships.some((x) => x.memberId === m.id && x.departmentId === departmentId),
   )
   const grants = memberId ? previewPositionGrants(data, memberId, departmentId) : []
   return (
@@ -442,10 +588,11 @@ function ScopeDialog({ onClose }: { onClose: () => void }) {
           <Field label="対象部署" htmlFor="scope-dept">
             <NativeSelect id="scope-dept" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
               <option value="">選択してください</option>
-              {data.departments
-                .filter((d) => !ownDept.includes(d.id))
-                .map((d) => (
+              {departmentTree(data)
+                .filter(({ dept: d }) => !ownDept.includes(d.id))
+                .map(({ dept: d, depth }) => (
                   <option key={d.id} value={d.id}>
+                    {"　".repeat(depth)}
                     {d.name}
                   </option>
                 ))}
@@ -508,7 +655,7 @@ function RouteDialog({ onClose }: { onClose: () => void }) {
   const [alternateId, setAlternateId] = useState("")
   const tool = toolId ? findTool(data, toolId) : undefined
   const managers = data.members.filter(
-    (m) => m.status === "active" && data.orgRoles.some((r) => r.memberId === m.id),
+    (m) => m.status === "active" && data.orgRoles.some((r) => r.memberId === m.id && r.kind !== "org_account"),
   )
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
@@ -521,8 +668,9 @@ function RouteDialog({ onClose }: { onClose: () => void }) {
           <Field label="部署" htmlFor="route-dept">
             <NativeSelect id="route-dept" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
               <option value="">全部署</option>
-              {data.departments.map((d) => (
+              {departmentTree(data).map(({ dept: d, depth }) => (
                 <option key={d.id} value={d.id}>
+                  {"　".repeat(depth)}
                   {d.name}
                 </option>
               ))}
