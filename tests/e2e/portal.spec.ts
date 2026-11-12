@@ -299,3 +299,21 @@ test('スマホ幅でも横にはみ出さない', async ({ page }) => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false)
   }
 })
+
+test('公開範囲を「全権管理者」だけにしたツールは、全権管理者にしか見えない', async ({ page }) => {
+  await login(page, '管理 太郎')
+  await page.goto('./#/admin/tools')
+  await page.getByRole('button', { name: 'サンプルツールBを編集' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('button', { name: '全権管理者', exact: true }).click()
+  await dialog.getByRole('button', { name: '保存' }).click()
+  await expect(dialog).toHaveCount(0)
+  await page.goto('./#/tools')
+  await expect(page.locator('article h3', { hasText: 'サンプルツールB' })).toBeVisible()
+
+  await logout(page)
+  await login(page, '掲載 花子')
+  await page.goto('./#/tools')
+  await expect(page.locator('article h3').first()).toBeVisible()
+  await expect(page.locator('article h3', { hasText: 'サンプルツールB' })).toHaveCount(0)
+})
