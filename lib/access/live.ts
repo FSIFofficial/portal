@@ -8,6 +8,7 @@ import { ApiError, api } from '@/lib/api'
 import { DEMO_MODE } from '@/lib/config'
 import type { Tool as PortalSiteTool, User as PortalUser } from '@/lib/types'
 import { computeEffectiveRows } from './effective'
+import { memberEmails } from './rules'
 import type { AccessRepository, SaveResult } from './repository'
 import type { AppData, PortalTool } from './types'
 
@@ -170,17 +171,17 @@ export interface PortalAccountResult {
 
 /**
  * メンバーの変更をポータルのアカウントに反映する（メンバーに追加した人がポータルに入れるように）。
- * - 新しいメンバー・メールを変えたメンバー：アカウントが無ければ作る（ロールはポータルの「自動登録のロール」、無ければ member）
+ * - 新しいメンバー・メールを変えた／足したメンバー：アドレスごとにアカウントが無ければ作る（ロールはポータルの「自動登録のロール」、無ければ member）
  * - 退会：アカウントを無効にする／退会から戻した：有効にする
  * - 氏名の変更：アカウントの名前も変える
- * - メールを変えたときの古いアカウントは無効にする
+ * - メンバーから外したメールアドレスのアカウントは無効にする
  * ポータル側でしか持たない情報（ロール・メモ）は変えない。失敗しても権限管理の保存は取り消さない（warnings に入れる）。
  */
 export async function syncPortalAccounts(token: string, before: AppData, after: AppData, selfEmail: string): Promise<PortalAccountResult> {
   const result: PortalAccountResult = { added: [], activated: [], deactivated: [], renamed: [], warnings: [] }
   const changed = after.members.filter((m) => {
     const b = before.members.find((x) => x.id === m.id)
-    return !b || b.email !== m.email || b.name !== m.name || b.status !== m.status
+    return !b || memberEmails(b).join() !== memberEmails(m).join() || b.name !== m.name || b.status !== m.status
   })
   if (changed.length === 0) return result
 
@@ -202,27 +203,30 @@ export async function syncPortalAccounts(token: string, before: AppData, after: 
   const toDeactivate: string[] = []
   for (const m of changed) {
     const b = before.members.find((x) => x.id === m.id)
-    const email = m.email.toLowerCase()
-    const user = byEmail.get(email)
+    const emails = memberEmails(m)
     const shouldBeActive = m.status !== 'withdrawn'
-    if (b && b.email.toLowerCase() !== email) {
-      const old = byEmail.get(b.email.toLowerCase())
-      if (old?.active && b.email.toLowerCase() !== selfEmail) toDeactivate.push(old.email)
+    // メンバーから外したメールアドレスのアカウントは無効にする
+    for (const old of b ? memberEmails(b) : []) {
+      const u = byEmail.get(old)
+      if (!emails.includes(old) && u?.active && old !== selfEmail) toDeactivate.push(u.email)
     }
-    if (!user) {
-      if (shouldBeActive) toAdd.push({ email, name: m.name })
-      continue
-    }
-    if (user.active !== shouldBeActive) {
-      if (!shouldBeActive && email === selfEmail) result.warnings.push('自分自身のポータルのアカウントは無効にできません')
-      else (shouldBeActive ? toActivate : toDeactivate).push(user.email)
-    }
-    if (b && b.name !== m.name && user.name !== m.name) {
-      try {
-        await api.saveUser(token, { ...user, name: m.name }, false)
-        result.renamed.push(email)
-      } catch (e) {
-        result.warnings.push(`${m.name} のアカウント名を変更できませんでした：${portalError(e)}`)
+    for (const email of emails) {
+      const user = byEmail.get(email)
+      if (!user) {
+        if (shouldBeActive) toAdd.push({ email, name: m.name })
+        continue
+      }
+      if (user.active !== shouldBeActive) {
+        if (!shouldBeActive && email === selfEmail) result.warnings.push('自分自身のポータルのアカウントは無効にできません')
+        else (shouldBeActive ? toActivate : toDeactivate).push(user.email)
+      }
+      if (b && b.name !== m.name && user.name !== m.name) {
+        try {
+          await api.saveUser(token, { ...user, name: m.name }, false)
+          result.renamed.push(email)
+        } catch (e) {
+          result.warnings.push(`${m.name}（${email}）のアカウント名を変更できませんでした：${portalError(e)}`)
+        }
       }
     }
   }

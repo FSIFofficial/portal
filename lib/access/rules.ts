@@ -24,6 +24,68 @@ export const findTool = (data: AppData, id: string): Tool | undefined => data.to
 export const findDepartment = (data: AppData, id: string): Department | undefined =>
   data.departments.find((d) => d.id === id)
 
+/* ---------- 部署の階層 ---------- */
+
+/** 部署の祖先（親→…→最上位の順。自分は含まない）。循環していても止まる */
+export function departmentAncestors(data: AppData, id: string): string[] {
+  const out: string[] = []
+  let cur = findDepartment(data, id)?.parentId ?? null
+  while (cur && !out.includes(cur) && cur !== id) {
+    out.push(cur)
+    cur = findDepartment(data, cur)?.parentId ?? null
+  }
+  return out
+}
+
+/** 部署とその配下すべて（自分を含む） */
+export function departmentDescendants(data: AppData, id: string): string[] {
+  return data.departments.filter((d) => d.id === id || departmentAncestors(data, d.id).includes(id)).map((d) => d.id)
+}
+
+/** 「親 / 子 / 孫」の形の名前 */
+export const departmentPath = (data: AppData, id: string) =>
+  [...departmentAncestors(data, id).reverse(), id].map((x) => findDepartment(data, x)?.name ?? x).join(" / ")
+
+export interface DepartmentNode {
+  dept: Department
+  depth: number
+}
+
+/** 部署を階層の順（親の直後に子）に並べる。親が見つからない部署は最上位として扱う */
+export function departmentTree(data: AppData): DepartmentNode[] {
+  const ids = new Set(data.departments.map((d) => d.id))
+  const children = (parent: string | null) =>
+    data.departments.filter((d) => (parent === null ? !d.parentId || !ids.has(d.parentId) || d.parentId === d.id : d.parentId === parent && d.id !== parent))
+  const out: DepartmentNode[] = []
+  const seen = new Set<string>()
+  const walk = (parent: string | null, depth: number) => {
+    for (const d of children(parent)) {
+      if (seen.has(d.id)) continue
+      seen.add(d.id)
+      out.push({ dept: d, depth })
+      walk(d.id, depth + 1)
+    }
+  }
+  walk(null, 0)
+  for (const d of data.departments) if (!seen.has(d.id)) out.push({ dept: d, depth: 0 }) // 循環しているもの
+  return out
+}
+
+/** 事業部長として管理できる部署（自部署とその配下） */
+export const managedDepartmentIds = (data: AppData, memberId: string) => [
+  ...new Set(headDepartmentIds(data, memberId).flatMap((d) => departmentDescendants(data, d))),
+]
+
+/* ---------- メールアドレス ---------- */
+
+/** メンバーのメールアドレスすべて（主＋追加、小文字） */
+export const memberEmails = (m: Member) => [...new Set([m.email, ...(m.altEmails ?? [])].map((e) => e.trim().toLowerCase()).filter(Boolean))]
+
+export const findMemberByEmail = (data: AppData, email: string) => {
+  const e = email.trim().toLowerCase()
+  return data.members.find((m) => memberEmails(m).includes(e))
+}
+
 export const memberDepartmentIds = (data: AppData, memberId: string) =>
   data.memberships.filter((ms) => ms.memberId === memberId).map((ms) => ms.departmentId)
 
@@ -42,6 +104,10 @@ export const headDepartmentIds = (data: AppData, memberId: string) =>
   data.orgRoles
     .filter((r) => r.memberId === memberId && r.kind === "division_head" && r.departmentId)
     .map((r) => r.departmentId as string)
+
+/** 団体垢（団体・部署で共用するアカウント） */
+export const isOrgAccount = (data: AppData, memberId: string) =>
+  data.orgRoles.some((r) => r.memberId === memberId && r.kind === "org_account")
 
 export const isDivisionHead = (data: AppData, memberId: string) => headDepartmentIds(data, memberId).length > 0
 
@@ -63,6 +129,7 @@ export const actorLevel = (data: AppData, memberId: string): ActorLevel =>
 export const orgRoleLabels = (data: AppData, memberId: string): string[] => {
   const labels: string[] = []
   if (isRepresentative(data, memberId)) labels.push("代表")
+  if (isOrgAccount(data, memberId)) labels.push("団体垢")
   for (const d of headDepartmentIds(data, memberId)) labels.push(`${findDepartment(data, d)?.name ?? ""} 事業部長`)
   return labels.length ? labels : ["メンバー"]
 }
@@ -290,13 +357,14 @@ export function canManageTarget(
   const depts = memberDepartmentIds(data, targetId)
   if (depts.length === 0) return deny("所属未設定のメンバーは代表のみ変更できます")
 
+  const managed = managedDepartmentIds(data, actorId)
   const uncovered = depts.filter((d) => {
-    if (heads.includes(d)) return false
+    if (managed.includes(d)) return false
     if (action === "edit_member") return true
     return !data.scopes.some(
       (s) =>
         s.grantedTo === actorId &&
-        s.departmentId === d &&
+        departmentDescendants(data, s.departmentId).includes(d) &&
         s.actions.includes(action) &&
         (s.toolIds === "all" || (toolId !== null && s.toolIds.includes(toolId))),
     )
@@ -417,13 +485,14 @@ export function getApproverCandidates(
   const depts = memberDepartmentIds(data, requesterId)
   const routes = data.routes.filter(
     (r) =>
-      (r.departmentId === null || depts.includes(r.departmentId)) &&
+      // 上の部署に設定した申請先は、配下の部署のメンバーにも使う
+      (r.departmentId === null || depts.some((d) => d === r.departmentId || departmentAncestors(data, d).includes(r.departmentId!))) &&
       (r.toolId === null || r.toolId === toolId) &&
       (r.roleKey === null || r.roleKey === roleKey),
   )
   const result: ApproverCandidate[] = []
   for (const m of data.members) {
-    if (m.id === requesterId || m.status !== "active") continue
+    if (m.id === requesterId || m.status !== "active" || isOrgAccount(data, m.id)) continue
     const ok =
       canManageTarget(data, m.id, requesterId, toolId, "toggle_access").ok &&
       canManageTarget(data, m.id, requesterId, toolId, "change_role").ok &&

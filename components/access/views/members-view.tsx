@@ -11,7 +11,11 @@ import { fetchPortalUsers } from "@/lib/access/live"
 import { formatDate } from "@/lib/access/format"
 import {
   canManageTarget,
+  departmentPath,
+  departmentTree,
   findDepartment,
+  managedDepartmentIds,
+  memberEmails,
   findTool,
   findToolRole,
   headDepartmentIds,
@@ -33,7 +37,7 @@ export function MembersView() {
 
   const members = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return data.members.filter((m) => !q || m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q))
+    return data.members.filter((m) => !q || m.name.toLowerCase().includes(q) || memberEmails(m).some((e) => e.includes(q)))
   }, [data.members, query])
 
   /** 本番：ポータルのアカウントのうち、まだメンバーにいない人を取り込む */
@@ -41,7 +45,7 @@ export function MembersView() {
     setImporting(true)
     try {
       const users = await fetchPortalUsers(portalToken)
-      const known = new Set(data.members.map((m) => m.email.toLowerCase()))
+      const known = new Set(data.members.flatMap(memberEmails))
       const list = users.filter((u) => !known.has(u.email.toLowerCase()))
       if (list.length === 0) {
         toast.info("取り込めるアカウントはありません（すべて登録済みです）")
@@ -64,7 +68,7 @@ export function MembersView() {
 
   const openEdit = (id: string) => {
     const m = data.members.find((x) => x.id === id)!
-    setEditing({ id, name: m.name, email: m.email, departmentIds: memberDepartmentIds(data, id), status: m.status })
+    setEditing({ id, name: m.name, email: m.email, altEmails: m.altEmails ?? [], departmentIds: memberDepartmentIds(data, id), status: m.status })
   }
 
   return (
@@ -88,7 +92,7 @@ export function MembersView() {
             <Button
               size="lg"
               onClick={() =>
-                setEditing({ name: "", email: "", departmentIds: rep ? [] : headDepartmentIds(data, actor.id).slice(0, 1), status: "active" })
+                setEditing({ name: "", email: "", altEmails: [], departmentIds: rep ? [] : headDepartmentIds(data, actor.id).slice(0, 1), status: "active" })
               }
             >
               <Plus className="size-4" />
@@ -123,13 +127,14 @@ export function MembersView() {
                       ))}
                     </div>
                     <span className="truncate text-xs text-muted-foreground">
-                      {m.email} ／ 登録 {formatDate(m.joinedAt)}
+                      {m.email}
+                      {(m.altEmails ?? []).length > 0 && `（ほか ${m.altEmails!.join("、")}）`} ／ 登録 {formatDate(m.joinedAt)}
                     </span>
                     <div className="flex flex-wrap gap-1">
                       {memberDepartmentIds(data, m.id).length === 0 ? (
                         <Tag tone="outline">所属未設定</Tag>
                       ) : (
-                        memberDepartmentIds(data, m.id).map((d) => <Tag key={d}>{findDepartment(data, d)?.name}</Tag>)
+                        memberDepartmentIds(data, m.id).map((d) => <Tag key={d}>{departmentPath(data, d)}</Tag>)
                       )}
                     </div>
                   </div>
@@ -160,7 +165,8 @@ function MemberDialog({ initial, onClose }: { initial: MemberInput; onClose: () 
   const errors = validateMemberInput(data, actor.id, form)
   const preview = previewMemberChange(data, form)
   const rep = hasFullAccess(data, actor.id)
-  const heads = headDepartmentIds(data, actor.id)
+  const heads = managedDepartmentIds(data, actor.id)
+  const [altText, setAltText] = useState((initial.altEmails ?? []).join("\n"))
   const prevStatus = initial.id ? data.members.find((m) => m.id === initial.id)?.status : undefined
 
   const toggleDept = (id: string) =>
@@ -203,13 +209,36 @@ function MemberDialog({ initial, onClose }: { initial: MemberInput; onClose: () 
               <Input id="m-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} aria-invalid={!!show("email")} className="h-9" />
             </Field>
           </div>
+          <Field
+            label="追加のメールアドレス（任意）"
+            htmlFor="m-alt"
+            error={show("altEmails")}
+            hint="別の Google アカウントでもログインする場合に、1行に1つ入れます。どのアドレスでも同じ人として扱い、ポータルのアカウントもアドレスごとに作ります。"
+          >
+            <textarea
+              id="m-alt"
+              rows={2}
+              value={altText}
+              onChange={(e) => {
+                setAltText(e.target.value)
+                setForm({ ...form, altEmails: e.target.value.split(/[\s,、]+/).filter(Boolean) })
+              }}
+              aria-invalid={!!show("altEmails")}
+              className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              placeholder="例：name@example.org"
+            />
+          </Field>
           <fieldset className="flex flex-col gap-1.5">
             <legend className="pb-1.5 text-sm font-medium">所属（複数選択可）</legend>
-            <div className="grid gap-1.5 sm:grid-cols-2">
-              {data.departments.map((d) => {
+            <div className="flex max-h-64 flex-col gap-1.5 overflow-y-auto">
+              {departmentTree(data).map(({ dept: d, depth }) => {
                 const disabled = !rep && !heads.includes(d.id)
                 return (
-                  <label key={d.id} className="flex items-center gap-2 rounded-md border px-2.5 py-2 text-sm has-disabled:opacity-50">
+                  <label
+                    key={d.id}
+                    style={{ marginLeft: `${depth * 1.25}rem` }}
+                    className="flex items-center gap-2 rounded-md border px-2.5 py-2 text-sm has-disabled:opacity-50"
+                  >
                     <input type="checkbox" className="size-4 accent-primary" checked={form.departmentIds.includes(d.id)} disabled={disabled} onChange={() => toggleDept(d.id)} />
                     {d.name}
                   </label>
