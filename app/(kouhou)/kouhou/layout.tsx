@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { StoreProvider } from '@/lib/kouhou/store/store'
 import { Toaster } from '@/components/kouhou/kit/toast'
 import { PortalGate } from '@/components/kouhou/portal-gate'
+import { LiveGate } from '@/components/kouhou/live-gate'
 import '../../kouhou.css'
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
@@ -29,7 +30,7 @@ export default function KouhouLayout({ children }: Readonly<{ children: React.Re
       <body className="antialiased">
         <PortalGate>
           <StoreProvider>
-            {children}
+            <LiveGate>{children}</LiveGate>
             <Toaster />
           </StoreProvider>
         </PortalGate>

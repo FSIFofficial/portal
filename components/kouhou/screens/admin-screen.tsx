@@ -1,6 +1,6 @@
 'use client'
 
-import { useCurrentUser } from '@/lib/kouhou/store/store'
+import { useAppState, useCurrentUser } from '@/lib/kouhou/store/store'
 import { Notice } from '@/components/kouhou/kit/primitives'
 import { AccountsSection, BrandsSection, DiscordSection, PostTypesSection } from '@/components/kouhou/admin/org-sections'
 import { PermissionsSection, PromotionSection, UsersSection } from '@/components/kouhou/admin/people-sections'
@@ -20,14 +20,15 @@ const NAV = [
 
 export function AdminScreen() {
   const user = useCurrentUser()
+  const live = useAppState().live
   const isAdmin = Boolean(user?.isAdmin)
   return (
     <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">管理者設定</h1>
-        <p className="text-sm text-muted-foreground">変更はデモ環境の全画面にすぐ反映されます。</p>
+        <p className="text-sm text-muted-foreground">{live ? '変更はすぐに全員に反映されます。' : '変更はデモ環境の全画面にすぐ反映されます。'}</p>
       </header>
-      {!isAdmin && <Notice tone="warning">管理者ではないため閲覧のみです。右上のデモ操作から「管理者A」に切り替えると変更できます。</Notice>}
+      {!isAdmin && <Notice tone="warning">{live ? '管理者ではないため閲覧のみです。' : '管理者ではないため閲覧のみです。右上のデモ操作から「管理者A」に切り替えると変更できます。'}</Notice>}
       <nav aria-label="設定セクション" className="flex gap-1.5 overflow-x-auto pb-1">
         {NAV.map(([id, label]) => (
           <a key={id} href={`#${id}`} className="shrink-0 rounded-md border border-border bg-card px-3 py-1.5 text-sm hover:bg-muted">

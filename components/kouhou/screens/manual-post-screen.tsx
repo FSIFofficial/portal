@@ -34,8 +34,8 @@ export function ManualPostScreen() {
   const set = (p: Partial<ManualInput>) => setInput((i) => ({ ...i, ...p }))
   const account = s.accounts.find((a) => a.id === input.accountId)
 
-  const submit = () => {
-    const r = toastResult(runAction(recordManual, input))
+  const submit = async () => {
+    const r = await toastResult(runAction(recordManual, input))
     if (r.ok && r.id) router.push(`/kouhou/posts/detail?id=${encodeURIComponent(r.id)}`)
   }
 

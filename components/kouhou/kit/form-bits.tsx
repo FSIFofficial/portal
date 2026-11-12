@@ -35,7 +35,7 @@ export function ReasonDialog({
   title: string
   description?: React.ReactNode
   confirmLabel: string
-  onConfirm: (reason: string) => boolean
+  onConfirm: (reason: string) => boolean | Promise<boolean>
   destructive?: boolean
 }) {
   const [reason, setReason] = useState('')
@@ -59,7 +59,7 @@ export function ReasonDialog({
             variant={destructive ? 'destructive' : 'default'}
             disabled={!reason.trim()}
             onClick={() => {
-              if (onConfirm(reason)) close()
+              void Promise.resolve(onConfirm(reason)).then((ok) => ok && close())
             }}
           >
             {confirmLabel}

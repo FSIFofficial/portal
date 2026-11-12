@@ -199,12 +199,26 @@ export function scheduleChecks(s: AppState, post: Post): ScheduleCheck[] {
       ok: !isStopped(s, post),
       detail: isStopped(s, post) ? '緊急停止の対象です' : '停止対象外',
     },
+    ...(s.live ? [connectionCheck(s, post)] : []),
     {
       label: '承認待ちの変更なし',
       ok: !post.pendingChange,
       detail: post.pendingChange ? '予約後の変更・取り消しが承認待ちです' : 'なし',
     },
   ]
+}
+
+/** 本番：送信先アカウントが自動送信できる状態か（Instagramの自動送信は未対応） */
+function connectionCheck(s: AppState, post: Post): ScheduleCheck {
+  const acc = getAccount(s, post.accountId)
+  if (!acc) return { label: 'アカウント接続', ok: false, detail: 'アカウントが見つかりません' }
+  if (acc.platform === 'instagram') return { label: 'アカウント接続', ok: false, detail: 'Instagramの自動送信は未対応です。公開後に「手動投稿の記録」で記録してください' }
+  if (acc.platform === 'discord') {
+    const ch = s.channels.find((c) => c.id === post.channelId)
+    if (!ch?.discordId) return { label: 'アカウント接続', ok: false, detail: 'チャンネルのDiscord IDが未設定です（管理者設定）' }
+  }
+  const ok = acc.connection === 'connected'
+  return { label: 'アカウント接続', ok, detail: ok ? '接続済み' : acc.connectionError || '未接続です（管理者設定で接続してください）' }
 }
 
 export function canSchedule(s: AppState, user: User | undefined, post: Post): Verdict {

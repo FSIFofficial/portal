@@ -24,8 +24,8 @@ export function UsersSection() {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
 
-  const invite = () => {
-    const ok = edit(`${email} を招待しました（デモ：メールは送信しません）`, (d) => {
+  const invite = async () => {
+    const ok = await edit(s.live ? `${email} を登録しました。本人がポータルにログインした状態で広報管理を開くと利用中になります` : `${email} を招待しました（デモ：メールは送信しません）`, (d) => {
       if (!name.trim()) return '表示名を入力してください'
       if (!EMAIL_RE.test(email)) return 'Googleアカウントのメールアドレスを入力してください'
       if (d.users.some((u) => u.email.toLowerCase() === email.toLowerCase())) return 'このメールアドレスは登録済みです'
@@ -85,7 +85,7 @@ export function UsersSection() {
                   </td>
                   <td className="px-3 py-2">
                     <span className="flex flex-wrap gap-1.5">
-                      {u.status === 'invited' && (
+                      {u.status === 'invited' && !s.live && (
                         <Button size="sm" variant="outline" onClick={() => edit(`${u.name}を利用中にしました（デモ：招待承諾を再現）`, (d) => void (d.users.find((x) => x.id === u.id)!.status = 'active'))}>
                           承諾を再現
                         </Button>

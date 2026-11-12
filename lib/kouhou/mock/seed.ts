@@ -12,7 +12,7 @@ import { BASE_NOW, addHours, compactDate } from '@/lib/kouhou/domain/time'
 import { STANDARD_SETTING, METRICS } from '@/lib/kouhou/domain/analytics'
 import { PLATFORM_CODE } from '@/lib/kouhou/domain/labels'
 
-const brands = [
+export const SEED_BRANDS = [
   { id: 'b-fsif', name: 'FSIF', code: 'FSIF', color: '#1f63d6' },
   { id: 'b-cb', name: 'Cosmo Base', code: 'CB', color: '#7a4cc2' },
 ]
@@ -64,7 +64,7 @@ function perms(): AccountPermission[] {
   return out
 }
 
-const postTypes = [
+export const SEED_POST_TYPES = [
   { id: 'pt-tips', name: '知っトク告知', routine: true, important: false },
   { id: 'pt-partner', name: 'パートナー連携', routine: true, important: false },
   { id: 'pt-event', name: 'イベント告知', routine: false, important: false },
@@ -105,7 +105,7 @@ function metricsFor(platform: Platform, publishedAt: string, base: number, flaw?
 
 function mk(seed: Seed): Post {
   const acc = accounts.find((a) => a.id === seed.accountId)!
-  const brand = brands.find((b) => b.id === acc.brandId)!
+  const brand = SEED_BRANDS.find((b) => b.id === acc.brandId)!
   seq += 1
   const initialDate = seed.scheduledAt ?? seed.publishedAt ?? null
   const id = `${brand.code}-${PLATFORM_CODE[acc.platform]}-${compactDate(initialDate)}-${String(seq).padStart(4, '0')}`
@@ -266,7 +266,7 @@ function buildComments(posts: Post[]): Comment[] {
   ]
 }
 
-const assets: Asset[] = [
+export const SEED_ASSETS: Asset[] = [
   { id: 'as-bg-1', kind: 'background', name: '知っトク告知 背景（ネイビー）', brandId: 'b-cb', purpose: '知っトク告知', src: '/kouhou/templates/bg-tips.svg', text: null, edit: null, sourceAssetId: null, updatedBy: 'u-b', updatedAt: '2026-11-01T10:00' },
   { id: 'as-bg-2', kind: 'background', name: 'イベント告知 背景（ライト）', brandId: 'b-fsif', purpose: 'イベント告知', src: '/kouhou/templates/bg-event.svg', text: null, edit: null, sourceAssetId: null, updatedBy: 'u-a', updatedAt: '2026-10-28T15:00' },
   { id: 'as-bg-3', kind: 'background', name: 'お知らせ 背景（グリッド）', brandId: 'b-fsif', purpose: 'お知らせ', src: '/kouhou/templates/bg-notice.svg', text: null, edit: null, sourceAssetId: null, updatedBy: 'u-a', updatedAt: '2026-10-20T09:00' },
@@ -292,7 +292,7 @@ export function createSeed(): AppState {
   return {
     now: BASE_NOW,
     currentUserId: 'u-a',
-    brands,
+    brands: SEED_BRANDS,
     accounts,
     servers: [{ id: 'srv-cb', brandId: 'b-cb', name: 'Cosmo Base コミュニティ' }],
     channels: [
@@ -303,7 +303,7 @@ export function createSeed(): AppState {
     ],
     users,
     permissions: perms(),
-    postTypes,
+    postTypes: SEED_POST_TYPES,
     posts,
     comments: buildComments(posts),
     history: buildHistory(posts),
@@ -321,7 +321,7 @@ export function createSeed(): AppState {
       { id: 'ev-4', title: 'Cosmo Base 公開ミーティング', brandId: 'b-cb', at: '2026-11-22T19:00' },
       { id: 'ev-5', title: 'コンテスト応募締切', brandId: 'b-cb', at: '2026-11-30T23:59' },
     ],
-    assets,
+    assets: SEED_ASSETS,
     recurrences: [
       { id: 'rc-1', name: '宇宙知っトク 毎週水曜19時', accountIds: ['acc-cb-dc'], channelId: 'ch-tips', typeId: 'pt-tips', weekdays: [3], time: '19:00', startDate: '2026-11-18', endDate: '2026-12-30', count: null, mode: 'template', templateText: '今週の宇宙知っトクは、{テーマ}をテーマに開催します。参加方法はコミュニティ内のお知らせをご覧ください。', generatedPostIds: [] },
     ],

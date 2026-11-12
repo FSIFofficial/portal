@@ -1,6 +1,9 @@
 'use client'
 
-import { mediaUrl } from '@/lib/kouhou/paths'
+import { MediaImg } from '@/components/kouhou/domain/media-img'
+import { uploadImage } from '@/lib/kouhou/live'
+import { renderTemplatePng } from '@/lib/kouhou/render-template'
+import { setAssetRender } from '@/lib/kouhou/domain/commands'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -214,18 +217,26 @@ function EditorBody({ origin, postId, onSaved, userId }: { origin: Asset; postId
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, h.undo, h.redo, h.commit])
 
-  const save = () => {
-    const r = runAction(saveTemplateCopy, { originId: origin.id, name, edit })
-    toastResult(r)
+  const save = async () => {
+    const r = await toastResult(runAction(saveTemplateCopy, { originId: origin.id, name, edit }))
     if (!r.ok || !r.id) return
     setSavedSnapshot(JSON.stringify(edit))
+    // 本番：送信に使う PNG を書き出して Drive に保存する
+    if (s.live) {
+      try {
+        const fileId = await uploadImage(await renderTemplatePng(s, edit), `${name}.png`)
+        const set = await runAction(setAssetRender, r.id, fileId)
+        if (!set.ok) toast(set.message, false)
+      } catch (e) {
+        toast(`送信用の画像を保存できませんでした：${e instanceof Error ? e.message : e}。もう一度保存してください`, false)
+      }
+    }
     onSaved(r.id)
   }
 
   const attach = () => {
     if (!targetPost) return toast('添付先の投稿を選んでください', false)
-    const r = runAction(attachAssetToPost, targetPost, origin.id)
-    toastResult(r)
+    void toastResult(runAction(attachAssetToPost, targetPost, origin.id))
   }
 
   const attachReason = !isCopy ? '先に「投稿用コピーを保存」してください' : dirty ? '未保存の変更があります。保存してから添付してください' : !targetPost ? '添付先の投稿を選んでください' : undefined
@@ -303,7 +314,7 @@ function EditorBody({ origin, postId, onSaved, userId }: { origin: Asset; postId
               role="application"
               aria-label="キャンバス。文字をドラッグで移動、矢印キーで微調整、Deleteで削除"
             >
-              {bg?.src && <img src={mediaUrl(bg.src)} alt="" className="pointer-events-none absolute inset-0 size-full object-cover" draggable={false} />}
+              {bg?.src && <MediaImg src={bg.src} alt="" className="pointer-events-none absolute inset-0 size-full object-cover" draggable={false} />}
               {guides.v && <div aria-hidden className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-primary" />}
               {guides.h && <div aria-hidden className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-primary" />}
               {edit.layers.map((l) => {

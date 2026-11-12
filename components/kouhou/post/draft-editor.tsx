@@ -66,9 +66,8 @@ function EditForm({ post }: { post: Post }) {
     setConflict(false)
   }
 
-  const save = () => {
-    const r = runAction(savePost, post.id, patch, baseVersion)
-    toastResult(r)
+  const save = async () => {
+    const r = await toastResult(runAction(savePost, post.id, patch, baseVersion))
     if (!r.ok && r.conflict) setConflict(true)
     if (r.ok) {
       setConflict(false)

@@ -1,6 +1,7 @@
 /**
- * 業務操作。すべて (state, ...) => Result の純粋な形で、モック状態のドラフトを変更する。
- * API接続時はこのファイルの各関数をAPI呼び出しに置き換える。
+ * 業務操作。すべて (state, ...) => Result の純粋な形で、状態のドラフトを変更する。
+ * デモではブラウザ内で、本番では同じ関数を GAS（scripts/build-kouhou-gas.mjs で書き出したもの）でも実行し、
+ * サーバー側の結果を正とする。s.now・s.currentUserId はサーバーが現在時刻とログイン中の利用者に置き換える。
  */
 import type { AppState, HistoryKind, JstDateTime, Post, User } from './types'
 import {
@@ -31,6 +32,12 @@ const ok = (message?: string, extra?: { id?: string; ids?: string[] }): Result =
 const fail = (message: string, conflict = false): Result => ({ ok: false, message, conflict })
 
 export const DEMO_STOP_CODE = 'DEMO-STOP'
+/** 本番の緊急停止で入力する確認値 */
+export const LIVE_STOP_CODE = 'STOP'
+export const stopCode = (s: Pick<AppState, 'live'>) => (s.live ? LIVE_STOP_CODE : DEMO_STOP_CODE)
+
+/** デモのときだけ文言に注記を付ける */
+const demoNote = (s: AppState, text: string, note: string) => (s.live ? text : `${text}${note}`)
 
 function me(s: AppState): User | undefined {
   return getUser(s, s.currentUserId)
@@ -65,8 +72,10 @@ function notify(s: AppState, text: string, postId: string | null) {
     at: s.now,
     channelId: s.settings.notifyChannelId,
     mentions: s.settings.notifyMentions,
-    text: `${text}（デモ・未送信）`,
+    text: demoNote(s, text, '（デモ・未送信）'),
     postId,
+    // 本番では GAS が Discord の通知チャンネルへ送り、sent を true にする
+    ...(s.live ? { sent: false } : {}),
   })
 }
 
@@ -428,9 +437,9 @@ export function confirmSchedule(s: AppState, id: string): Result {
   post.delivery = 'queued'
   post.deliveryError = null
   if (post.status === 'failed') post.status = 'draft'
-  log(s, post, 'scheduled', `${formatDateTime(post.scheduledAt)} に予約を確定（デモ・実送信なし）`)
+  log(s, post, 'scheduled', demoNote(s, `${formatDateTime(post.scheduledAt)} に予約を確定`, '（デモ・実送信なし）'))
   touch(s, post)
-  return ok('予約を確定しました（デモのため実際には送信されません）')
+  return ok(s.live ? '予約を確定しました。予定日時になると自動で送信します' : '予約を確定しました（デモのため実際には送信されません）')
 }
 
 export function requestCancel(s: AppState, id: string, reason: string): Result {
@@ -589,7 +598,7 @@ export function emergencyStop(s: AppState, scope: 'all' | 'brand' | 'account', t
   if (!user?.isAdmin) return fail('緊急停止は管理者のみ実行できます')
   if (scope !== 'all' && !targetId) return fail('対象を選択してください')
   if (!reason.trim()) return fail('停止理由を入力してください')
-  if (code !== DEMO_STOP_CODE) return fail('確認値が一致しません')
+  if (code !== stopCode(s)) return fail('確認値が一致しません')
   let n = 0
   for (const p of s.posts) {
     if (p.queued && stopMatches(s, scope, targetId, p)) {
@@ -627,45 +636,93 @@ function makeMetrics(s: AppState, post: Post, now: JstDateTime) {
   const plan = planCheckpoints(post.analytics, post.publishedAt)
   return plan.offsets.map((h) => {
     const plannedAt = checkpointTime(post.publishedAt!, h)
-    const fetched = !isBefore(now, plannedAt)
+    // 本番は取得予定を作るだけ（実際の値は GAS が取得時刻に API から取る）
+    const fetched = !s.live && !isBefore(now, plannedAt)
     const values: Record<string, number | null> = {}
     for (const m of METRICS[acc.platform]) values[m.key] = fetched ? Math.round((12 + h) * (m.key === 'impressions' ? 25 : 1.5)) : null
     return { offsetHours: h, plannedAt, fetchedAt: fetched ? plannedAt : null, status: fetched ? ('fetched' as const) : ('pending' as const), values }
   })
 }
 
-export function setNow(s: AppState, next: JstDateTime): Result {
-  if (!isValidDateTime(next)) return fail('日時の形式が正しくありません')
-  if (isBefore(next, s.now)) return fail('基準日時を過去に戻すことはできません。リセットを使用してください')
+/** 送信の結果。ok のとき url は公開URL、externalId は送信先での投稿ID */
+export type DeliverResult = { ok: true; url: string; externalId: string | null } | { ok: false; error: string }
+
+/** 分析値の取得結果（投稿ID → 指標の値、または取得できなかった理由） */
+export type MetricsResult = Record<string, { values: Record<string, number | null> } | { error: string }>
+
+/** 時刻を進めたときの外部とのやりとり。デモはモック、本番は GAS が X・Discord の API を呼ぶ */
+export interface ClockIO {
+  deliver(s: AppState, post: Post): DeliverResult
+  /** 取得時刻を過ぎた計測点がある投稿の指標をまとめて取る */
+  fetchMetrics(s: AppState, posts: Post[]): MetricsResult
+  /** 1回の処理で送信する上限（GAS の実行時間の制限に収めるため） */
+  maxDeliveries?: number
+}
+
+const mockIO: ClockIO = {
+  deliver(s, p) {
+    if (s.demo.failNextDelivery) {
+      s.demo.failNextDelivery = false
+      return { ok: false, error: '配信処理でエラーが発生しました（デモで再現）' }
+    }
+    return { ok: true, url: `https://example.com/demo/${p.id}`, externalId: null }
+  },
+  fetchMetrics(_s, posts) {
+    const out: MetricsResult = {}
+    for (const p of posts) {
+      const m = p.metrics.find((x) => x.status === 'pending')
+      const values: Record<string, number | null> = {}
+      for (const k of Object.keys(m?.values ?? {})) values[k] = Math.round(10 + (m?.offsetHours ?? 0) * 3)
+      out[p.id] = { values }
+    }
+    return out
+  },
+}
+
+/**
+ * 時刻を next に進める：予定時刻を過ぎた予約を送信し、承認が間に合わなかった投稿を保留し、取得時刻を過ぎた分析値を取る。
+ * デモは「基準日時を進める」から、本番は GAS の時間トリガー（数分おき）から呼ぶ。
+ */
+export function runClock(s: AppState, next: JstDateTime, io: ClockIO): Result & { published: number; failed: number; held: number } {
   s.now = next
   let published = 0
+  let failed = 0
   let held = 0
+  let attempts = 0
+  const limit = io.maxDeliveries ?? Infinity
   for (const p of [...s.posts].sort((a, b) => (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? ''))) {
     if (!p.scheduledAt || isBefore(next, p.scheduledAt)) continue
     if (p.queued) {
-      if (s.demo.failNextDelivery) {
-        s.demo.failNextDelivery = false
+      if (isStopped(s, p)) continue
+      if (attempts >= limit) continue
+      attempts++
+      const r = io.deliver(s, p)
+      if (!r.ok) {
         p.queued = false
         p.status = 'failed'
         p.delivery = 'error'
-        p.deliveryError = '配信処理でエラーが発生しました（デモで再現）'
-        log(s, p, 'failed', `投稿失敗：${p.deliveryError}`, { actor: 'system' })
-        notify(s, `【投稿失敗】${p.title}`, p.id)
+        p.deliveryError = r.error
+        log(s, p, 'failed', `投稿失敗：${r.error}`, { actor: 'system' })
+        notify(s, `【投稿失敗】${p.title}：${r.error}`, p.id)
         touch(s, p)
+        failed++
         continue
       }
       p.queued = false
       p.status = 'published'
-      p.publishedAt = p.scheduledAt
-      p.delivery = 'sent_mock'
-      p.publicUrl = `https://example.com/demo/${p.id}`
+      p.publishedAt = s.live ? next : p.scheduledAt
+      p.delivery = s.live ? 'sent' : 'sent_mock'
+      p.publicUrl = r.url
+      p.externalId = r.externalId
       p.metrics = makeMetrics(s, p, next)
+      p.updatedAt = next
       const author = getUser(s, p.authorId)
       if (author) {
         author.publishSuccessCount += 1
         if (author.publishSuccessCount === s.settings.promotionThreshold) notify(s, `【昇格検討】${author.name} の公開成功回数が${s.settings.promotionThreshold}回に達しました`, null)
       }
-      log(s, p, 'published', '公開しました（デモ配信）', { actor: 'system' })
+      log(s, p, 'published', s.live ? '公開しました' : '公開しました（デモ配信）', { actor: 'system' })
+      if (s.live) notify(s, `【公開】${p.title}`, p.id)
       published++
     } else if (!p.hold && (p.status === 'review' || p.status === 'draft' || p.status === 'rejected')) {
       p.hold = { kind: 'late_approval', reason: '予定時刻までに承認が完了しませんでした。新しい日時を設定してください', at: next }
@@ -675,18 +732,38 @@ export function setNow(s: AppState, next: JstDateTime): Result {
       touch(s, p)
     }
   }
-  for (const p of s.posts) {
-    if (p.status === 'published' && p.mode !== 'manual') {
+  const due = s.posts.filter((p) => p.status === 'published' && p.mode !== 'manual' && p.metrics.some((m) => m.status === 'pending' && !isBefore(next, m.plannedAt)))
+  if (due.length) {
+    let fetched: MetricsResult = {}
+    try {
+      fetched = io.fetchMetrics(s, due)
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e)
+      for (const p of due) fetched[p.id] = { error }
+    }
+    for (const p of due) {
+      const r = fetched[p.id]
+      if (!r) continue
       for (const m of p.metrics) {
-        if (m.status === 'pending' && !isBefore(next, m.plannedAt)) {
+        if (m.status !== 'pending' || isBefore(next, m.plannedAt)) continue
+        m.fetchedAt = next
+        if ('error' in r) {
+          m.status = 'failed'
+        } else {
           m.status = 'fetched'
-          m.fetchedAt = m.plannedAt
-          for (const k of Object.keys(m.values)) m.values[k] = Math.round(10 + m.offsetHours * 3)
+          for (const k of Object.keys(m.values)) m.values[k] = r.values[k] ?? null
         }
       }
     }
   }
-  return ok(`基準日時を ${formatDateTime(next)} に進めました（公開 ${published}件・保留 ${held}件）`)
+  return { ...ok(), published, failed, held }
+}
+
+export function setNow(s: AppState, next: JstDateTime): Result {
+  if (!isValidDateTime(next)) return fail('日時の形式が正しくありません')
+  if (isBefore(next, s.now)) return fail('基準日時を過去に戻すことはできません。リセットを使用してください')
+  const r = runClock(s, next, mockIO)
+  return ok(`基準日時を ${formatDateTime(next)} に進めました（公開 ${r.published}件・保留 ${r.held}件）`)
 }
 
 export function failEarliestQueued(s: AppState): Result {
@@ -715,7 +792,7 @@ export function updateAnalyticsSetting(s: AppState, id: string, setting: Post['a
     const fresh = makeMetrics(s, post, s.now)
     post.metrics = fresh.map((m) => existing.get(m.offsetHours) ?? m)
   }
-  return ok('取得設定を保存しました（デモ：実取得は行いません）')
+  return ok(demoNote(s, '取得設定を保存しました', '（デモ：実取得は行いません）'))
 }
 
 export function generateFromRecurrence(s: AppState, recId: string, dates: JstDateTime[]): Result {
@@ -865,6 +942,8 @@ export function adminEdit(s: AppState, message: string, fn: (s: AppState) => str
   return ok(message)
 }
 
+/** 管理者設定などで画面側が作るID。本番では他の人と重ならないよう乱数を付ける */
 export function newId(s: AppState, prefix: string) {
-  return uid(s, prefix)
+  const id = uid(s, prefix)
+  return s.live ? `${id}-${Math.random().toString(36).slice(2, 6)}` : id
 }

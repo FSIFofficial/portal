@@ -128,8 +128,8 @@ function ContentCard({ post, open }: { post: Post; open: (k: DialogKind) => void
 function CandidateForm({ post }: { post: Post }) {
   const s = useAppState()
   const [times, setTimes] = useState<(string | null)[]>([null])
-  const submit = () => {
-    const r = toastResult(runAction(proposeCandidates, post.id, times.filter((t): t is string => !!t)))
+  const submit = async () => {
+    const r = await toastResult(runAction(proposeCandidates, post.id, times.filter((t): t is string => !!t)))
     if (r.ok) setTimes([null])
   }
   return (
@@ -261,7 +261,7 @@ function ScheduleCard({ post, open }: { post: Post; open: (k: DialogKind) => voi
           <div className="flex flex-col gap-1.5 rounded-md border bg-muted/50 p-3">
             <p className="flex items-center gap-1.5 text-xs font-bold">
               <Bell className="size-3.5" aria-hidden />
-              確定通知プレビュー（デモ・未送信）
+              {s.live ? '通知' : '確定通知プレビュー（デモ・未送信）'}
             </p>
             {notifications.slice(-2).map((n) => (
               <p key={n.id} className="text-xs leading-relaxed">
@@ -289,7 +289,7 @@ function BookingCard({ post, open }: { post: Post; open: (k: DialogKind) => void
       <div className="flex flex-col gap-4">
         {post.status === 'published' ? (
           <p className="text-sm">
-            <span className="tabular">{formatDateTime(post.publishedAt)}</span> に公開済み（デモ）
+            <span className="tabular">{formatDateTime(post.publishedAt)}</span> に公開済み{s.live ? '' : '（デモ）'}
           </p>
         ) : post.status === 'cancelled' ? (
           <p className="text-sm text-muted-foreground">この投稿は取り消されました</p>
@@ -330,7 +330,7 @@ function BookingCard({ post, open }: { post: Post; open: (k: DialogKind) => void
                   </ActionButton>
                 )}
               </div>
-              {!post.queued && <DisabledReason reason={can.ok ? '確定しても実際のSNSには送信されません（デモ）' : can.reason} />}
+              {!post.queued && <DisabledReason reason={can.ok ? (s.live ? '確定すると、予定日時に自動で送信されます（5分ごとに確認するため、最大5分ほど遅れます）' : '確定しても実際のSNSには送信されません（デモ）') : can.reason} />}
               {post.queued && (
                 <p className="text-xs leading-relaxed text-muted-foreground">予約後に原稿・日時を保存すると「変更申請」として扱われ、再承認まで公開が保留されます。保留中に予定日時を過ぎた場合は自動公開せず、新しい日時の設定が必要です。</p>
               )}
@@ -405,7 +405,7 @@ function PendingChangeCard({ post, open }: { post: Post; open: (k: DialogKind) =
 
 export function ApprovalPanel({ post }: { post: Post }) {
   const [dialog, setDialog] = useState<DialogKind>(null)
-  const done = (r: Result) => toastResult(r).ok
+  const done = (r: Promise<Result>) => toastResult(r).then((x) => x.ok)
 
   return (
     <div className="flex flex-col gap-4">

@@ -45,3 +45,10 @@ test('広報管理：ログアウトするとデモのログイン画面にな�
   await page.getByRole('button', { name: /Lv/ }).last().click()
   await expect(page.getByRole('heading', { name: 'カレンダー' })).toBeVisible()
 })
+
+test('広報管理：デモで基準日時を進めると、予約済みの投稿が公開される', async ({ page }) => {
+  await page.goto('./kouhou/dashboard/')
+  await page.getByRole('button', { name: 'デモ操作' }).click()
+  await page.getByRole('button', { name: /次の予約/ }).click()
+  await expect(page.getByText(/基準日時を .* に進めました（公開 [1-9]\d*件/)).toBeVisible()
+})

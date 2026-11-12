@@ -143,13 +143,13 @@ export function CommentsPanel({ target, withCategory = false, canComment = true 
   const shown = roots.filter((c) => (filter === 'all' ? true : filter === 'open' ? !c.resolved : c.resolved))
   const repliesOf = (id: string) => all.filter((c) => c.parentId === id).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 
-  const submit = () => {
-    const r = toastResult(runAction(addComment, target, body, null, withCategory ? category : null))
+  const submit = async () => {
+    const r = await toastResult(runAction(addComment, target, body, null, withCategory ? category : null))
     if (r.ok) setBody('')
   }
-  const submitReply = () => {
+  const submitReply = async () => {
     if (!replyTo) return
-    const r = toastResult(runAction(addComment, target, replyBody, replyTo, null))
+    const r = await toastResult(runAction(addComment, target, replyBody, replyTo, null))
     if (r.ok) {
       setReplyBody('')
       setReplyTo(null)

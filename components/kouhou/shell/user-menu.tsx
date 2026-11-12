@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { House, LogOut } from 'lucide-react'
 import { portalHomeUrl } from '@/lib/kouhou/paths'
-import { mutate, useCurrentUser } from '@/lib/kouhou/store/store'
+import { mutate, useAppState, useCurrentUser } from '@/lib/kouhou/store/store'
 
 export function UserMenu() {
   const user = useCurrentUser()
+  const s = useAppState()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -51,6 +52,7 @@ export function UserMenu() {
             <House className="size-4" aria-hidden />
             ポータルに戻る
           </a>
+          {!s.live && (
           <button
             type="button"
             role="menuitem"
@@ -65,6 +67,7 @@ export function UserMenu() {
             <LogOut className="size-4" aria-hidden />
             ログアウト（デモ）
           </button>
+          )}
         </div>
       )}
     </div>

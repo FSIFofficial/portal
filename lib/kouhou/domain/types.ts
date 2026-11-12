@@ -21,7 +21,12 @@ export interface Account {
   platform: Platform
   name: string
   code: string
-  connection: 'connected_mock' | 'disconnected_mock'
+  /** デモは *_mock。本番はGASが認証情報の確認結果で決める（画面からは変えられない） */
+  connection: 'connected_mock' | 'disconnected_mock' | 'connected' | 'disconnected'
+  /** 本番：Xのユーザー名（@なし）。投稿URLに使う */
+  handle?: string | null
+  /** 本番：接続確認で出たエラー */
+  connectionError?: string | null
   defaultApproverId: string | null
   /** Discordの場合のみ */
   serverId?: string
@@ -31,6 +36,8 @@ export interface DiscordServer {
   id: string
   brandId: string
   name: string
+  /** 本番：DiscordのサーバーID（ギルドID） */
+  guildId?: string
 }
 
 export interface DiscordChannel {
@@ -38,6 +45,8 @@ export interface DiscordChannel {
   serverId: string
   name: string
   postable: boolean
+  /** 本番：DiscordのチャンネルID */
+  discordId?: string
 }
 
 export interface User {
@@ -114,7 +123,7 @@ export type PublishStatus =
   | 'failed'
   | 'cancelled'
 
-export type DeliveryState = 'none' | 'queued' | 'sent_mock' | 'error' | 'stopped'
+export type DeliveryState = 'none' | 'queued' | 'sent_mock' | 'sent' | 'error' | 'stopped'
 
 export interface Hold {
   kind: 'pending_change' | 'late_approval' | 'emergency' | 'reschedule'
@@ -185,6 +194,8 @@ export interface Post {
   deliveryError: string | null
   analytics: AnalyticsSetting
   metrics: MetricPoint[]
+  /** 本番：送信先での投稿ID（XのポストID／DiscordのメッセージID）。分析の取得に使う */
+  externalId?: string | null
   createdAt: JstDateTime
   updatedAt: JstDateTime
 }
@@ -292,6 +303,8 @@ export interface Asset {
   sourceAssetId: string | null
   updatedBy: string
   updatedAt: JstDateTime
+  /** 本番：Google Drive に保存した画像のファイルID（アップロードした画像・テンプレートから書き出した画像）。送信にはこれを使う */
+  fileId?: string | null
 }
 
 export interface Recurrence {
@@ -326,6 +339,9 @@ export interface NotificationLog {
   mentions: string[]
   text: string
   postId: string | null
+  /** 本番：Discordへの送信結果（未送信は undefined） */
+  sent?: boolean
+  error?: string | null
 }
 
 export interface Settings {
@@ -361,4 +377,6 @@ export interface AppState {
   settings: Settings
   demo: DemoFlags
   seq: number
+  /** 本番データ（GAS）で動いているとき true。文言の「デモ」表記や送信の扱いが変わる */
+  live?: boolean
 }

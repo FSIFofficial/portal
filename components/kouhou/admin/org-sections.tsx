@@ -9,10 +9,11 @@ import { PLATFORM_LABEL } from '@/lib/kouhou/domain/labels'
 import type { Platform } from '@/lib/kouhou/domain/types'
 import { Field, Input, Panel, Pill, Select, Switch } from '@/components/kouhou/kit/primitives'
 import { BrandDot } from '@/components/kouhou/domain/tags'
+import { CheckConnectionsButton, ConnectionPill, SyncDiscordButton, XConnectButton } from './live-connections'
 import { CODE_RE, useAdminEdit } from './use-admin'
 
 /** テキストは確定（フォーカスを外す）時に保存。失敗したら元の値に戻す */
-function CommitInput({ value, onCommit, label, className, ...rest }: { value: string; onCommit: (v: string) => boolean; label: string; className?: string } & Omit<React.ComponentProps<'input'>, 'value' | 'onChange'>) {
+function CommitInput({ value, onCommit, label, className, ...rest }: { value: string; onCommit: (v: string) => boolean | Promise<boolean>; label: string; className?: string } & Omit<React.ComponentProps<'input'>, 'value' | 'onChange'>) {
   return (
     <Input
       {...rest}
@@ -23,7 +24,8 @@ function CommitInput({ value, onCommit, label, className, ...rest }: { value: st
       onBlur={(e) => {
         const v = e.target.value.trim()
         if (v === value) return
-        if (!onCommit(v)) e.target.value = value
+        const input = e.target
+        void Promise.resolve(onCommit(v)).then((ok) => !ok && (input.value = value))
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) (e.target as HTMLInputElement).blur()
@@ -39,8 +41,8 @@ export function BrandsSection() {
   const [code, setCode] = useState('')
   const [color, setColor] = useState('#2f6fde')
 
-  const add = () => {
-    const ok = edit(`ブランド「${name}」を追加しました`, (d) => {
+  const add = async () => {
+    const ok = await edit(`ブランド「${name}」を追加しました`, (d) => {
       if (!name.trim()) return 'ブランド名を入力してください'
       if (!CODE_RE.test(code)) return '識別コードは英大文字・数字・ハイフン2〜12文字です'
       if (d.brands.some((b) => b.code === code)) return 'この識別コードは使用中です'
@@ -107,8 +109,8 @@ export function AccountsSection() {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
 
-  const add = () => {
-    const ok = edit(`アカウント「${name}」を追加しました`, (d) => {
+  const add = async () => {
+    const ok = await edit(`アカウント「${name}」を追加しました`, (d) => {
       if (!name.trim()) return '表示名を入力してください'
       if (!CODE_RE.test(code)) return '識別コードは英大文字・数字・ハイフン2〜12文字です'
       if (d.accounts.some((a) => a.brandId === brandId && a.code === code)) return '同じブランド内で識別コードが重複しています'
@@ -119,7 +121,7 @@ export function AccountsSection() {
         platform,
         name: name.trim(),
         code,
-        connection: 'disconnected_mock',
+        connection: d.live ? 'disconnected' : 'disconnected_mock',
         defaultApproverId: null,
         serverId: platform === 'discord' ? d.servers.find((sv) => sv.brandId === brandId)?.id : undefined,
       })
@@ -132,12 +134,12 @@ export function AccountsSection() {
   }
 
   return (
-    <Panel title="SNSアカウント" id="accounts" bodyClassName="p-0">
+    <Panel title="SNSアカウント" id="accounts" bodyClassName="p-0" actions={s.live ? <CheckConnectionsButton /> : undefined}>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-muted/60 text-xs text-muted-foreground">
             <tr>
-              {['ブランド', '媒体', '表示名', '識別コード', '接続（モック）', '標準承認者'].map((h) => (
+              {['ブランド', '媒体', '表示名', '識別コード', s.live ? '接続' : '接続（モック）', '標準承認者'].map((h) => (
                 <th key={h} scope="col" className="px-3 py-2 text-left font-medium">
                   {h}
                 </th>
@@ -163,6 +165,12 @@ export function AccountsSection() {
                     <span className="font-mono text-xs">{a.code}</span>
                   </td>
                   <td className="px-3 py-2">
+                    {s.live ? (
+                      <span className="flex flex-col gap-1.5">
+                        <ConnectionPill account={a} />
+                        {a.platform === 'x' && <XConnectButton account={a} />}
+                      </span>
+                    ) : (
                     <span className="flex items-center gap-2">
                       <Switch
                         label={`${a.name}の接続状態`}
@@ -171,6 +179,7 @@ export function AccountsSection() {
                       />
                       <Pill tone={a.connection === 'connected_mock' ? 'success' : 'muted'}>{a.connection === 'connected_mock' ? '接続済み' : '未接続'}</Pill>
                     </span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <Select
@@ -222,7 +231,11 @@ export function AccountsSection() {
           追加
         </Button>
       </div>
-      <p className="px-3 pb-3 text-xs text-muted-foreground">接続状態はモックです。実際のSNS連携・認証は行いません。追加直後は管理者以外に権限がありません。</p>
+      <p className="px-3 pb-3 text-xs text-muted-foreground">
+        {s.live
+          ? 'Xは「Xと接続」でアカウントごとのトークンを登録します。Discordは下の「Discord」でサーバーIDを入れてチャンネルを取得すると接続済みになります。Instagramの自動送信は未対応です。追加直後は管理者以外に権限がありません。'
+          : '接続状態はモックです。実際のSNS連携・認証は行いません。追加直後は管理者以外に権限がありません。'}
+      </p>
     </Panel>
   )
 }
@@ -243,6 +256,25 @@ export function DiscordSection() {
                 <BrandDot brand={s.brands.find((b) => b.id === sv.brandId)} />
                 {sv.name}
               </h3>
+              {s.live && (
+                <div className="flex flex-wrap items-end gap-2">
+                  <Field label="DiscordのサーバーID" htmlFor={`guild-${sv.id}`} hint="Discordの開発者モードで、サーバー名を右クリック →「サーバーIDをコピー」">
+                    <CommitInput
+                      id={`guild-${sv.id}`}
+                      label={`${sv.name}のDiscordサーバーID`}
+                      value={sv.guildId ?? ''}
+                      className="font-mono"
+                      onCommit={(v) =>
+                        edit('サーバーIDを保存しました', (d) => {
+                          if (v && !/^\d{15,22}$/.test(v)) return 'サーバーIDは数字です'
+                          d.servers.find((x) => x.id === sv.id)!.guildId = v || undefined
+                        })
+                      }
+                    />
+                  </Field>
+                  <SyncDiscordButton server={sv} />
+                </div>
+              )}
               {chans.length ? (
                 <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
                   {chans.map((c) => (
@@ -250,6 +282,7 @@ export function DiscordSection() {
                       <span className="flex items-center gap-2">
                         #{c.name}
                         {s.settings.notifyChannelId === c.id && <Pill tone="info">通知用</Pill>}
+                        {s.live && (c.discordId ? <span className="font-mono text-xs text-muted-foreground">{c.discordId}</span> : <Pill tone="warning">Discord未連携</Pill>)}
                       </span>
                       <span className="flex items-center gap-2 text-xs text-muted-foreground">
                         投稿可能
@@ -266,13 +299,13 @@ export function DiscordSection() {
               ) : (
                 <p className="text-sm text-muted-foreground">チャンネルがありません。</p>
               )}
-              <div className="flex gap-2">
+              {!s.live && <div className="flex gap-2">
                 <Input aria-label={`${sv.name}に追加するチャンネル名`} placeholder="チャンネル名" value={names[sv.id] ?? ''} onChange={(e) => setNames((n) => ({ ...n, [sv.id]: e.target.value }))} />
                 <Button
                   variant="outline"
-                  onClick={() => {
+                  onClick={async () => {
                     const n = (names[sv.id] ?? '').trim().replace(/^#/, '')
-                    const ok = edit(`#${n} を追加しました`, (d) => {
+                    const ok = await edit(`#${n} を追加しました`, (d) => {
                       if (!n) return 'チャンネル名を入力してください'
                       if (d.channels.some((c) => c.serverId === sv.id && c.name === n)) return '同名のチャンネルがあります'
                       d.channels.push({ id: newId(d, 'ch'), serverId: sv.id, name: n, postable: true })
@@ -283,7 +316,7 @@ export function DiscordSection() {
                   <Plus className="size-4" aria-hidden />
                   追加
                 </Button>
-              </div>
+              </div>}
             </section>
           )
         })}
@@ -321,8 +354,8 @@ export function PostTypesSection() {
           <Input aria-label="新しい投稿種類名" placeholder="種類名" value={name} onChange={(e) => setName(e.target.value)} />
           <Button
             variant="outline"
-            onClick={() => {
-              const ok = edit(`「${name}」を追加しました`, (d) => {
+            onClick={async () => {
+              const ok = await edit(`「${name}」を追加しました`, (d) => {
                 if (!name.trim()) return '種類名を入力してください'
                 d.postTypes.push({ id: newId(d, 'pt'), name: name.trim(), routine: false, important: false })
               })
