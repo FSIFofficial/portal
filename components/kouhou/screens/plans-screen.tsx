@@ -137,8 +137,9 @@ function PlanCard({ s, plan, onOpen, canEdit }: { s: AppState; plan: Plan; onOpe
           <Select
             value={plan.status}
             onChange={(e) => {
-              const r = runAction(movePlan, plan.id, e.target.value as PlanStatus)
-              if (!r.ok) toastResult(r)
+              void runAction(movePlan, plan.id, e.target.value as PlanStatus).then((r) => {
+                if (!r.ok) void toastResult(r)
+              })
             }}
             className="h-8 text-xs md:h-8"
           >
@@ -230,8 +231,8 @@ function PlanEditor({ s, initial, brands, onClose, onSaved }: { s: AppState; ini
   const [f, setF] = useState<PlanInput>(initial)
   const [error, setError] = useState<string | null>(null)
   const set = (patch: Partial<PlanInput>) => setF((v) => ({ ...v, ...patch }))
-  const save = () => {
-    const r = runAction(savePlan, f)
+  const save = async () => {
+    const r = await runAction(savePlan, f)
     if (!r.ok) return setError(r.message)
     toast(r.message ?? '保存しました')
     onSaved(r.id!)

@@ -23,11 +23,16 @@ export function toast(message: string, ok = true) {
   setTimeout(() => dismiss(id), ok ? 3600 : 6000)
 }
 
-export function toastResult(r: Result) {
+function show(r: Result) {
   if (r.ok) {
     if (r.message) toast(r.message, true)
   } else if (!r.conflict) toast(r.message, false)
   return r
+}
+
+/** 操作の結果を通知に出す。本番では結果がサーバーから返るまで待つ */
+export function toastResult(r: Result | Promise<Result>): Promise<Result> {
+  return Promise.resolve(r).then(show)
 }
 
 function dismiss(id: number) {

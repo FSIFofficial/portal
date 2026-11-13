@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Lightbulb,
   List,
+  Loader2,
   Menu,
   OctagonPause,
   Plus,
@@ -19,7 +20,8 @@ import {
   Search,
   Settings,
 } from 'lucide-react'
-import { useAppState, useCurrentUser, useStoreMeta } from '@/lib/kouhou/store/store'
+import { useAppState, useCurrentUser, useLiveMeta, useStoreMeta } from '@/lib/kouhou/store/store'
+import { EXPECTED_KOUHOU_GAS_VERSION } from '@/lib/kouhou/live'
 import { setBrandFilter, useUi } from '@/lib/kouhou/store/ui'
 import { approvalCount } from '@/lib/kouhou/domain/selectors'
 import { formatDateTime } from '@/lib/kouhou/domain/time'
@@ -101,20 +103,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [drawer, setDrawer] = useState(false)
   const [demo, setDemo] = useState(false)
   const [q, setQ] = useState('')
+  const live = useLiveMeta()
+  const versionMismatch = s.live && user?.isAdmin && live.status.kind === 'ready' && live.status.gasVersion !== EXPECTED_KOUHOU_GAS_VERSION
 
   useEffect(() => {
-    if (hydrated && !user) router.replace('/kouhou/login')
-  }, [hydrated, user, router])
+    if (hydrated && !user && !s.live) router.replace('/kouhou/login')
+  }, [hydrated, user, router, s.live])
 
   const stopped = s.stops.length > 0
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 border-b bg-warning-soft px-3 py-1 text-center text-xs text-foreground">
-        <span className="font-bold text-warning">デモ</span>
-        <span>実際の認証・SNS送信・分析取得は行いません</span>
-        <span className="tabular">基準日時 {formatDateTime(s.now)}（日本時間）</span>
-      </div>
+      {!s.live && (
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 border-b bg-warning-soft px-3 py-1 text-center text-xs text-foreground">
+          <span className="font-bold text-warning">デモ</span>
+          <span>実際の認証・SNS送信・分析取得は行いません</span>
+          <span className="tabular">基準日時 {formatDateTime(s.now)}（日本時間）</span>
+        </div>
+      )}
+      {versionMismatch && live.status.kind === 'ready' && (
+        <div role="alert" className="border-b border-danger/30 bg-danger-soft px-3 py-1.5 text-center text-sm text-danger">
+          GASの版が画面と合っていません（GAS {live.status.gasVersion} / 画面 {EXPECTED_KOUHOU_GAS_VERSION}）。README の手順で GAS を更新してください
+        </div>
+      )}
       {stopped && (
         <div role="alert" className="flex flex-wrap items-center justify-center gap-2 border-b border-danger/30 bg-danger-soft px-3 py-1.5 text-sm text-danger">
           <OctagonPause className="size-4" aria-hidden />
@@ -175,6 +186,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link href="/kouhou/posts" className="rounded-md p-2.5 hover:bg-muted md:hidden" aria-label="検索">
                 <Search className="size-5" />
               </Link>
+              {live.pending > 0 && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground" role="status">
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  <span className="hidden sm:inline">保存中…</span>
+                </span>
+              )}
+              {!s.live && (
               <button
                 type="button"
                 onClick={() => setDemo(true)}
@@ -183,6 +201,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <FlaskConical className="size-4" aria-hidden />
                 <span className="hidden sm:inline">デモ操作</span>
               </button>
+              )}
               <Link href="/kouhou/posts/new" className={cn(buttonVariants(), 'gap-1')}>
                 <Plus className="size-4" aria-hidden />
                 <span className="hidden sm:inline">新規投稿</span>

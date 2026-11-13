@@ -4,13 +4,14 @@ import { useState } from 'react'
 import { OctagonX } from 'lucide-react'
 import { Button } from '@/components/kouhou/ui/button'
 import { useAction, useAppState } from '@/lib/kouhou/store/store'
-import { DEMO_STOP_CODE, countStopTargets, emergencyStop, releaseStop } from '@/lib/kouhou/domain/actions'
+import { countStopTargets, emergencyStop, releaseStop, stopCode } from '@/lib/kouhou/domain/actions'
 import { formatDateTime } from '@/lib/kouhou/domain/time'
 import type { EmergencyStop } from '@/lib/kouhou/domain/types'
 import { Dialog, Field, Input, Notice, Panel, Select, Textarea } from '@/components/kouhou/kit/primitives'
 import { UserName } from '@/components/kouhou/domain/tags'
 import { toastResult } from '@/components/kouhou/kit/toast'
 import { useAdminEdit } from './use-admin'
+import { TestNotifyButton } from './live-connections'
 
 export function NotifySection() {
   const s = useAppState()
@@ -21,7 +22,7 @@ export function NotifySection() {
     .split(/[,、\s]+/)
     .map((m) => m.trim())
     .filter(Boolean)
-    .map((m) => (m.startsWith('@') ? m : `@${m}`))
+    .map((m) => (m.startsWith('@') || m.startsWith('<') ? m : `@${m}`))
 
   return (
     <Panel title="Discord通知" id="notify">
@@ -40,6 +41,7 @@ export function NotifySection() {
                 })
               }
             >
+              {!s.settings.notifyChannelId && <option value="">未設定</option>}
               {s.channels.map((c) => (
                 <option key={c.id} value={c.id}>
                   #{c.name}（{s.servers.find((sv) => sv.id === c.serverId)?.name}）
@@ -47,7 +49,7 @@ export function NotifySection() {
               ))}
             </Select>
           </Field>
-          <Field label="メンション先" htmlFor="nt-m" hint="カンマ区切り。例：@広報チーム, @管理者A">
+          <Field label="メンション先" htmlFor="nt-m" hint={s.live ? 'カンマ区切り。Discordのロールは <@&ロールID>、人は <@ユーザーID>、全員は @everyone' : 'カンマ区切り。例：@広報チーム, @管理者A'}>
             <div className="flex gap-2">
               <Input id="nt-m" value={mentions} onChange={(e) => setMentions(e.target.value)} />
               <Button variant="outline" onClick={() => edit('メンション先を保存しました', (d) => void (d.settings.notifyMentions = parsed))}>
@@ -64,7 +66,11 @@ export function NotifySection() {
               {parsed.join(' ')} 【日時確定】宇宙知っトク11月 月探査回 ― 11/10(火) 19:00 に予約できます
             </p>
           </div>
-          <p className="text-xs text-muted-foreground">デモのため実際には送信しません。下の履歴は「未送信」として記録されます。</p>
+          {s.live ? (
+            <TestNotifyButton disabled={!s.settings.notifyChannelId} />
+          ) : (
+            <p className="text-xs text-muted-foreground">デモのため実際には送信しません。下の履歴は「未送信」として記録されます。</p>
+          )}
         </div>
         <div className="flex flex-col gap-1.5">
           <h3 className="text-sm font-semibold">通知履歴</h3>
@@ -77,6 +83,7 @@ export function NotifySection() {
                     {n.mentions.length > 0 && `・${n.mentions.join(' ')}`}
                   </span>
                   <span>{n.text}</span>
+                  {n.error && <span className="text-xs text-danger">送信できませんでした：{n.error}</span>}
                 </li>
               ))}
             </ul>
@@ -108,8 +115,8 @@ export function EmergencySection({ isAdmin }: { isAdmin: boolean }) {
     setReason('')
     setCode('')
   }
-  const run = () => {
-    const r = toastResult(act(emergencyStop, scope, scope === 'all' ? null : targetId || null, reason, code))
+  const run = async () => {
+    const r = await toastResult(act(emergencyStop, scope, scope === 'all' ? null : targetId || null, reason, code))
     setCode('')
     if (r.ok) close()
   }
@@ -191,8 +198,10 @@ export function EmergencySection({ isAdmin }: { isAdmin: boolean }) {
           <Field label="停止理由" htmlFor="st-reason" required>
             <Textarea id="st-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
           </Field>
-          <Notice tone="warning" title="デモ専用">
-            {`実際の追加認証ではありません。確認値「${DEMO_STOP_CODE}」を入力してください。入力値は保存・履歴表示しません。`}
+          <Notice tone="warning" title={s.live ? '誤操作防止' : 'デモ専用'}>
+            {s.live
+              ? `確認のため「${stopCode(s)}」と入力してください。停止すると対象の予約は送信されず、解除後も自動では再送されません。`
+              : `実際の追加認証ではありません。確認値「${stopCode(s)}」を入力してください。入力値は保存・履歴表示しません。`}
           </Notice>
           <Field label="確認値（追加パスワード）" htmlFor="st-code" required>
             <Input id="st-code" type="password" autoComplete="off" value={code} onChange={(e) => setCode(e.target.value)} />

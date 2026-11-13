@@ -6,6 +6,8 @@ import { ArrowLeft, Ban, UserX } from 'lucide-react'
 import { Button } from '@/components/kouhou/ui/button'
 import { Notice, Segmented } from '@/components/kouhou/kit/primitives'
 import { mutate, useAppState } from '@/lib/kouhou/store/store'
+import { LIVE_MODE } from '@/lib/kouhou/live'
+import { RedirectTo } from '@/components/kouhou/routes'
 
 type Step = 'start' | 'choose' | 'unregistered' | 'suspended'
 
@@ -14,6 +16,9 @@ export function LoginScreen() {
   const router = useRouter()
   const [step, setStep] = useState<Step>('start')
   const [preview, setPreview] = useState<'normal' | 'unregistered' | 'suspended'>('normal')
+
+  // 本番はポータルのログインを使うので、この画面は使わない
+  if (LIVE_MODE) return <RedirectTo href="/kouhou/calendar" />
 
   const login = (id: string) => {
     mutate((d) => {

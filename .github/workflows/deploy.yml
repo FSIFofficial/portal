@@ -51,6 +51,8 @@ jobs:
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
           # アクセス権限管理（/access/）の GAS の URL。未設定なら /access/ は「未設定」の案内を出す
           NEXT_PUBLIC_ACCESS_GAS_URL: ${{ vars.ACCESS_GAS_URL }}
+          # 広報管理（/kouhou/）の GAS の URL。未設定なら /kouhou/ は「準備中」の案内を出す
+          NEXT_PUBLIC_KOUHOU_GAS_URL: ${{ vars.KOUHOU_GAS_URL }}
       - run: touch out/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:

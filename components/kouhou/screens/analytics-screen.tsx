@@ -94,7 +94,11 @@ export function AnalyticsScreen() {
     <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">投稿分析</h1>
-        <p className="text-sm text-muted-foreground">数値はすべてデモ指標です。各媒体のAPIで実際に取得できるか・取得頻度は未確認です。</p>
+        <p className="text-sm text-muted-foreground">
+          {s.live
+            ? 'X は X API（public_metrics）、Discord はリアクション数・スレッドの返信数を、取得予定の時刻を過ぎた最初の定期処理（5分ごと）で取得します。手動記録の投稿は取得しません。'
+            : '数値はすべてデモ指標です。各媒体のAPIで実際に取得できるか・取得頻度は未確認です。'}
+        </p>
       </header>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
@@ -220,7 +224,7 @@ function PostAnalytics({ post, metric, view, setView }: { post: Post; metric: st
         <div className="flex flex-col gap-3">
           {!supported && <Notice tone="warning">{`${acc.name}（${getType(s, post.typeId)?.name ?? ''}）には選択中の指標がないため「${label}」を表示しています。`}</Notice>}
           <p className="text-sm text-muted-foreground">
-            デモ指標：{label}（横軸：公開からの経過時間）
+            {s.live ? '' : 'デモ指標：'}{label}（横軸：公開からの経過時間）
           </p>
           <LineChart series={series} />
           <div className="overflow-x-auto">

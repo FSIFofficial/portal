@@ -8,7 +8,7 @@ import { toastResult } from '@/components/kouhou/kit/toast'
 
 export function useAdminEdit() {
   const act = useAction()
-  return useCallback((message: string, fn: (s: AppState) => string | void) => toastResult(act(adminEdit, message, fn)).ok, [act])
+  return useCallback((message: string, fn: (s: AppState) => string | void) => toastResult(act(adminEdit, message, fn)).then((r) => r.ok), [act])
 }
 
 export const CODE_RE = /^[A-Z0-9-]{2,12}$/

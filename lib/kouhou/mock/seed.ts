@@ -12,17 +12,25 @@ import { BASE_NOW, addHours, compactDate } from '@/lib/kouhou/domain/time'
 import { STANDARD_SETTING, METRICS } from '@/lib/kouhou/domain/analytics'
 import { PLATFORM_CODE } from '@/lib/kouhou/domain/labels'
 
-const brands = [
+export const SEED_BRANDS = [
   { id: 'b-fsif', name: 'FSIF', code: 'FSIF', color: '#1f63d6' },
   { id: 'b-cb', name: 'Cosmo Base', code: 'CB', color: '#7a4cc2' },
 ]
 
-const accounts = [
+/** SNSアカウント：X・Discord は FSIF と Cosmo Base の2つずつ（Instagram の自動送信は未対応） */
+export const SEED_ACCOUNTS = [
   { id: 'acc-fsif-x', brandId: 'b-fsif', platform: 'x' as const, name: 'FSIF公式X', code: 'fsif_x', connection: 'connected_mock' as const, defaultApproverId: 'u-b' },
   { id: 'acc-fsif-ig', brandId: 'b-fsif', platform: 'instagram' as const, name: 'FSIF Instagram', code: 'fsif_ig', connection: 'connected_mock' as const, defaultApproverId: 'u-b' },
   { id: 'acc-cb-x', brandId: 'b-cb', platform: 'x' as const, name: 'Cosmo Base公式X', code: 'cb_x', connection: 'connected_mock' as const, defaultApproverId: 'u-b' },
   { id: 'acc-cb-ig', brandId: 'b-cb', platform: 'instagram' as const, name: 'Cosmo Base Instagram', code: 'cb_ig', connection: 'disconnected_mock' as const, defaultApproverId: 'u-a' },
+  { id: 'acc-fsif-dc', brandId: 'b-fsif', platform: 'discord' as const, name: 'FSIF Discord', code: 'fsif_dc', connection: 'connected_mock' as const, defaultApproverId: 'u-b', serverId: 'srv-fsif' },
   { id: 'acc-cb-dc', brandId: 'b-cb', platform: 'discord' as const, name: 'Cosmo Base Discord', code: 'cb_dc', connection: 'connected_mock' as const, defaultApproverId: 'u-b', serverId: 'srv-cb' },
+]
+const accounts = SEED_ACCOUNTS
+
+export const SEED_SERVERS = [
+  { id: 'srv-fsif', brandId: 'b-fsif', name: 'FSIF コミュニティ' },
+  { id: 'srv-cb', brandId: 'b-cb', name: 'Cosmo Base コミュニティ' },
 ]
 
 const users = [
@@ -64,7 +72,7 @@ function perms(): AccountPermission[] {
   return out
 }
 
-const postTypes = [
+export const SEED_POST_TYPES = [
   { id: 'pt-tips', name: '知っトク告知', routine: true, important: false },
   { id: 'pt-partner', name: 'パートナー連携', routine: true, important: false },
   { id: 'pt-event', name: 'イベント告知', routine: false, important: false },
@@ -105,7 +113,7 @@ function metricsFor(platform: Platform, publishedAt: string, base: number, flaw?
 
 function mk(seed: Seed): Post {
   const acc = accounts.find((a) => a.id === seed.accountId)!
-  const brand = brands.find((b) => b.id === acc.brandId)!
+  const brand = SEED_BRANDS.find((b) => b.id === acc.brandId)!
   seq += 1
   const initialDate = seed.scheduledAt ?? seed.publishedAt ?? null
   const id = `${brand.code}-${PLATFORM_CODE[acc.platform]}-${compactDate(initialDate)}-${String(seq).padStart(4, '0')}`
@@ -266,7 +274,7 @@ function buildComments(posts: Post[]): Comment[] {
   ]
 }
 
-const assets: Asset[] = [
+export const SEED_ASSETS: Asset[] = [
   { id: 'as-bg-1', kind: 'background', name: '知っトク告知 背景（ネイビー）', brandId: 'b-cb', purpose: '知っトク告知', src: '/kouhou/templates/bg-tips.svg', text: null, edit: null, sourceAssetId: null, updatedBy: 'u-b', updatedAt: '2026-11-01T10:00' },
   { id: 'as-bg-2', kind: 'background', name: 'イベント告知 背景（ライト）', brandId: 'b-fsif', purpose: 'イベント告知', src: '/kouhou/templates/bg-event.svg', text: null, edit: null, sourceAssetId: null, updatedBy: 'u-a', updatedAt: '2026-10-28T15:00' },
   { id: 'as-bg-3', kind: 'background', name: 'お知らせ 背景（グリッド）', brandId: 'b-fsif', purpose: 'お知らせ', src: '/kouhou/templates/bg-notice.svg', text: null, edit: null, sourceAssetId: null, updatedBy: 'u-a', updatedAt: '2026-10-20T09:00' },
@@ -292,10 +300,12 @@ export function createSeed(): AppState {
   return {
     now: BASE_NOW,
     currentUserId: 'u-a',
-    brands,
+    brands: SEED_BRANDS,
     accounts,
-    servers: [{ id: 'srv-cb', brandId: 'b-cb', name: 'Cosmo Base コミュニティ' }],
+    servers: SEED_SERVERS,
     channels: [
+      { id: 'ch-fsif-news', serverId: 'srv-fsif', name: 'お知らせ', postable: true },
+      { id: 'ch-fsif-event', serverId: 'srv-fsif', name: 'イベント', postable: true },
       { id: 'ch-news', serverId: 'srv-cb', name: 'お知らせ', postable: true },
       { id: 'ch-tips', serverId: 'srv-cb', name: '宇宙知っトク', postable: true },
       { id: 'ch-event', serverId: 'srv-cb', name: 'イベント', postable: true },
@@ -303,7 +313,7 @@ export function createSeed(): AppState {
     ],
     users,
     permissions: perms(),
-    postTypes,
+    postTypes: SEED_POST_TYPES,
     posts,
     comments: buildComments(posts),
     history: buildHistory(posts),
@@ -321,7 +331,7 @@ export function createSeed(): AppState {
       { id: 'ev-4', title: 'Cosmo Base 公開ミーティング', brandId: 'b-cb', at: '2026-11-22T19:00' },
       { id: 'ev-5', title: 'コンテスト応募締切', brandId: 'b-cb', at: '2026-11-30T23:59' },
     ],
-    assets,
+    assets: SEED_ASSETS,
     recurrences: [
       { id: 'rc-1', name: '宇宙知っトク 毎週水曜19時', accountIds: ['acc-cb-dc'], channelId: 'ch-tips', typeId: 'pt-tips', weekdays: [3], time: '19:00', startDate: '2026-11-18', endDate: '2026-12-30', count: null, mode: 'template', templateText: '今週の宇宙知っトクは、{テーマ}をテーマに開催します。参加方法はコミュニティ内のお知らせをご覧ください。', generatedPostIds: [] },
     ],

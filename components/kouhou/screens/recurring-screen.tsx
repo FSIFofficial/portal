@@ -147,17 +147,17 @@ function RecurrenceEditor({ s, initial, existing, onSaved, onCancel }: { s: AppS
   const generated = existing ? s.posts.filter((p) => existing.generatedPostIds.includes(p.id)) : []
   const dirty = JSON.stringify(input) !== JSON.stringify(baseline)
 
-  const save = () => {
-    const r = runAction(saveRecurrence, input)
+  const save = async () => {
+    const r = await runAction(saveRecurrence, input)
     if (!r.ok) return setError(r.message)
     toast(r.message ?? '保存しました')
     onSaved(r.id!)
   }
-  const generate = () => {
+  const generate = async () => {
     if (!existing) return
-    const saved = runAction(saveRecurrence, input)
+    const saved = await runAction(saveRecurrence, input)
     if (!saved.ok) return setError(saved.message)
-    const r = runAction(generateFromRecurrence, existing.id, future)
+    const r = await runAction(generateFromRecurrence, existing.id, future)
     if (!r.ok) return setError(r.message)
     toast(r.message ?? '生成しました')
   }

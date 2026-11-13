@@ -12,6 +12,7 @@ import { AssetThumb } from '@/components/kouhou/domain/asset-thumb'
 import { BrandTag, PostId, UserName } from '@/components/kouhou/domain/tags'
 import { CommentsPanel } from '@/components/kouhou/domain/comments'
 import { cn } from '@/lib/utils'
+import { UploadButton } from '@/components/kouhou/assets/upload-dialog'
 
 const KIND_TABS: { value: AssetKind; label: string }[] = [
   { value: 'image', label: '画像' },
@@ -48,7 +49,12 @@ export function AssetsScreen() {
     <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">素材・テンプレート</h1>
-        <p className="text-sm text-muted-foreground">背景テンプレートから文字入りの投稿用画像を作れます。外部の保存先は未接続のため、サンプル素材で動作します。</p>
+        <p className="text-sm text-muted-foreground">
+          {s.live
+            ? '背景テンプレートから文字入りの投稿用画像を作れます。画像は Google Drive に保存されます。'
+            : '背景テンプレートから文字入りの投稿用画像を作れます。外部の保存先は未接続のため、サンプル素材で動作します。'}
+        </p>
+        {s.live && <UploadButton defaultKind={kind === 'logo' || kind === 'background' ? kind : 'image'} />}
       </header>
 
       <Tabs label="素材の種類" value={kind} onChange={setKind} items={KIND_TABS.map((t) => ({ ...t, count: scoped.filter((a) => a.kind === t.value).length }))} />

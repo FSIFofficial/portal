@@ -1,6 +1,6 @@
 'use client'
 
-import { mediaUrl } from '@/lib/kouhou/paths'
+import { MediaImg } from './media-img'
 import { FileText, Film } from 'lucide-react'
 import type { AppState, Asset, TemplateEdit, TextLayer } from '@/lib/kouhou/domain/types'
 import { cn } from '@/lib/utils'
@@ -39,7 +39,7 @@ export function TemplateRender({ s, edit, className, label }: { s: AppState; edi
       className={cn('relative aspect-square w-full overflow-hidden bg-muted', className)}
       style={{ containerType: 'inline-size' }}
     >
-      {bg?.src && <img src={mediaUrl(bg.src)} alt="" className="absolute inset-0 size-full object-cover" draggable={false} />}
+      {bg?.src && <MediaImg src={bg.src} alt="" className="absolute inset-0 size-full object-cover" draggable={false} />}
       {edit.layers.map((l) => (
         <span key={l.id} aria-hidden className="absolute" style={layerStyle(l)}>
           {l.text}
@@ -70,7 +70,7 @@ export function AssetThumb({ s, asset, className }: { s: AppState; asset: Asset;
   if (asset.src) {
     return (
       <div className={cn('aspect-square w-full overflow-hidden bg-muted', className)}>
-        <img src={mediaUrl(asset.src)} alt={asset.name} className={cn('size-full', asset.kind === 'logo' ? 'object-contain p-3' : 'object-cover')} />
+        <MediaImg src={asset.src} alt={asset.name} className={cn('size-full', asset.kind === 'logo' ? 'object-contain p-3' : 'object-cover')} />
       </div>
     )
   }

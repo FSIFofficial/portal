@@ -5,9 +5,10 @@
 // ポータルがデモモード（手元の pnpm dev や CI）のときは、そのまま開く。
 
 import { useEffect, useState } from 'react'
-import { LogIn } from 'lucide-react'
+import { LogIn, Settings } from 'lucide-react'
 import { DEMO_MODE } from '@/lib/config'
 import { portalHomeUrl } from '@/lib/kouhou/paths'
+import { KOUHOU_NOT_CONFIGURED } from '@/lib/kouhou/live'
 import { buttonVariants } from '@/components/kouhou/ui/button'
 
 const SESSION_KEY = 'fsif-portal-session'
@@ -26,6 +27,24 @@ export function PortalGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!DEMO_MODE) setState(hasPortalSession() ? 'ok' : 'signedOut')
   }, [])
+  if (state === 'ok' && KOUHOU_NOT_CONFIGURED) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center p-6">
+        <div className="flex max-w-md flex-col items-center gap-3 text-center">
+          <div className="flex size-12 items-center justify-center rounded-full bg-accent text-primary">
+            <Settings className="size-6" aria-hidden />
+          </div>
+          <h1 className="text-lg font-bold">広報管理はまだ準備中です</h1>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            広報管理のサーバー（GAS）が設定されていません。管理者は README の「広報管理 ― 本番のセットアップ」に沿って GAS を用意し、GitHub の Variables に KOUHOU_GAS_URL を登録してください。
+          </p>
+          <a href={portalHomeUrl()} className={buttonVariants({ size: 'lg' })}>
+            ポータルを開く
+          </a>
+        </div>
+      </main>
+    )
+  }
   if (state === 'ok') return <>{children}</>
   if (state === 'checking') return <p className="p-6 text-sm text-muted-foreground">読み込み中…</p>
   return (

@@ -61,8 +61,8 @@ export function NewPostScreen({ initialAt, initialPlanId }: { initialAt?: string
     setUnits((list) => list.map((u) => (u.accountId === id ? u : { ...u, body: src.body, assetIds: [...src.assetIds] })))
   }
 
-  const submit = () => {
-    const r = toastResult(runAction(createPosts, fields, units))
+  const submit = async () => {
+    const r = await toastResult(runAction(createPosts, fields, units))
     if (r.ok && r.id) router.push(r.ids && r.ids.length > 1 ? '/kouhou/posts' : `/kouhou/posts/detail?id=${encodeURIComponent(r.id)}`)
   }
 
