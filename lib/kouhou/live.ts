@@ -13,7 +13,7 @@ export const LIVE_MODE = !!KOUHOU_GAS_URL && !DEMO_MODE
 export const KOUHOU_NOT_CONFIGURED = !KOUHOU_GAS_URL && !DEMO_MODE
 
 /** この画面が前提としている GAS の版名（gas/kouhou/Code.gs の1行目 GAS_VERSION と同じにする） */
-export const EXPECTED_KOUHOU_GAS_VERSION = 'kouhou-1.1.0'
+export const EXPECTED_KOUHOU_GAS_VERSION = 'kouhou-1.2.0'
 
 const SESSION_KEY = 'fsif-portal-session'
 

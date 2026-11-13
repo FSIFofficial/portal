@@ -164,7 +164,9 @@ X・Instagram・Discord の投稿を、企画から下書き・承認・予約�
 3. アクセス権限管理の「ツール・同期」で広報管理の役割（`level1`・`level2`・`level3`・`admin`）を定義し、最初の管理者に `admin` を付与しておく
 4. 関数 `setup` を実行して権限を承認する（シート・画像フォルダ・5分ごとのトリガーが作られ、アクセス権限管理から利用者を取り込みます）
 5. 「デプロイ > 新しいデプロイ > ウェブアプリ」（実行：自分／アクセス：全員）で発行された URL を、GitHub の Variables に `KOUHOU_GAS_URL` として登録し、`main` に push（またはデプロイを再実行）
-6. **X**：Developer Portal でアプリの権限を **Read and write** にし、投稿する各アカウントで Access Token / Secret を発行 → 広報管理の「管理者設定 > SNSアカウント」でアカウントを追加して「Xと接続」に入力
+6. **X**：Developer Portal でアプリの「User authentication settings」を設定（App permissions：**Read and write**、Type of App：Web App、Callback URI と Website URL：`https://admin.fsif.jp/kouhou/`）→
+   広報管理の「管理者設定 > SNSアカウント」で各 X アカウントの「Xと接続」→「認可ページを用意する」→ 開いたページで**そのアカウントでログインして**認証 → 表示された PIN を入力。
+   1つの X アプリで FSIF・Cosmo Base の両方を接続できます（Developer Portal の「Access Token」の発行は、アプリを作ったアカウント本人の分しか作れないため）
 7. **Discord**：Developer Portal で Bot を作り、サーバーに招待（権限：チャンネルを見る・メッセージを送信・ファイルを添付・メッセージ履歴を読む）→
    「管理者設定 > Discord」でサーバーIDを入れて「Discordからチャンネルを取得」→ 投稿に使うチャンネルを「投稿可能」に、「Discord通知」で通知先を選んで「テスト通知を送る」
 8. 必要なら「管理者設定 > 権限」で、アカウントごとの権限（閲覧・作成・編集・承認）を調整する

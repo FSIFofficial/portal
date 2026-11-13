@@ -26,7 +26,7 @@ import { compactDate, formatDateTime, isBefore, isValidDateTime, toMinutes } fro
 import { PLATFORM_CODE } from './labels'
 import { METRICS, STANDARD_SETTING, planCheckpoints, checkpointTime } from './analytics'
 
-export type Result = { ok: true; message?: string; id?: string; ids?: string[] } | { ok: false; message: string; conflict?: boolean }
+export type Result = { ok: true; message?: string; id?: string; ids?: string[]; /** 本番：開いてもらうURL（Xの認可ページなど） */ url?: string } | { ok: false; message: string; conflict?: boolean }
 
 const ok = (message?: string, extra?: { id?: string; ids?: string[] }): Result => ({ ok: true, message, ...extra })
 const fail = (message: string, conflict = false): Result => ({ ok: false, message, conflict })
