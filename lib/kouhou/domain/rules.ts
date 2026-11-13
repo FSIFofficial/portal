@@ -215,7 +215,7 @@ function connectionCheck(s: AppState, post: Post): ScheduleCheck {
   if (acc.platform === 'instagram') return { label: 'アカウント接続', ok: false, detail: 'Instagramの自動送信は未対応です。公開後に「手動投稿の記録」で記録してください' }
   if (acc.platform === 'discord') {
     const ch = s.channels.find((c) => c.id === post.channelId)
-    if (!ch?.webhook) return { label: 'アカウント接続', ok: false, detail: `#${ch?.name ?? 'チャンネル'} の Webhook が未設定です（管理者設定 > Discord）` }
+    if (!ch?.discordId) return { label: 'アカウント接続', ok: false, detail: 'チャンネルのDiscord IDが未設定です（管理者設定）' }
   }
   const ok = acc.connection === 'connected'
   return { label: 'アカウント接続', ok, detail: ok ? '接続済み' : acc.connectionError || '未接続です（管理者設定で接続してください）' }

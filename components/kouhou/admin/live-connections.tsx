@@ -9,7 +9,7 @@ import { Button } from '@/components/kouhou/ui/button'
 import { Dialog, Field, Input, Pill } from '@/components/kouhou/kit/primitives'
 import { toastResult } from '@/components/kouhou/kit/toast'
 import { liveAdmin, useLiveMeta } from '@/lib/kouhou/store/store'
-import type { Account, DiscordChannel, DiscordServer } from '@/lib/kouhou/domain/types'
+import type { Account, DiscordServer } from '@/lib/kouhou/domain/types'
 
 export function ConnectionPill({ account }: { account: Account }) {
   const ok = account.connection === 'connected'
@@ -149,97 +149,13 @@ export function CheckConnectionsButton() {
   )
 }
 
-const WEBHOOK_HINT = 'Discord でチャンネルの「設定（歯車）→ 連携サービス → ウェブフック → 新しいウェブフック」を作り、「ウェブフックURLをコピー」した URL を貼ります'
-
-/** チャンネルの Webhook を設定・差し替え・解除する */
-export function WebhookButton({ channel }: { channel: DiscordChannel }) {
-  const [open, setOpen] = useState(false)
-  const [url, setUrl] = useState('')
+export function SyncDiscordButton({ server }: { server: DiscordServer }) {
   const { pending } = useLiveMeta()
-  const close = () => {
-    setOpen(false)
-    setUrl('')
-  }
-  const submit = async () => {
-    const r = await toastResult(liveAdmin('setDiscordWebhook', { channelId: channel.id, webhookUrl: url }))
-    if (r.ok) close()
-  }
   return (
-    <>
-      <span className="flex flex-wrap gap-1.5">
-        <Button size="sm" variant="outline" className="gap-1" onClick={() => setOpen(true)}>
-          <Link2 className="size-3.5" aria-hidden />
-          {channel.webhook ? 'Webhookを差し替え' : 'Webhookを設定'}
-        </Button>
-        {channel.webhook && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="gap-1"
-            onClick={() => window.confirm(`#${channel.name} の Webhook を外しますか？このチャンネルには送信できなくなります。`) && void toastResult(liveAdmin('removeDiscordWebhook', { channelId: channel.id }))}
-          >
-            <Link2Off className="size-3.5" aria-hidden />
-            外す
-          </Button>
-        )}
-      </span>
-      <Dialog
-        open={open}
-        onClose={close}
-        title={`#${channel.name} の Webhook`}
-        description={WEBHOOK_HINT}
-        footer={
-          <>
-            <Button variant="outline" onClick={close}>
-              キャンセル
-            </Button>
-            <Button onClick={submit} disabled={!url.trim() || pending > 0}>
-              {pending > 0 ? '確認中…' : '保存する'}
-            </Button>
-          </>
-        }
-      >
-        <Field label="ウェブフックURL" htmlFor={`wh-${channel.id}`}>
-          <Input id={`wh-${channel.id}`} type="password" placeholder="https://discord.com/api/webhooks/…" value={url} onChange={(e) => setUrl(e.target.value)} autoComplete="off" spellCheck={false} className="font-mono" />
-        </Field>
-      </Dialog>
-    </>
-  )
-}
-
-/** Webhook を貼って、サーバーにチャンネルを追加する */
-export function AddWebhookChannel({ server }: { server: DiscordServer }) {
-  const [name, setName] = useState('')
-  const [url, setUrl] = useState('')
-  const { pending } = useLiveMeta()
-  const submit = async () => {
-    const r = await toastResult(liveAdmin('setDiscordWebhook', { serverId: server.id, name, webhookUrl: url }))
-    if (r.ok) {
-      setName('')
-      setUrl('')
-    }
-  }
-  return (
-    <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-border p-3">
-      <p className="text-xs font-semibold">チャンネルを追加</p>
-      <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
-        <Input aria-label={`${server.name}に追加するチャンネル名`} placeholder="チャンネル名（例：お知らせ）" value={name} onChange={(e) => setName(e.target.value)} />
-        <Input
-          aria-label={`${server.name}に追加するチャンネルのウェブフックURL`}
-          type="password"
-          placeholder="ウェブフックURL https://discord.com/api/webhooks/…"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          autoComplete="off"
-          spellCheck={false}
-          className="font-mono"
-        />
-        <Button variant="outline" className="gap-1" disabled={!name.trim() || !url.trim() || pending > 0} onClick={submit}>
-          追加
-        </Button>
-      </div>
-      <p className="text-xs leading-relaxed text-muted-foreground">{WEBHOOK_HINT}。URL は広報管理の GAS にだけ保存され、画面には表示されません。</p>
-    </div>
+    <Button size="sm" variant="outline" className="gap-1" disabled={!server.guildId || pending > 0} title={server.guildId ? undefined : '先にサーバーIDを入力してください'} onClick={() => void toastResult(liveAdmin('syncDiscordChannels', { serverId: server.id }))}>
+      <RefreshCw className="size-3.5" aria-hidden />
+      Discordからチャンネルを取得
+    </Button>
   )
 }
 

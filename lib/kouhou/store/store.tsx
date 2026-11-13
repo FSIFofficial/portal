@@ -102,7 +102,7 @@ function send<T extends CommandResponse>(action: string, payload: Record<string,
 }
 
 /** 本番の管理者専用の操作（Xとの接続・Discordのチャンネル取得など） */
-export function liveAdmin(action: 'connectX' | 'xStartAuth' | 'xFinishAuth' | 'disconnectX' | 'checkConnections' | 'setDiscordWebhook' | 'removeDiscordWebhook' | 'testNotify' | 'syncAccess', payload: Record<string, unknown> = {}) {
+export function liveAdmin(action: 'connectX' | 'xStartAuth' | 'xFinishAuth' | 'disconnectX' | 'checkConnections' | 'syncDiscordChannels' | 'testNotify' | 'syncAccess', payload: Record<string, unknown> = {}) {
   return send(action, payload)
 }
 

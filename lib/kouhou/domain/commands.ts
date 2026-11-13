@@ -120,8 +120,6 @@ export const isEmptyPatch = (p: AdminPatch) => !Object.keys(p.upsert).length && 
 /** サーバーが管理する項目（画面から送られても上書きしない） */
 const SERVER_OWNED: Partial<Record<AdminCollection, string[]>> = {
   accounts: ['connection', 'handle', 'connectionError'],
-  channels: ['discordId', 'webhook'],
-  servers: ['guildId'],
   users: ['publishSuccessCount'],
 }
 
@@ -145,7 +143,6 @@ export function applyAdminPatch(s: AppState, patch: AdminPatch): Result {
         if (existing) item[f] = existing[f]
         else if (c === 'accounts' && f === 'connection') item[f] = s.live ? 'disconnected' : item[f]
         else if (c === 'users' && f === 'publishSuccessCount') item[f] = 0
-        else delete item[f]
       }
       if (i >= 0) list[i] = item
       else list.push(item)
