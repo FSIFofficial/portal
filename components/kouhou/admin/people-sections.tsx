@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { ExternalLink, Plus, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/kouhou/ui/button'
-import { useAppState } from '@/lib/kouhou/store/store'
+import { liveAdmin, useAppState, useLiveMeta } from '@/lib/kouhou/store/store'
+import { ACCESS_ROLES } from '@/lib/kouhou/domain/commands'
+import { toastResult } from '@/components/kouhou/kit/toast'
 import { newId } from '@/lib/kouhou/domain/actions'
 import { PLATFORM_CODE } from '@/lib/kouhou/domain/labels'
 import type { AccountPermission, Level, User } from '@/lib/kouhou/domain/types'
@@ -18,7 +20,89 @@ const STATUS_LABEL: Record<User['status'], { label: string; tone: 'success' | 'i
 const LEVEL_LABEL: Record<Level, string> = { 1: 'レベル①', 2: 'レベル②', 3: 'レベル③' }
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+const accessUrl = () => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/access/`
+
+/** 利用者を FSIF Access Manager（/access/）で管理しているとき：一覧は表示だけ */
+function ManagedUsersSection() {
+  const s = useAppState()
+  const { pending } = useLiveMeta()
+  return (
+    <Panel
+      title="利用者"
+      id="users"
+      bodyClassName="p-0"
+      actions={
+        <>
+          <a href={accessUrl()} className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-muted">
+            <ExternalLink className="size-3.5" aria-hidden />
+            アクセス権限管理を開く
+          </a>
+          <Button size="sm" variant="outline" className="gap-1" disabled={pending > 0} onClick={() => void toastResult(liveAdmin('syncAccess'))}>
+            <RefreshCw className="size-3.5" aria-hidden />
+            今すぐ同期
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-2 p-3 text-sm">
+        <Notice tone="info" title="利用者はアクセス権限管理で管理しています">
+          広報管理を使える人と役割は、アクセス権限管理（/access/）の「広報管理」で付与します。付与した人は、広報管理を開いたときに自動で登録されます（1時間ごとにも同期し、権限が外れた人は利用停止になります）。
+          SNSアカウントごとの閲覧・作成・編集・承認は、下の「権限」で調整します。
+        </Notice>
+        <table className="w-full max-w-xl text-xs">
+          <caption className="mb-1 text-left font-semibold">役割とレベルの対応（アクセス権限管理の役割キー）</caption>
+          <tbody>
+            {ACCESS_ROLES.map((r) => (
+              <tr key={r.roleKey} className="border-t border-border">
+                <td className="py-1 pr-3 font-mono">{r.roleKey}</td>
+                <td className="py-1 pr-3 font-medium">{r.label}</td>
+                <td className="py-1 text-muted-foreground">{r.description}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="overflow-x-auto border-t border-border">
+        <table className="w-full min-w-[560px] text-sm">
+          <thead className="bg-muted/60 text-xs text-muted-foreground">
+            <tr>
+              {['利用者', '状態', 'レベル', '管理者'].map((h) => (
+                <th key={h} scope="col" className="px-3 py-2 text-left font-medium">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {s.users.map((u) => (
+              <tr key={u.id} className="border-t border-border">
+                <td className="px-3 py-2">
+                  <span className="flex flex-col">
+                    <span className="font-medium">{u.name}</span>
+                    <span className="text-xs text-muted-foreground">{u.email}</span>
+                  </span>
+                </td>
+                <td className="px-3 py-2">
+                  <Pill tone={STATUS_LABEL[u.status].tone}>{u.status === 'suspended' ? '権限なし' : STATUS_LABEL[u.status].label}</Pill>
+                </td>
+                <td className="px-3 py-2">{LEVEL_LABEL[u.level]}</td>
+                <td className="px-3 py-2">{u.isAdmin ? <Pill tone="info">管理者</Pill> : <span className="text-muted-foreground">—</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  )
+}
+
 export function UsersSection() {
+  const s = useAppState()
+  if (s.settings.usersManagedBy === 'access') return <ManagedUsersSection />
+  return <LocalUsersSection />
+}
+
+function LocalUsersSection() {
   const s = useAppState()
   const edit = useAdminEdit()
   const [email, setEmail] = useState('')
@@ -245,7 +329,10 @@ export function PromotionSection() {
             onBlur={(e) => {
               const v = Number(e.target.value)
               if (v === t) return
-              if (!edit('通知基準を変更しました', (d) => (v >= 1 && Number.isInteger(v) ? void (d.settings.promotionThreshold = v) : '1以上の整数で入力してください'))) e.target.value = String(t)
+              const input = e.target
+              void edit('通知基準を変更しました', (d) => (v >= 1 && Number.isInteger(v) ? void (d.settings.promotionThreshold = v) : '1以上の整数で入力してください')).then((ok) => {
+                if (!ok) input.value = String(t)
+              })
             }}
           />
         </Field>
@@ -259,9 +346,13 @@ export function PromotionSection() {
                     公開成功 {u.publishSuccessCount}回・現在 {LEVEL_LABEL[u.level]}
                   </span>
                 </span>
+                {s.settings.usersManagedBy === 'access' ? (
+                  <span className="text-xs text-muted-foreground">昇格はアクセス権限管理で役割を変更してください</span>
+                ) : (
                 <Button size="sm" variant="outline" onClick={() => edit(`${u.name}を${LEVEL_LABEL[(u.level + 1) as Level]}に変更しました`, (d) => void (d.users.find((x) => x.id === u.id)!.level = (u.level + 1) as Level))}>
                   {LEVEL_LABEL[(u.level + 1) as Level]}へ手動変更
                 </Button>
+                )}
               </li>
             ))}
           </ul>

@@ -348,6 +348,8 @@ export interface Settings {
   notifyChannelId: string
   notifyMentions: string[]
   promotionThreshold: number
+  /** 本番：'access' のとき、利用者（誰が使えるか・レベル・管理者）は FSIF Access Manager（/access/）で管理する */
+  usersManagedBy?: 'access' | null
 }
 
 export interface DemoFlags {

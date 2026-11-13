@@ -44,7 +44,7 @@ export function LiveGate({ children }: { children: React.ReactNode }) {
     case 'unregistered':
       return (
         <Screen icon={<UserX className="size-6" aria-hidden />} title="広報管理に登録されていません">
-          <p>{status.email} は広報管理の利用者に登録されていません。広報管理の管理者に、このメールアドレスの登録を依頼してください。</p>
+          <p>{status.reason ?? `${status.email} は広報管理の利用者に登録されていません。広報管理の管理者に、このメールアドレスの登録を依頼してください。`}</p>
         </Screen>
       )
     case 'suspended':
