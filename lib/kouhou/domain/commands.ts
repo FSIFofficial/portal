@@ -4,7 +4,7 @@
  * - GAS は保存済みの状態に同じ関数を実行し、その結果を正とする（権限の判定もサーバー側で行われる）
  * scripts/build-kouhou-gas.mjs がこのファイル（と domain/ 以下）を GAS 用の1ファイルにまとめる。
  */
-import type { AccountPermission, AppState, Asset, AssetKind, JstDateTime, Settings, User } from './types'
+import type { AccountPermission, AppState, AssetKind, JstDateTime, Level, Settings, User } from './types'
 import {
   type Result,
   addComment,
@@ -148,7 +148,10 @@ export function applyAdminPatch(s: AppState, patch: AdminPatch): Result {
       else list.push(item)
     }
   }
-  if (patch.settings) s.settings = patch.settings
+  if (s.settings.usersManagedBy === 'access' && (patch.upsert.users?.length || patch.remove.users?.length)) {
+    return { ok: false, message: '利用者はアクセス権限管理（/access/）で管理しています。追加・レベル・管理者の変更はそちらで行ってください' }
+  }
+  if (patch.settings) s.settings = { ...patch.settings, usersManagedBy: s.settings.usersManagedBy ?? null }
   // 自分の管理者権限は外せない（誰も管理できなくなるのを防ぐ）
   const self = s.users.find((u) => u.id === user.id)
   if (!self?.isAdmin || self.status !== 'active') return { ok: false, message: '自分自身の管理者権限・利用状態は変更できません' }
@@ -195,6 +198,80 @@ export const COMMANDS: Record<string, (s: AppState, ...args: any[]) => Result> =
 export function commandName(fn: unknown): string | null {
   for (const [name, f] of Object.entries(COMMANDS)) if (f === fn) return name
   return null
+}
+
+/* ---------- 利用者：FSIF Access Manager（/access/）との連携 ---------- */
+
+/** Access Manager の「実効権限」1件（checkAccess・listAccess の結果のうち、利用できる人） */
+export interface AccessEntry {
+  email: string
+  name: string
+  roleKey: string
+  rank: number
+}
+
+/**
+ * Access Manager で定義する広報管理の役割と、広報管理のレベル・管理者の対応。
+ * 役割キーが一致しないときは rank（1〜3）をレベルとして使い、4以上は管理者として扱う。
+ */
+export const ACCESS_ROLES: { roleKey: string; label: string; rank: number; level: Level; isAdmin: boolean; description: string }[] = [
+  { roleKey: 'level1', label: 'レベル①', rank: 1, level: 1, isAdmin: false, description: '原稿の作成。内容は承認が必要' },
+  { roleKey: 'level2', label: 'レベル②', rank: 2, level: 2, isAdmin: false, description: '定期投稿の内容は自動承認' },
+  { roleKey: 'level3', label: 'レベル③', rank: 3, level: 3, isAdmin: false, description: '内容は自動承認。承認者になれる' },
+  { roleKey: 'admin', label: '管理者', rank: 4, level: 3, isAdmin: true, description: 'レベル③＋管理者設定（アカウント接続・権限・緊急停止）' },
+]
+
+export function levelFromRole(roleKey: string, rank: number): { level: Level; isAdmin: boolean } {
+  const def = ACCESS_ROLES.find((r) => r.roleKey === roleKey)
+  if (def) return { level: def.level, isAdmin: def.isAdmin }
+  const n = Math.round(Number(rank) || 1)
+  return { level: (Math.min(3, Math.max(1, n)) as Level), isAdmin: n >= 4 }
+}
+
+/** Access Manager で使えると判定された人を利用者に反映する（いなければ追加）。変わったら true */
+export function syncAccessUser(s: AppState, entry: AccessEntry): { user: User; changed: boolean } {
+  const email = entry.email.trim().toLowerCase()
+  const { level, isAdmin } = levelFromRole(entry.roleKey, entry.rank)
+  let user = s.users.find((u) => u.email.trim().toLowerCase() === email)
+  if (!user) {
+    s.seq += 1
+    user = { id: `u-${s.seq}`, name: entry.name || email.split('@')[0], email, isAdmin, level, status: 'active', publishSuccessCount: 0 }
+    s.users.push(user)
+    // 新しい人：全アカウントを閲覧・作成・編集でき、レベル③以上は承認もできる（細かい調整は「権限」で）
+    for (const a of s.accounts) {
+      s.permissions.push({ userId: user.id, accountId: a.id, view: true, create: true, edit: true, approve: level === 3, levelOverride: null })
+    }
+    return { user, changed: true }
+  }
+  const next = { name: entry.name || user.name, level, isAdmin, status: 'active' as const }
+  const changed = user.name !== next.name || user.level !== next.level || user.isAdmin !== next.isAdmin || user.status !== next.status
+  Object.assign(user, next)
+  return { user, changed }
+}
+
+/** Access Manager の一覧（使える人全員）に合わせる。一覧にいない人は利用停止にする（履歴のため削除はしない） */
+export function syncAccessUsers(s: AppState, entries: AccessEntry[]): { changed: boolean; added: number; updated: number; suspended: number } {
+  let added = 0
+  let updated = 0
+  let suspended = 0
+  const before = s.users.length
+  const allowed = new Set<string>()
+  for (const e of entries) {
+    if (!e.email) continue
+    allowed.add(e.email.trim().toLowerCase())
+    const r = syncAccessUser(s, e)
+    if (r.changed) updated++
+  }
+  added = s.users.length - before
+  updated -= added
+  for (const u of s.users) {
+    if (allowed.has(u.email.trim().toLowerCase()) || u.status === 'suspended') continue
+    u.status = 'suspended'
+    u.isAdmin = false
+    suspended++
+  }
+  s.settings.usersManagedBy = 'access'
+  return { changed: added + updated + suspended > 0, added, updated, suspended }
 }
 
 /* ---------- GAS から呼ぶ入口 ---------- */

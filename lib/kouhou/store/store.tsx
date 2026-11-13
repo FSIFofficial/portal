@@ -44,7 +44,7 @@ function subscribe(l: () => void) {
 export type LiveStatus =
   | { kind: 'loading' }
   | { kind: 'ready'; gasVersion: string }
-  | { kind: 'unregistered'; email: string }
+  | { kind: 'unregistered'; email: string; reason?: string }
   | { kind: 'suspended'; email: string }
   | { kind: 'error'; code: string; message: string }
 
@@ -68,7 +68,7 @@ function adopt(state: AppState) {
 export async function reloadLive(): Promise<void> {
   try {
     const r = await callKouhou<LoadResponse>('load')
-    if (!r.registered) setMeta({ status: { kind: 'unregistered', email: r.email } })
+    if (!r.registered) setMeta({ status: { kind: 'unregistered', email: r.email, reason: r.reason } })
     else if (r.suspended) setMeta({ status: { kind: 'suspended', email: r.email } })
     else {
       adopt(r.state)
@@ -102,7 +102,7 @@ function send<T extends CommandResponse>(action: string, payload: Record<string,
 }
 
 /** 本番の管理者専用の操作（Xとの接続・Discordのチャンネル取得など） */
-export function liveAdmin(action: 'connectX' | 'disconnectX' | 'checkConnections' | 'syncDiscordChannels' | 'testNotify', payload: Record<string, unknown> = {}) {
+export function liveAdmin(action: 'connectX' | 'disconnectX' | 'checkConnections' | 'syncDiscordChannels' | 'testNotify' | 'syncAccess', payload: Record<string, unknown> = {}) {
   return send(action, payload)
 }
 
