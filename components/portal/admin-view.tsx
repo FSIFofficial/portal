@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AlertTriangle, Bell, BookOpen, Link2, Tags, Trash2, ChartColumn, CheckCircle2, ChevronRight, FileText, History, KeyRound, LifeBuoy, Link2Off, LoaderCircle, Plus, RefreshCcw, Settings2, ShieldCheck, UserCog, Wrench, XCircle } from 'lucide-react'
+import { AlertTriangle, Bell, BookOpen, Link2, Tags, Trash2, ChartColumn, CheckCircle2, ChevronRight, FileText, History, LifeBuoy, Link2Off, LoaderCircle, Plus, RefreshCcw, Settings2, ShieldCheck, Wrench, XCircle } from 'lucide-react'
 import { DEMO_MODE, EXPECTED_GAS_VERSION, asset } from '@/lib/config'
 import { ApiError, api } from '@/lib/api'
 import { downloadUrl, driveKindLabel, parseDriveUrl } from '@/lib/drive'
@@ -22,7 +22,7 @@ import {
   ToolIcon, useToast,
 } from './ui'
 
-type Section = 'guide' | 'tools' | 'documents' | 'links' | 'categories' | 'announcements' | 'help' | 'users' | 'roles' | 'settings' | 'stats' | 'trash' | 'logs' | 'system'
+type Section = 'guide' | 'tools' | 'documents' | 'links' | 'categories' | 'announcements' | 'help' | 'settings' | 'stats' | 'trash' | 'logs' | 'system'
 
 const SECTIONS: { id: Section; label: string; icon: typeof Wrench; allowed: (me: Me) => boolean; description: string }[] = [
   { id: 'tools', label: 'ツール管理', icon: Wrench, allowed: (me) => can(me, 'tools.manage'), description: 'ポータルに掲載するツールと接続先URL・公開範囲を管理します。' },
@@ -31,8 +31,6 @@ const SECTIONS: { id: Section; label: string; icon: typeof Wrench; allowed: (me:
   { id: 'categories', label: 'カテゴリ整理', icon: Tags, allowed: (me) => can(me, 'tools.manage') || can(me, 'documents.manage') || can(me, 'links.manage'), description: 'ツールのカテゴリ・資料の種類・リンクのカテゴリの名前を、まとめて変更・統合します。' },
   { id: 'announcements', label: 'お知らせ', icon: Bell, allowed: (me) => can(me, 'announcements.manage'), description: 'ページ上部に表示するお知らせを管理します。' },
   { id: 'help', label: 'ヘルプ編集', icon: LifeBuoy, allowed: (me) => can(me, 'announcements.manage'), description: 'ヘルプ・問い合わせページの内容（問い合わせ先・よくある質問）を編集します。' },
-  { id: 'users', label: 'アカウント', icon: UserCog, allowed: (me) => me.isSuper, description: 'アカウントは FSIF Access Manager で管理しています。' },
-  { id: 'roles', label: 'ロールと権限', icon: KeyRound, allowed: (me) => me.isSuper, description: 'ロールと権限は FSIF Access Manager で管理しています。' },
   { id: 'settings', label: '設定', icon: Settings2, allowed: (me) => me.isSuper, description: '未登録アカウントの扱いなど、ポータル全体の設定です。' },
   { id: 'stats', label: '利用状況', icon: ChartColumn, allowed: (me) => can(me, 'logs.view'), description: 'ツールと資料がどれくらい使われているかを月ごとに集計しています。' },
   { id: 'trash', label: 'ゴミ箱', icon: Trash2, allowed: () => true, description: '削除したものは30日間ここに残り、元に戻せます。30日を過ぎると自動で完全に削除されます。' },
@@ -107,7 +105,6 @@ export function AdminView({ me, section, navigate }: { me: Me; section: string; 
             {current.id === 'links' && <LinksAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'categories' && <CategoryAdmin section={current} data={data} me={me} mutate={mutate} loading={loading} onReload={reload} />}
             {current.id === 'announcements' && <AnnouncementsAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
-            {(current.id === 'users' || current.id === 'roles') && <MovedToAccessManager section={current} header={<SectionHeader section={current} loading={loading} onReload={reload} />} />}
             {current.id === 'settings' && <SettingsAdmin data={data} mutate={mutate} header={<SectionHeader section={current} loading={loading} onReload={reload} />} />}
             {current.id === 'help' && <HelpAdmin section={current} data={data} mutate={mutate} loading={loading} onReload={reload} />}
             {current.id === 'stats' && <UsageAdmin section={current} data={data} />}
@@ -401,35 +398,6 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
           </div>
         </Modal>
       )}
-    </>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// アカウント・ロールと権限（FSIF Access Manager に移した）
-// ---------------------------------------------------------------------------
-
-/**
- * アカウントとロールの編集は FSIF Access Manager（/access/）で行う（二重に編集できないよう、ここでは案内だけ出す）。
- * データの正本はこれまでどおりこのポータルの GAS で、Access Manager はポータルの API を通して書き換える。
- */
-function MovedToAccessManager({ section, header }: { section: (typeof SECTIONS)[number]; header: ReactNode }) {
-  const isUsers = section.id === 'users'
-  const href = asset(isUsers ? '/access/#members' : '/access/#portalRoles')
-  return (
-    <>
-      {header}
-      <div className="flex flex-col items-start gap-3 px-5 py-6 text-[13px] leading-6 text-[#4f5f70]">
-        <p>
-          {isUsers
-            ? 'アカウント（ポータルにログインできる人）とロールの割り当ては、FSIF Access Manager の「メンバー」で行います。メンバーを追加するとポータルのアカウントが作られ、退会にするとアカウントが無効になります。'
-            : 'ロールの作成・編集と、できる操作の設定は、FSIF Access Manager の「ポータルのロール」で行います。ツール・資料・お知らせ・リンクの「公開範囲」は、これまでどおりこの管理画面で設定します。'}
-        </p>
-        <a href={href} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--brand)] px-3.5 py-2 text-[12px] font-bold text-white hover:bg-[var(--brand-dark)]">
-          {isUsers ? 'Access Manager の「メンバー」を開く' : 'Access Manager の「ポータルのロール」を開く'}
-          <ChevronRight size={14} />
-        </a>
-      </div>
     </>
   )
 }

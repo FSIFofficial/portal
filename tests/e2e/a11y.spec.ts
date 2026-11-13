@@ -14,7 +14,6 @@ const PAGES = [
   { name: 'ヘルプ', path: './#/help' },
   { name: '検索', path: './#/search?q=サンプル' },
   { name: '管理：ツール', path: './#/admin/tools' },
-  { name: '管理：アカウント', path: './#/admin/users' },
   { name: '管理：設定', path: './#/admin/settings' },
   { name: '管理：変更履歴', path: './#/admin/logs' },
   { name: '管理：バージョン確認', path: './#/admin/system' },

@@ -6,12 +6,14 @@ import { ArrowRight, ChevronDown } from 'lucide-react'
 import { can, type Me, type Permission } from '@/lib/types'
 import { SectionHeader } from './admin-shared'
 import type { Navigate } from './router'
+import { asset } from '@/lib/config'
 
 interface Topic {
   title: string
   /** 表示に必要な権限（'*' は全権管理者のみ、null は全員） */
   perm: Permission | null
-  link?: { label: string; path: string }
+  /** path はポータル内の画面、href は別の画面（FSIF Access Manager など） */
+  link?: { label: string; path?: string; href?: string }
   body: ReactNode
 }
 
@@ -97,7 +99,7 @@ const TOPICS: Topic[] = [
   {
     title: 'メンバーを登録する・権限を決める',
     perm: '*',
-    link: { label: 'アカウントの案内を開く', path: '/admin/users' },
+    link: { label: 'FSIF Access Manager を開く', href: '/access/#members' },
     body: (
       <ol>
         <li>メンバー（アカウント）とロールは <b>FSIF Access Manager</b>（ツール一覧の「アクセス権限管理」、<code>/access/</code>）で管理します。</li>
@@ -184,11 +186,15 @@ export function AdminGuide({ section, me, navigate }: { section: { label: string
             </summary>
             <div className="border-t border-[#eef1f4] px-4 py-3 text-[13px] leading-7 text-[#38536f] [&_li]:mb-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5">
               {t.body}
-              {t.link && (
-                <button onClick={() => navigate(t.link!.path)} className="mt-2 inline-flex items-center gap-1 text-[12px] font-bold text-[var(--brand-fg)] hover:underline">
+              {t.link?.href ? (
+                <a href={asset(t.link.href)} className="mt-2 inline-flex items-center gap-1 text-[12px] font-bold text-[var(--brand-fg)] hover:underline">
+                  {t.link.label}<ArrowRight size={13} />
+                </a>
+              ) : t.link?.path ? (
+                <button onClick={() => navigate(t.link!.path!)} className="mt-2 inline-flex items-center gap-1 text-[12px] font-bold text-[var(--brand-fg)] hover:underline">
                   {t.link.label}<ArrowRight size={13} />
                 </button>
-              )}
+              ) : null}
             </div>
           </details>
         ))}
