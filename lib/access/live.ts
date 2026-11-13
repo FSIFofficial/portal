@@ -165,23 +165,37 @@ export interface PortalAccountResult {
   added: string[]
   activated: string[]
   deactivated: string[]
-  renamed: string[]
+  /** 名前・ロールを変えたアカウント */
+  updated: string[]
   warnings: string[]
 }
 
+/** ポータルのロール。メンバーの主なメールアドレス（小文字）→ ロールID の一覧 */
+export type PortalRolesByEmail = Record<string, string[]>
+
+const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x))
+
 /**
- * メンバーの変更をポータルのアカウントに反映する（メンバーに追加した人がポータルに入れるように）。
- * - 新しいメンバー・メールを変えた／足したメンバー：アドレスごとにアカウントが無ければ作る（ロールはポータルの「自動登録のロール」、無ければ member）
+ * メンバーの変更をポータルのアカウントに反映する（ポータルのアカウント・ロールは Access Manager で管理する）。
+ * - 新しいメンバー・メールを変えた／足したメンバー：アドレスごとにアカウントが無ければ作る
+ *   （ロールは roles で指定したもの。指定が無ければポータルの「自動登録のロール」、それも無ければ member）
  * - 退会：アカウントを無効にする／退会から戻した：有効にする
- * - 氏名の変更：アカウントの名前も変える
+ * - 氏名の変更・ロールの指定：アカウントの名前・ロールを変える（メンバーのすべてのアドレスに同じロール）
  * - メンバーから外したメールアドレスのアカウントは無効にする
- * ポータル側でしか持たない情報（ロール・メモ）は変えない。失敗しても権限管理の保存は取り消さない（warnings に入れる）。
+ * 失敗しても権限管理の保存は取り消さない（warnings に入れる）。ポータルへの書き込みはこの関数だけが行う
  */
-export async function syncPortalAccounts(token: string, before: AppData, after: AppData, selfEmail: string): Promise<PortalAccountResult> {
-  const result: PortalAccountResult = { added: [], activated: [], deactivated: [], renamed: [], warnings: [] }
+export async function syncPortalAccounts(
+  token: string,
+  before: AppData,
+  after: AppData,
+  selfEmail: string,
+  roles: PortalRolesByEmail = {},
+): Promise<PortalAccountResult> {
+  const result: PortalAccountResult = { added: [], activated: [], deactivated: [], updated: [], warnings: [] }
+  const rolesFor = (m: { email: string }) => roles[m.email.trim().toLowerCase()]
   const changed = after.members.filter((m) => {
     const b = before.members.find((x) => x.id === m.id)
-    return !b || memberEmails(b).join() !== memberEmails(m).join() || b.name !== m.name || b.status !== m.status
+    return !b || memberEmails(b).join() !== memberEmails(m).join() || b.name !== m.name || b.status !== m.status || !!rolesFor(m)
   })
   if (changed.length === 0) return result
 
@@ -198,14 +212,15 @@ export async function syncPortalAccounts(token: string, before: AppData, after: 
   }
   const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), u]))
 
-  const toAdd: { email: string; name: string }[] = []
+  // 作るアカウントは、付けるロールごとにまとめて一括登録する
+  const toAdd = new Map<string, { roles: string[]; users: { email: string; name: string }[] }>()
   const toActivate: string[] = []
   const toDeactivate: string[] = []
   for (const m of changed) {
     const b = before.members.find((x) => x.id === m.id)
     const emails = memberEmails(m)
     const shouldBeActive = m.status !== 'withdrawn'
-    // メンバーから外したメールアドレスのアカウントは無効にする
+    const desired = rolesFor(m)
     for (const old of b ? memberEmails(b) : []) {
       const u = byEmail.get(old)
       if (!emails.includes(old) && u?.active && old !== selfEmail) toDeactivate.push(u.email)
@@ -213,27 +228,35 @@ export async function syncPortalAccounts(token: string, before: AppData, after: 
     for (const email of emails) {
       const user = byEmail.get(email)
       if (!user) {
-        if (shouldBeActive) toAdd.push({ email, name: m.name })
+        if (!shouldBeActive) continue
+        const r = desired ?? defaultRoles
+        const key = [...r].sort().join(',')
+        const group = toAdd.get(key) ?? { roles: r, users: [] }
+        group.users.push({ email, name: m.name })
+        toAdd.set(key, group)
         continue
       }
       if (user.active !== shouldBeActive) {
         if (!shouldBeActive && email === selfEmail) result.warnings.push('自分自身のポータルのアカウントは無効にできません')
         else (shouldBeActive ? toActivate : toDeactivate).push(user.email)
       }
-      if (b && b.name !== m.name && user.name !== m.name) {
+      const patch: Partial<PortalUser> = {}
+      if (b && b.name !== m.name && user.name !== m.name) patch.name = m.name
+      if (desired && !sameSet(user.roles, desired)) patch.roles = desired
+      if (Object.keys(patch).length) {
         try {
-          await api.saveUser(token, { ...user, name: m.name }, false)
-          result.renamed.push(email)
+          await api.saveUser(token, { ...user, ...patch }, false)
+          result.updated.push(email)
         } catch (e) {
-          result.warnings.push(`${m.name}（${email}）のアカウント名を変更できませんでした：${portalError(e)}`)
+          result.warnings.push(`${m.name}（${email}）のアカウントを更新できませんでした：${portalError(e)}`)
         }
       }
     }
   }
 
-  if (toAdd.length) {
+  for (const group of toAdd.values()) {
     try {
-      const r = await api.bulkAddUsers(token, toAdd, defaultRoles)
+      const r = await api.bulkAddUsers(token, group.users, group.roles)
       result.added.push(...r.added)
       for (const s of r.skipped) result.warnings.push(`${s.email}：${s.reason}`)
     } catch (e) {

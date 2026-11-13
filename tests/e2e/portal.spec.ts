@@ -317,3 +317,12 @@ test('公開範囲を「全権管理者」だけにしたツールは、全権�
   await expect(page.locator('article h3').first()).toBeVisible()
   await expect(page.locator('article h3', { hasText: 'サンプルツールB' })).toHaveCount(0)
 })
+
+test('管理画面の「アカウント」「ロールと権限」は FSIF Access Manager への案内になっている', async ({ page }) => {
+  await login(page, '管理 太郎')
+  await page.goto('./#/admin/users')
+  await expect(page.getByRole('link', { name: 'Access Manager の「メンバー」を開く' })).toHaveAttribute('href', /\/access\/#members$/)
+  await expect(page.getByRole('button', { name: 'アカウント追加' })).toHaveCount(0)
+  await page.goto('./#/admin/roles')
+  await expect(page.getByRole('link', { name: 'Access Manager の「ポータルのロール」を開く' })).toHaveAttribute('href', /\/access\/#portalRoles$/)
+})

@@ -6,14 +6,14 @@ import { ArrowDown, ArrowUp, BellRing, Stethoscope, XCircle, MessageSquare, Shie
 import { api, fileToBase64 } from '@/lib/api'
 import { DEMO_MODE } from '@/lib/config'
 import {
-  DEFAULT_BRANDING, type AckStatus, type AdminData, type Announcement, type BackupStatus, type Branding, type BulkAddResult, type DiscordStatus,
+  DEFAULT_BRANDING, type AckStatus, type AdminData, type Announcement, type BackupStatus, type Branding, type DiscordStatus,
   type CategoryKind, type ErrorDigestStatus, type HelpContent, type Me, type SelfCheckResult, type TrashItem, type UploadFolder, type UploadFolders, type UploadResult, type UsageStats,
   can,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { SectionHeader, Table, fmt, type Mutate } from './admin-shared'
 import { useAuth } from './auth-provider'
-import { Button, Checkbox, Field, Modal, RolePicker, TextArea, TextInput, useToast } from './ui'
+import { Button, Checkbox, Field, Modal, TextArea, TextInput, useToast } from './ui'
 
 type SectionInfo = { label: string; description: string }
 
@@ -145,103 +145,6 @@ export function UsageAdmin({ section, data }: { section: SectionInfo; data: Admi
       )}
       <p className="px-5 py-4 text-[11px] text-[#5b6b7c]">「開く」「資料を開く」「プレビュー」「ダウンロード」、リンク集のリンクが押された回数です（同じ人が何度押しても数えます）。</p>
     </>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// アカウントの一括登録
-// ---------------------------------------------------------------------------
-
-/** 表計算ソフトからのコピー（タブ区切り）やカンマ区切りの行から、名前とメールアドレスを取り出す */
-export function parseUserLines(text: string) {
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const cells = line.split(/\t|,|，/).map((c) => c.trim()).filter(Boolean)
-      const email = cells.find((c) => c.includes('@')) ?? ''
-      const name = cells.filter((c) => c !== email).join(' ')
-      return { email: email.toLowerCase(), name, valid: /^[^@\s,]+@[^@\s,]+\.[^@\s,]+$/.test(email) }
-    })
-    .filter((row) => !/^(メール|mail|e-?mail)/i.test(row.email))
-}
-
-export function BulkImportModal({ data, onClose, mutate }: { data: AdminData; onClose: () => void; mutate: Mutate }) {
-  const { run } = useAuth()
-  const toast = useToast()
-  const [text, setText] = useState('')
-  const [roles, setRoles] = useState<string[]>(['member'])
-  const [result, setResult] = useState<BulkAddResult | null>(null)
-  const [saving, setSaving] = useState(false)
-  const rows = parseUserLines(text)
-  const existing = new Set((data.users ?? []).map((u) => u.email))
-  const toAdd = rows.filter((r) => r.valid && !existing.has(r.email))
-
-  const submit = async () => {
-    setSaving(true)
-    try {
-      const res = await run((t) => api.bulkAddUsers(t, toAdd.map(({ email, name }) => ({ email, name })), roles))
-      // 画面側で除外した行（不正・登録済み）も結果に含める
-      const excluded = rows.filter((r) => !toAdd.includes(r)).map((r) => ({
-        email: r.email || '(メールアドレスなし)',
-        reason: r.valid ? 'すでに登録されています' : 'メールアドレスが正しくありません',
-      }))
-      setResult({ ...res, skipped: [...excluded, ...res.skipped] })
-      await mutate(async () => {}, `${res.added.length}件のアカウントを登録しました`)
-    } catch (e) {
-      toast((e as Error).message, 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal wide title="アカウントの一括登録" onClose={onClose} footer={result ? <Button onClick={onClose}>閉じる</Button> : (
-      <>
-        <Button variant="secondary" onClick={onClose} disabled={saving}>キャンセル</Button>
-        <Button onClick={submit} disabled={saving || !toAdd.length}>{saving ? '登録中…' : `${toAdd.length}件を登録`}</Button>
-      </>
-    )}>
-      {result ? (
-        <div className="text-[13px] leading-6">
-          <p className="font-bold text-[#1c7a43]">{result.added.length}件を登録しました。</p>
-          {result.skipped.length > 0 && (
-            <>
-              <p className="mt-3 font-bold text-[#92400e]">登録しなかった行（{result.skipped.length}件）</p>
-              <ul className="mt-1 list-disc pl-5 text-[12px] text-[#55708b]">{result.skipped.map((s, i) => <li key={i}>{s.email}：{s.reason}</li>)}</ul>
-            </>
-          )}
-        </div>
-      ) : (
-        <>
-          <Field label="名前とメールアドレス" hint="スプレッドシートから「名前」「メールアドレス」の2列をコピーして貼り付けられます。カンマ区切りでも大丈夫です。1行に1人ずつ。">
-            <TextArea rows={7} value={text} onChange={(e) => setText(e.target.value)} placeholder={'山田 太郎\tyamada@example.com\n佐藤 花子, sato@example.com'} />
-          </Field>
-          <Field group label="割り当てるロール">
-            <RolePicker roles={data.roles} value={roles} onChange={setRoles} emptyLabel="ロールなし" />
-          </Field>
-          {rows.length > 0 && (
-            <div className="max-h-[260px] overflow-y-auto rounded-xl border border-[#edf0f3]">
-              <table className="w-full text-left text-[12px]">
-                <thead className="sticky top-0 bg-[#fafbfd] text-[#5b6b7c]"><tr><th className="px-3 py-2">名前</th><th className="px-3 py-2">メールアドレス</th><th className="px-3 py-2">判定</th></tr></thead>
-                <tbody>
-                  {rows.map((r, i) => (
-                    <tr key={i} className="border-t border-[#edf0f3]">
-                      <td className="px-3 py-2">{r.name || <span className="text-[#5b6b7c]">（メールアドレスを使用）</span>}</td>
-                      <td className="px-3 py-2">{r.email || '—'}</td>
-                      <td className="px-3 py-2">
-                        {!r.valid ? <span className="text-[#b42318]">メールアドレスが不正</span> : existing.has(r.email) ? <span className="text-[#92400e]">登録済み（スキップ）</span> : <span className="text-[#1c7a43]">登録する</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-    </Modal>
   )
 }
 

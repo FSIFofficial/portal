@@ -100,3 +100,38 @@ test('アクセス権限管理：代表を変更でき、団体垢は代表・�
   await page.getByRole('button', { name: '譲渡する' }).click()
   await expect(page.getByText('役割を譲渡しました')).toBeVisible()
 })
+
+test('アクセス権限管理：ポータルのロールを作り、メンバーに割り当て、一括追加できる', async ({ page }) => {
+  await page.goto('./access/')
+  // ロールを作る
+  await page.getByRole('button', { name: 'ポータルのロール' }).click()
+  await expect(page.getByLabel('ポータルのロール').getByText('全権管理者')).toBeVisible()
+  await page.getByRole('button', { name: 'ロールを作成' }).click()
+  await page.getByLabel('ロールID').fill('pr-team')
+  await page.getByLabel('ロール名').fill('広報チーム')
+  await page.getByLabel('お知らせの追加・編集').check()
+  await page.getByRole('button', { name: '保存する' }).click()
+  await expect(page.getByText('ロールを作成しました')).toBeVisible()
+  await expect(page.getByLabel('ポータルのロール').getByRole('listitem').filter({ hasText: '広報チーム' })).toContainText('お知らせの追加・編集')
+
+  // メンバーに割り当てる（メンバーの情報は変えず、ロールだけ）
+  await page.getByRole('button', { name: 'メンバー', exact: true }).click()
+  const row = page.getByRole('listitem').filter({ hasText: '森下 花音' })
+  await expect(row).toContainText('メンバー')
+  await row.getByRole('button', { name: '編集' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '広報チーム' }).click()
+  await page.getByRole('button', { name: '保存する' }).click()
+  await expect(row).toContainText('広報チーム')
+  await page.getByLabel('ポータルのロールで絞り込み').selectOption({ label: '広報チーム' })
+  await expect(page.getByRole('listitem').filter({ hasText: '@' })).toHaveCount(1)
+  await page.getByLabel('ポータルのロールで絞り込み').selectOption({ label: 'すべてのロール' })
+
+  // 一括追加
+  await page.getByRole('button', { name: '一括追加' }).click()
+  await page.getByLabel('名前・メールアドレス').fill('一括 一郎\tikkatsu1@example.com\n一括 二郎, ikkatsu2@example.com\nkanon.morishita@example.com\nまちがい')
+  await expect(page.getByRole('status')).toContainText('追加：2人')
+  await expect(page.getByRole('status')).toContainText('登録済みのため飛ばす：1人')
+  await page.getByRole('button', { name: '2人を追加' }).click()
+  await expect(page.getByText('2人を追加しました')).toBeVisible()
+  await expect(page.getByRole('listitem').filter({ hasText: '一括 二郎' })).toContainText('メンバー')
+})

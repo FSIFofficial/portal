@@ -1,13 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AlertTriangle, Bell, BookOpen, Link2, Tags, Trash2, UserX, ChartColumn, CheckCircle2, ChevronRight, FileText, History, KeyRound, LifeBuoy, Link2Off, LoaderCircle, Plus, RefreshCcw, Settings2, ShieldCheck, UserCog, Users, Wrench, XCircle } from 'lucide-react'
-import { DEMO_MODE, EXPECTED_GAS_VERSION } from '@/lib/config'
+import { AlertTriangle, Bell, BookOpen, Link2, Tags, Trash2, ChartColumn, CheckCircle2, ChevronRight, FileText, History, KeyRound, LifeBuoy, Link2Off, LoaderCircle, Plus, RefreshCcw, Settings2, ShieldCheck, UserCog, Wrench, XCircle } from 'lucide-react'
+import { DEMO_MODE, EXPECTED_GAS_VERSION, asset } from '@/lib/config'
 import { ApiError, api } from '@/lib/api'
 import { downloadUrl, driveKindLabel, parseDriveUrl } from '@/lib/drive'
 import {
-  PERMISSION_LABELS, can, type AdminData, type Announcement, type LogEntry, type Me, type Permission, type PortalDocument,
-  type LogFilter, type Role, type Settings, type SystemCheck, type Tool, type User,
+  can, type AdminData, type Announcement, type LogEntry, type Me, type PortalDocument,
+  type LogFilter, type Settings, type SystemCheck, type Tool,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from './auth-provider'
@@ -15,7 +15,7 @@ import { ModalFooter, RowActions, SectionHeader, Table, confirmDelete, fmt, useE
 import { AdminGuide } from './admin-guide'
 import { LinksAdmin } from './admin-links'
 import { IconImageField } from './icon-field'
-import { AckStatusModal, BackupPanel, BrandingPanel, CategoryAdmin, SecurityAlertsPanel, SelfCheckPanel, BulkImportModal, DiscordPanel, TrashAdmin, ErrorDigestPanel, NotifyCheckbox, HelpAdmin, UploadButton, UploadFolderPanel, UsageAdmin } from './admin-extra'
+import { AckStatusModal, BackupPanel, BrandingPanel, CategoryAdmin, SecurityAlertsPanel, SelfCheckPanel, DiscordPanel, TrashAdmin, ErrorDigestPanel, NotifyCheckbox, HelpAdmin, UploadButton, UploadFolderPanel, UsageAdmin } from './admin-extra'
 import type { Navigate } from './router'
 import {
   Button, Checkbox, EmptyState, Field, Modal, RoleBadges, RolePicker, Select, StatusBadge, TONES, TOOL_ICONS, TextArea, TextInput,
@@ -31,8 +31,8 @@ const SECTIONS: { id: Section; label: string; icon: typeof Wrench; allowed: (me:
   { id: 'categories', label: 'カテゴリ整理', icon: Tags, allowed: (me) => can(me, 'tools.manage') || can(me, 'documents.manage') || can(me, 'links.manage'), description: 'ツールのカテゴリ・資料の種類・リンクのカテゴリの名前を、まとめて変更・統合します。' },
   { id: 'announcements', label: 'お知らせ', icon: Bell, allowed: (me) => can(me, 'announcements.manage'), description: 'ページ上部に表示するお知らせを管理します。' },
   { id: 'help', label: 'ヘルプ編集', icon: LifeBuoy, allowed: (me) => can(me, 'announcements.manage'), description: 'ヘルプ・問い合わせページの内容（問い合わせ先・よくある質問）を編集します。' },
-  { id: 'users', label: 'アカウント', icon: UserCog, allowed: (me) => me.isSuper, description: 'ログインできるGoogleアカウントと、割り当てるロールを管理します。' },
-  { id: 'roles', label: 'ロールと権限', icon: KeyRound, allowed: (me) => me.isSuper, description: 'ロール（権限のまとまり）を作成し、できる操作を設定します。' },
+  { id: 'users', label: 'アカウント', icon: UserCog, allowed: (me) => me.isSuper, description: 'アカウントは FSIF Access Manager で管理しています。' },
+  { id: 'roles', label: 'ロールと権限', icon: KeyRound, allowed: (me) => me.isSuper, description: 'ロールと権限は FSIF Access Manager で管理しています。' },
   { id: 'settings', label: '設定', icon: Settings2, allowed: (me) => me.isSuper, description: '未登録アカウントの扱いなど、ポータル全体の設定です。' },
   { id: 'stats', label: '利用状況', icon: ChartColumn, allowed: (me) => can(me, 'logs.view'), description: 'ツールと資料がどれくらい使われているかを月ごとに集計しています。' },
   { id: 'trash', label: 'ゴミ箱', icon: Trash2, allowed: () => true, description: '削除したものは30日間ここに残り、元に戻せます。30日を過ぎると自動で完全に削除されます。' },
@@ -107,8 +107,7 @@ export function AdminView({ me, section, navigate }: { me: Me; section: string; 
             {current.id === 'links' && <LinksAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
             {current.id === 'categories' && <CategoryAdmin section={current} data={data} me={me} mutate={mutate} loading={loading} onReload={reload} />}
             {current.id === 'announcements' && <AnnouncementsAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
-            {current.id === 'users' && <UsersAdmin me={me} data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
-            {current.id === 'roles' && <RolesAdmin data={data} mutate={mutate} header={(action) => <SectionHeader section={current} action={action} loading={loading} onReload={reload} />} />}
+            {(current.id === 'users' || current.id === 'roles') && <MovedToAccessManager section={current} header={<SectionHeader section={current} loading={loading} onReload={reload} />} />}
             {current.id === 'settings' && <SettingsAdmin data={data} mutate={mutate} header={<SectionHeader section={current} loading={loading} onReload={reload} />} />}
             {current.id === 'help' && <HelpAdmin section={current} data={data} mutate={mutate} loading={loading} onReload={reload} />}
             {current.id === 'stats' && <UsageAdmin section={current} data={data} />}
@@ -407,150 +406,30 @@ function AnnouncementsAdmin({ data, mutate, header }: { data: AdminData; mutate:
 }
 
 // ---------------------------------------------------------------------------
-// アカウント（全権管理者のみ）
+// アカウント・ロールと権限（FSIF Access Manager に移した）
 // ---------------------------------------------------------------------------
 
-const INACTIVE_DAYS = 90
-
-const emptyUser: User = { email: '', name: '', roles: ['member'], active: true, note: '', createdAt: '', updatedAt: '', lastLoginAt: '' }
-
-function UsersAdmin({ me, data, mutate, header }: { me: Me; data: AdminData; mutate: Mutate; header: (action: ReactNode) => ReactNode }) {
-  const ed = useEditor<User>()
-  const [query, setQuery] = useState('')
-  const [roleFilter, setRoleFilter] = useState('')
-  const [bulk, setBulk] = useState(false)
-  const [inactiveOnly, setInactiveOnly] = useState(false)
-  // 90日以上ログインしていない（一度もログインしていない人を含む）有効なアカウント
-  const limit = new Date(Date.now() - INACTIVE_DAYS * 86400000).toISOString()
-  const isInactive = (u: User) => u.active && u.email !== me.email && (!u.lastLoginAt || new Date(u.lastLoginAt).toISOString() < limit)
-  const inactiveCount = (data.users ?? []).filter(isInactive).length
-  const users = (data.users ?? []).filter((u) => `${u.email} ${u.name} ${u.note}`.toLowerCase().includes(query.toLowerCase()) && (!roleFilter || u.roles.includes(roleFilter)) && (!inactiveOnly || isInactive(u)))
-  const disableShown = async () => {
-    if (!window.confirm(`表示中の${users.length}人のアカウントを無効にします（ログインできなくなります。あとで1人ずつ有効に戻せます）。よろしいですか？`)) return
-    await mutate((t) => api.bulkSetActive(t, users.map((u) => u.email), false), `${users.length}人を無効にしました`)
-    setInactiveOnly(false)
-  }
-  const save = async () => {
-    if (!ed.draft) return
-    ed.setSaving(true)
-    const ok = await mutate((t) => api.saveUser(t, ed.draft!, ed.isNew), ed.isNew ? 'アカウントを追加しました' : 'アカウントを更新しました')
-    ed.setSaving(false)
-    if (ok) ed.close()
-  }
+/**
+ * アカウントとロールの編集は FSIF Access Manager（/access/）で行う（二重に編集できないよう、ここでは案内だけ出す）。
+ * データの正本はこれまでどおりこのポータルの GAS で、Access Manager はポータルの API を通して書き換える。
+ */
+function MovedToAccessManager({ section, header }: { section: (typeof SECTIONS)[number]; header: ReactNode }) {
+  const isUsers = section.id === 'users'
+  const href = asset(isUsers ? '/access/#members' : '/access/#portalRoles')
   return (
     <>
-      {header(
-        <>
-          <Button variant="secondary" onClick={() => setBulk(true)}><Users size={15} />一括登録</Button>
-          <Button onClick={() => ed.open({ ...emptyUser }, true)}><Plus size={15} />アカウント追加</Button>
-        </>,
-      )}
-      {bulk && <BulkImportModal data={data} mutate={mutate} onClose={() => setBulk(false)} />}
-      <div className="flex flex-col gap-2 border-b border-[#edf0f3] px-5 py-3 sm:flex-row">
-        <TextInput placeholder="名前・メールアドレス・メモで絞り込み" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <Select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="sm:w-[200px]" aria-label="ロールで絞り込み">
-          <option value="">すべてのロール</option>
-          {data.roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-        </Select>
-        <button onClick={() => setInactiveOnly(!inactiveOnly)} aria-pressed={inactiveOnly} className={cn('flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[12px] font-bold', inactiveOnly ? 'border-[#92400e] bg-[#92400e] text-white' : 'border-[#f0d9b5] bg-white text-[#92400e]')}>
-          <UserX size={14} />しばらくログインなし（{inactiveCount}）
-        </button>
+      {header}
+      <div className="flex flex-col items-start gap-3 px-5 py-6 text-[13px] leading-6 text-[#4f5f70]">
+        <p>
+          {isUsers
+            ? 'アカウント（ポータルにログインできる人）とロールの割り当ては、FSIF Access Manager の「メンバー」で行います。メンバーを追加するとポータルのアカウントが作られ、退会にするとアカウントが無効になります。'
+            : 'ロールの作成・編集と、できる操作の設定は、FSIF Access Manager の「ポータルのロール」で行います。ツール・資料・お知らせ・リンクの「公開範囲」は、これまでどおりこの管理画面で設定します。'}
+        </p>
+        <a href={href} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--brand)] px-3.5 py-2 text-[12px] font-bold text-white hover:bg-[var(--brand-dark)]">
+          {isUsers ? 'Access Manager の「メンバー」を開く' : 'Access Manager の「ポータルのロール」を開く'}
+          <ChevronRight size={14} />
+        </a>
       </div>
-      {inactiveOnly && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-[#edf0f3] bg-[#fffbf2] px-5 py-3 text-[12px] text-[#92400e]">
-          <span>{INACTIVE_DAYS}日以上ログインしていない（または一度もログインしていない）有効なアカウントです。退会した人がいれば無効にしてください。</span>
-          {users.length > 0 && <Button variant="danger" className="ml-auto" onClick={() => void disableShown()}>表示中の{users.length}人を無効にする</Button>}
-        </div>
-      )}
-      <Table head={['名前 / メールアドレス', 'ロール', '状態', '最終ログイン', '']} empty={!users.length}>
-        {users.map((u) => (
-          <tr key={u.email} className="border-t border-[#edf0f3]">
-            <td className="px-5 py-3 font-semibold text-[#38536f]">{u.name}{u.email === me.email && <span className="ml-1 text-[10px] text-[var(--brand-fg)]">（自分）</span>}<span className="block text-[11px] font-normal text-[#5b6b7c]">{u.email}</span></td>
-            <td className="px-5 py-3"><RoleBadges ids={u.roles} roles={data.roles} emptyLabel="なし" /></td>
-            <td className="px-5 py-3">{u.active ? <span className="text-[#1c7a43]">有効</span> : <span className="text-[#b42318]">無効</span>}</td>
-            <td className="whitespace-nowrap px-5 py-3 text-[#4f5f70]">{fmt(u.lastLoginAt)}</td>
-            <td className="px-5 py-3"><RowActions label={u.email} onEdit={() => ed.open({ ...u })} onDelete={u.email === me.email ? undefined : () => confirmDelete(u.email) && void mutate((t) => api.deleteUser(t, u.email), 'アカウントを削除しました')} /></td>
-          </tr>
-        ))}
-      </Table>
-      {ed.draft && (
-        <Modal title={ed.isNew ? 'アカウントを追加' : 'アカウントを編集'} onClose={ed.close} footer={<ModalFooter onCancel={ed.close} onSave={save} saving={ed.saving} />}>
-          <Field label="Googleアカウントのメールアドレス" required hint="このアドレスでGoogleログインした人がポータルを使えるようになります。">
-            <TextInput type="email" value={ed.draft.email} disabled={!ed.isNew} onChange={(e) => ed.set('email', e.target.value)} placeholder="name@example.com" />
-          </Field>
-          <Field label="表示名"><TextInput value={ed.draft.name} onChange={(e) => ed.set('name', e.target.value)} placeholder="未入力ならGoogleの名前を使います" /></Field>
-          <Field group label="ロール" hint="複数選べます。権限と閲覧範囲は割り当てたロールの合計になります。">
-            <RolePicker roles={data.roles} value={ed.draft.roles} onChange={(v) => ed.set('roles', v)} emptyLabel="ロールなし：公開範囲が「全員」のものだけ閲覧できます" />
-          </Field>
-          <Field label="メモ"><TextInput value={ed.draft.note} onChange={(e) => ed.set('note', e.target.value)} placeholder="所属・担当など" /></Field>
-          <Checkbox checked={ed.draft.active} onChange={(v) => ed.set('active', v)} label="有効（オフにするとログインできなくなります）" />
-        </Modal>
-      )}
-    </>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// ロールと権限（全権管理者のみ）
-// ---------------------------------------------------------------------------
-
-const emptyRole: Role = { id: '', name: '', description: '', permissions: [], builtin: false }
-
-function RolesAdmin({ data, mutate, header }: { data: AdminData; mutate: Mutate; header: (action: ReactNode) => ReactNode }) {
-  const ed = useEditor<Role>()
-  const userCount = (id: string) => (data.users ?? []).filter((u) => u.roles.includes(id)).length
-  const visibleCount = (id: string) =>
-    data.tools.filter((t) => t.visibleRoles.includes(id)).length + data.documents.filter((d) => d.visibleRoles.includes(id)).length
-  const save = async () => {
-    if (!ed.draft) return
-    ed.setSaving(true)
-    const ok = await mutate((t) => api.saveRole(t, ed.draft!, ed.isNew), ed.isNew ? 'ロールを作成しました' : 'ロールを更新しました')
-    ed.setSaving(false)
-    if (ok) ed.close()
-  }
-  const togglePerm = (p: Permission, on: boolean) => ed.set('permissions', on ? [...ed.draft!.permissions, p] : ed.draft!.permissions.filter((x) => x !== p))
-  return (
-    <>
-      {header(<Button onClick={() => ed.open({ ...emptyRole }, true)}><Plus size={15} />ロール作成</Button>)}
-      <div className="border-b border-[#edf0f3] bg-[#f8fafc] px-5 py-3 text-[11px] leading-5 text-[#55708b]">
-        <b>使い方：</b>①ロールを作る → ②「アカウント」でユーザーにロールを割り当てる → ③ツール・資料・お知らせの「公開範囲」でロールを選ぶと、そのロールを持つ人だけに表示されます。
-      </div>
-      <Table head={['ロール', 'できる操作', '割当人数', '限定公開の項目数', '']} empty={!data.roles.length}>
-        {data.roles.map((r) => (
-          <tr key={r.id} className="border-t border-[#edf0f3]">
-            <td className="px-5 py-3 font-semibold text-[#38536f]">
-              {r.name}{r.builtin && <span className="ml-1 rounded bg-[#eef1f5] px-1.5 py-0.5 text-[10px] text-[#4f5f70]">標準</span>}
-              <span className="block text-[11px] font-normal text-[#5b6b7c]">ID: {r.id}{r.description && ` · ${r.description}`}</span>
-            </td>
-            <td className="px-5 py-3 text-[#55708b]">
-              {r.permissions.includes('*') ? <b>すべての操作（アカウント・権限管理を含む）</b> : r.permissions.length ? r.permissions.map((p) => PERMISSION_LABELS[p as Exclude<Permission, '*'>] ?? p).join(' / ') : <span className="text-[#5b6b7c]">閲覧のみ</span>}
-            </td>
-            <td className="px-5 py-3 text-[#4f5f70]">{userCount(r.id)}人</td>
-            <td className="px-5 py-3 text-[#4f5f70]">{visibleCount(r.id)}件</td>
-            <td className="px-5 py-3">
-              {r.id === 'superadmin' ? <span className="block text-right text-[11px] text-[#5b6b7c]">変更不可</span> : (
-                <RowActions label={r.name} onEdit={() => ed.open({ ...r })} onDelete={r.builtin ? undefined : () => confirmDelete(r.name) && void mutate((t) => api.deleteRole(t, r.id), 'ロールを削除しました')} />
-              )}
-            </td>
-          </tr>
-        ))}
-      </Table>
-      {ed.draft && (
-        <Modal title={ed.isNew ? 'ロールを作成' : 'ロールを編集'} onClose={ed.close} footer={<ModalFooter onCancel={ed.close} onSave={save} saving={ed.saving} />}>
-          <Field label="ロールID" required hint="半角英小文字・数字・-_（例：contract, pr-team）。作成後は変更できません。">
-            <TextInput value={ed.draft.id} disabled={!ed.isNew} onChange={(e) => ed.set('id', e.target.value.toLowerCase())} />
-          </Field>
-          <Field label="ロール名" required><TextInput value={ed.draft.name} onChange={(e) => ed.set('name', e.target.value)} placeholder="例：契約担当" /></Field>
-          <Field label="説明"><TextInput value={ed.draft.description} onChange={(e) => ed.set('description', e.target.value)} /></Field>
-          <Field group label="できる操作" hint="何もチェックしなければ「閲覧のみ」のロールになります。アカウントと権限の管理は全権管理者だけができます。">
-            <div className="rounded-lg border border-[#edf0f3] px-3 py-2">
-              {(Object.keys(PERMISSION_LABELS) as Exclude<Permission, '*'>[]).map((p) => (
-                <Checkbox key={p} checked={ed.draft!.permissions.includes(p)} onChange={(v) => togglePerm(p, v)} label={PERMISSION_LABELS[p]} />
-              ))}
-            </div>
-          </Field>
-        </Modal>
-      )}
     </>
   )
 }
