@@ -135,3 +135,66 @@ test('アクセス権限管理：ポータルのロールを作り、メンバ�
   await expect(page.getByText('2人を追加しました')).toBeVisible()
   await expect(page.getByRole('listitem').filter({ hasText: '一括 二郎' })).toContainText('メンバー')
 })
+
+test('アクセス権限管理：親の部署のテンプレートは子の部署のメンバーにも付与される', async ({ page }) => {
+  await page.goto('./access/')
+  await page.getByRole('button', { name: '所属・自動付与' }).click()
+  await page.getByRole('button', { name: '部署を追加' }).click()
+  await page.getByLabel('部署名').fill('SNS班')
+  await page.getByLabel('親の部署').selectOption({ label: '広報部' })
+  await page.getByRole('button', { name: '保存する' }).click()
+  // 子の部署の画面に、広報部のテンプレート（kodama 編集者など）が「引き継ぐもの」として出る
+  const inherited = page.getByLabel('上の部署から引き継ぐテンプレート')
+  await expect(inherited).toContainText('kodama：編集者')
+
+  // 子の部署に所属させると、親のテンプレートどおりに付与される
+  await page.getByRole('button', { name: 'メンバー', exact: true }).click()
+  await page.getByRole('button', { name: 'メンバーを追加' }).click()
+  await page.getByLabel('氏名', { exact: true }).fill('引継 太郎')
+  await page.getByLabel('メールアドレス', { exact: true }).fill('hikitsugi@example.com')
+  await page.getByRole('dialog').getByText('SNS班').click()
+  await expect(page.getByRole('dialog')).toContainText('kodama：編集者 を付与（SNS班）')
+  await page.getByRole('button', { name: '保存する' }).click()
+  await expect(page.getByText('メンバーを追加しました')).toBeVisible()
+  await page.getByRole('button', { name: '権限一覧' }).click()
+  const row = page.getByRole('row').filter({ hasText: '引継 太郎' })
+  await expect(row).toContainText('編集者')
+})
+
+test('アクセス権限管理：完全削除は申請者以外の承認がそろってから予約され、取り消しも実行もできる', async ({ page }) => {
+  await page.goto('./access/')
+  // 天野 湊 に全権管理者のロールを付ける（承認できる人を増やす）
+  await page.getByRole('button', { name: 'メンバー', exact: true }).click()
+  await page.getByLabel('メンバー一覧').getByRole('listitem').filter({ hasText: '天野 湊' }).getByRole('button', { name: '編集' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '全権管理者' }).click()
+  await page.getByRole('button', { name: '保存する' }).click()
+  await expect(page.getByLabel('メンバー一覧').getByRole('listitem').filter({ hasText: '天野 湊' })).toContainText('全権管理者')
+
+  // 退会済みの 水谷 遥 の完全削除を申請
+  const target = page.getByLabel('メンバー一覧').getByRole('listitem').filter({ hasText: '水谷 遥' })
+  await target.getByRole('button', { name: '完全削除を申請' }).click()
+  await page.getByLabel('理由').fill('本人からの削除依頼')
+  await page.getByRole('button', { name: '申請する' }).click()
+  await expect(target).toContainText('完全削除の承認待ち（0/2）')
+  // 自分の申請は承認できない。承認の人数を1人にする
+  const panel = page.getByLabel('完全削除の申請')
+  await expect(panel.getByRole('button', { name: '承認' })).toHaveCount(0)
+  await page.getByRole('button', { name: '必要な承認：2人' }).click()
+  await page.getByLabel('必要な承認の人数').selectOption('1')
+  await expect(target).toContainText('完全削除の承認待ち（0/1）')
+
+  // 天野 湊 に切り替えて承認 → 90日後に削除予約
+  await page.getByRole('button', { name: 'デモユーザーを切り替える' }).click()
+  await page.getByRole('menuitem', { name: /天野 湊/ }).click()
+  await page.getByRole('button', { name: 'メンバー', exact: true }).click()
+  await page.getByLabel('完全削除の申請').getByRole('button', { name: '承認' }).click()
+  await expect(target).toContainText('以降に完全削除')
+
+  // （デモ）期限にして実行 → メンバーから消え、変更履歴の名前も置き換わる
+  await page.getByRole('button', { name: '（デモ）期限にして実行' }).click()
+  await expect(page.getByText('完全削除しました（デモ）')).toBeVisible()
+  await expect(target).toHaveCount(0)
+  await page.getByRole('button', { name: '変更履歴' }).click()
+  await expect(page.getByText('水谷 遥')).toHaveCount(0)
+  await expect(page.getByText(/削除済みメンバー を退会に変更/)).toBeVisible()
+})

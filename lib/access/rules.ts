@@ -209,17 +209,26 @@ function describeGrant(data: AppData, grant: Grant, tool: Tool): AccessSourceInf
       grantedAt: grant.grantedAt,
     }
   }
+  // 親の部署から引き継いだテンプレート
+  const inherited = grant.templateDepartmentId ? `${findDepartment(data, grant.templateDepartmentId)?.name ?? "親の部署"} の` : ""
+  const via = grant.templateDepartmentId ? `（${dept} の上の部署から引き継ぎ）` : ""
   if (grant.source === "position") {
     const stillHead = grant.departmentId ? headDepartmentIds(data, grant.memberId).includes(grant.departmentId) : false
     return {
       kind: stillHead ? "position" : "retained",
       label: stillHead ? "役職" : "役職解除後も保持",
-      detail: `${dept} 事業部長テンプレート`,
+      detail: inherited ? `${inherited}事業部長テンプレート${via}` : `${dept} 事業部長テンプレート`,
       role,
       grantedAt: grant.grantedAt,
     }
   }
-  return { kind: "department", label: "所属", detail: `${dept} 一般メンバーテンプレート`, role, grantedAt: grant.grantedAt }
+  return {
+    kind: "department",
+    label: "所属",
+    detail: inherited ? `${inherited}一般メンバーテンプレート${via}` : `${dept} 一般メンバーテンプレート`,
+    role,
+    grantedAt: grant.grantedAt,
+  }
 }
 
 /**
@@ -428,12 +437,17 @@ export interface GrantPreviewItem {
   toolId: string
   roleKey: string
   departmentId: string
+  /** 親の部署から引き継いだテンプレートのとき、その部署 */
+  templateDepartmentId?: string
   position: TemplatePosition
   /** 手動OFFのため付与しても利用可にならない */
   blockedByManualOff: boolean
 }
 
-/** 所属・役職テンプレートに従った追加付与を計算する（既存付与は削除しない） */
+/**
+ * 所属・役職テンプレートに従った追加付与を計算する（既存付与は削除しない）。
+ * 部署のテンプレートに加えて、親の部署（さらにその上も）のテンプレートも引き継ぐ。
+ */
 export function applyDepartmentRoleGrants(
   data: AppData,
   memberId: string,
@@ -441,8 +455,9 @@ export function applyDepartmentRoleGrants(
   position: TemplatePosition,
 ): GrantPreviewItem[] {
   const items: GrantPreviewItem[] = []
+  const chain = [departmentId, ...departmentAncestors(data, departmentId)]
   for (const tpl of data.templates) {
-    if (tpl.departmentId !== departmentId || tpl.position !== position) continue
+    if (!chain.includes(tpl.departmentId) || tpl.position !== position) continue
     const tool = findTool(data, tpl.toolId)
     if (!tool || !findToolRole(tool, tpl.roleKey)) continue
     const exists = data.grants.some(
@@ -451,6 +466,7 @@ export function applyDepartmentRoleGrants(
         g.memberId === memberId &&
         g.toolId === tpl.toolId &&
         g.departmentId === departmentId &&
+        (g.templateDepartmentId ?? g.departmentId) === tpl.departmentId &&
         g.source === (position === "member" ? "department" : "position") &&
         g.roleKey === tpl.roleKey &&
         !g.retainedAfterTransfer,
@@ -461,6 +477,7 @@ export function applyDepartmentRoleGrants(
       toolId: tpl.toolId,
       roleKey: tpl.roleKey,
       departmentId,
+      ...(tpl.departmentId !== departmentId ? { templateDepartmentId: tpl.departmentId } : {}),
       position,
       blockedByManualOff: savedCell(data, memberId, tpl.toolId).access === "off",
     })

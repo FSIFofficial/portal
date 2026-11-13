@@ -9,37 +9,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 import { ApiError, api } from "@/lib/api"
-import { createDemoDb } from "@/lib/demo-data"
+import { demoRolesOf, readDemoPortal as readDemo, writeDemoPortal as writeDemo, type DemoPortal } from "@/lib/access/portal-demo"
 import { memberEmails } from "@/lib/access/rules"
 import type { Member } from "@/lib/access/types"
 import type { Role, User } from "@/lib/types"
 import { PORTAL_UPDATED_EVENT, useStore } from "./store"
-
-const DEMO_KEY = "fsif-access-manager:portal-demo"
-
-interface DemoPortal {
-  roles: Role[]
-  /** メール → ロール */
-  users: Record<string, { roles: string[]; lastLoginAt: string }>
-}
-
-function readDemo(): DemoPortal {
-  try {
-    const raw = window.localStorage.getItem(DEMO_KEY)
-    if (raw) return JSON.parse(raw) as DemoPortal
-  } catch {
-    // 読めなければ初期状態
-  }
-  return { roles: createDemoDb().roles, users: {} }
-}
-
-function writeDemo(d: DemoPortal) {
-  try {
-    window.localStorage.setItem(DEMO_KEY, JSON.stringify(d))
-  } catch {
-    // 保存できなくても画面上は動かす
-  }
-}
 
 interface PortalAccountsValue {
   ready: boolean
@@ -107,12 +81,11 @@ export function PortalAccountsProvider({ children }: { children: ReactNode }) {
   // デモ：アカウントの一覧はメンバーから作る（ロールは保存したもの。無ければ member、代表は全権管理者）
   const demoUsers = useMemo<User[]>(() => {
     if (live || !demo) return []
-    const repIds = new Set(data.orgRoles.filter((r) => r.kind === "representative").map((r) => r.memberId))
     return data.members.flatMap((m) =>
       memberEmails(m).map((email) => ({
         email,
         name: m.name,
-        roles: demo.users[m.email.toLowerCase()]?.roles ?? (repIds.has(m.id) ? ["superadmin"] : ["member"]),
+        roles: demoRolesOf(data, demo, m.id, m.email),
         active: m.status !== "withdrawn",
         note: "",
         createdAt: m.joinedAt,
@@ -183,6 +156,8 @@ export function PortalAccountsProvider({ children }: { children: ReactNode }) {
       d.users[key] = { roles: next, lastLoginAt: d.users[key]?.lastLoginAt ?? "" }
       writeDemo(d)
       void reload()
+      // デモでは「全権管理者」のロールで代表と同じ操作ができるようになるので、権限を読み直してもらう
+      window.dispatchEvent(new Event(PORTAL_UPDATED_EVENT))
     },
     [reload],
   )

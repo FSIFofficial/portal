@@ -278,3 +278,31 @@ export async function syncPortalAccounts(
   }
   return result
 }
+
+/**
+ * 完全削除のとき、メンバーのポータルのアカウントを削除する（ポータルのゴミ箱に30日残る）。
+ * アカウントが無いアドレスは飛ばす。1つでも失敗したら false（権限管理の側も削除しない。次に開いたときにもう一度試す）
+ */
+export async function deletePortalAccounts(token: string, emails: string[], selfEmail: string): Promise<{ ok: boolean; warnings: string[] }> {
+  const warnings: string[] = []
+  let users: PortalUser[]
+  try {
+    users = (await api.adminData(token)).users ?? []
+  } catch (e) {
+    return { ok: false, warnings: [`ポータルのアカウントを読み込めませんでした：${portalError(e)}`] }
+  }
+  for (const email of emails) {
+    if (email === selfEmail) {
+      warnings.push('自分自身のアカウントは削除できません')
+      return { ok: false, warnings }
+    }
+    if (!users.some((u) => u.email.toLowerCase() === email)) continue
+    try {
+      await api.deleteUser(token, email)
+    } catch (e) {
+      warnings.push(`${email} のアカウントを削除できませんでした：${portalError(e)}`)
+      return { ok: false, warnings }
+    }
+  }
+  return { ok: true, warnings }
+}

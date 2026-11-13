@@ -2,10 +2,11 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { toast } from "sonner"
-import { CommandError, commitChanges, ensureOperatorMember, simulateExternalChange } from "@/lib/access/commands"
+import { CommandError, commitChanges, dueDeletions, ensureOperatorMember, executeDeletion, simulateExternalChange } from "@/lib/access/commands"
 import {
   ACCESS_NOT_CONFIGURED,
   AccessApiError,
+  deletePortalAccounts,
   LIVE_MODE,
   liveRepository,
   loadLive,
@@ -15,8 +16,9 @@ import {
   type PortalRolesByEmail,
 } from "@/lib/access/live"
 import { DEMO_USER_IDS, createEmptyData } from "@/lib/access/mock-data"
+import { demoOperatorIds } from "@/lib/access/portal-demo"
 import { localRepository, writeExternal, type AccessRepository } from "@/lib/access/repository"
-import { actorLevel, cellKey, findMember, parseCellKey, savedCell, sameCell, type ActorLevel } from "@/lib/access/rules"
+import { actorLevel, cellKey, findMember, memberEmails, parseCellKey, savedCell, sameCell, type ActorLevel } from "@/lib/access/rules"
 import type { AppData, Draft, DraftCell, Member } from "@/lib/access/types"
 
 export type ViewKey =
@@ -150,7 +152,8 @@ export function AccessStoreProvider({ children, fallback, gate }: { children: Re
     if (!LIVE_MODE) {
       localRepository.load().then((d) => {
         if (!alive) return
-        setData(d)
+        // デモ：ポータルのロールが「全権管理者」の人は、本番と同じく代表と同じ操作ができる
+        setData({ ...d, operators: demoOperatorIds(d) })
         const storedActor = window.localStorage.getItem(ACTOR_KEY)
         if (storedActor && d.members.some((m) => m.id === storedActor)) setActorId(storedActor)
         if (VIEW_KEYS.includes(hash)) setViewState(hash)
@@ -180,6 +183,20 @@ export function AccessStoreProvider({ children, fallback, gate }: { children: Re
           if (!saved.ok) throw new Error(saved.reason === "conflict" ? "他の人が同時に更新しました。再読み込みしてください" : saved.message)
           loaded = saved.data
         }
+        // 期限が来た完全削除を実行する（ポータルのアカウントを消してから、権限管理のデータから消す）
+        for (const del of dueDeletions(loaded)) {
+          const m = loaded.members.find((x) => x.id === del.memberId)
+          const emails = m ? memberEmails(m) : []
+          const portal = await deletePortalAccounts(token, emails, r.me.email.toLowerCase())
+          if (!portal.ok) {
+            toast.warning(`${del.memberName} さんの完全削除を実行できませんでした（次に開いたときにもう一度試します）`, { description: portal.warnings.join(" ／ "), duration: 15000 })
+            continue
+          }
+          const saved = await repo.save(executeDeletion(loaded, ensured.memberId, del.id), loaded.version)
+          if (!saved.ok) break
+          loaded = saved.data
+          toast.success(`期限が来たため、${del.memberName} さんを完全削除しました`)
+        }
         if (!alive) return
         repoRef.current = repo
         setMe(r.me)
@@ -199,6 +216,14 @@ export function AccessStoreProvider({ children, fallback, gate }: { children: Re
     return () => {
       alive = false
     }
+  }, [])
+
+  // デモ：ポータルのロールを変えたら、全権管理者（代表と同じ操作ができる人）を数え直す
+  useEffect(() => {
+    if (LIVE_MODE) return
+    const handler = () => setData((d) => (d ? { ...d, operators: demoOperatorIds(d) } : d))
+    window.addEventListener(PORTAL_UPDATED_EVENT, handler)
+    return () => window.removeEventListener(PORTAL_UPDATED_EVENT, handler)
   }, [])
 
   /** 本番：メンバーの追加・退会などをポータルのアカウントに反映する（保存のあとに裏で行う） */
