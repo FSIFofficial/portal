@@ -1,12 +1,12 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Download, Pencil, Plus, Search } from "lucide-react"
+import { Download, Pencil, Plus, Search, Users } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { importMembers, previewMemberChange, saveMember, validateMemberInput, type MemberInput } from "@/lib/access/commands"
+import { CommandError, importMembers, previewMemberChange, saveMember, validateMemberInput, type MemberInput } from "@/lib/access/commands"
 import { fetchPortalUsers } from "@/lib/access/live"
 import { formatDate } from "@/lib/access/format"
 import {
@@ -26,19 +26,45 @@ import {
 import type { EmploymentStatus } from "@/lib/access/types"
 import { Callout, EmptyState, Field, NativeSelect, PageHeader, Panel, StatusBadge, Tag } from "../shared"
 import { useStore } from "../store"
+import { usePortalAccounts } from "../portal-accounts"
+import { cn } from "@/lib/utils"
+import { parseUserLines } from "@/lib/user-lines"
+
+/** この日数より長くポータルにログインしていない（または一度もない）人を「しばらくログインなし」にする */
+const INACTIVE_DAYS = 90
+const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x))
 
 export function MembersView() {
   const { data, actor, live, portalToken, run } = useStore()
   const [query, setQuery] = useState("")
   const [importing, setImporting] = useState(false)
   const [editing, setEditing] = useState<MemberInput | null>(null)
+  const [roleFilter, setRoleFilter] = useState("")
+  const [inactiveOnly, setInactiveOnly] = useState(false)
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const portal = usePortalAccounts()
   const rep = hasFullAccess(data, actor.id)
   const canAdd = rep || headDepartmentIds(data, actor.id).length > 0
 
+  // 在籍中で、ポータルに長くログインしていない人（退会した人がいれば退会にする）
+  const limit = Date.now() - INACTIVE_DAYS * 86400000
+  const isInactive = (m: (typeof data.members)[number]) => {
+    if (m.status !== "active" || m.id === actor.id) return false
+    const a = portal.accountOf(m)
+    return !!a && a.active && (!a.lastLoginAt || Date.parse(a.lastLoginAt) < limit)
+  }
+  const inactiveCount = data.members.filter(isInactive).length
+
   const members = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return data.members.filter((m) => !q || m.name.toLowerCase().includes(q) || memberEmails(m).some((e) => e.includes(q)))
-  }, [data.members, query])
+    return data.members.filter(
+      (m) =>
+        (!q || m.name.toLowerCase().includes(q) || memberEmails(m).some((e) => e.includes(q))) &&
+        (!roleFilter || !!portal.accountOf(m)?.roles.includes(roleFilter)) &&
+        (!inactiveOnly || isInactive(m)),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.members, query, roleFilter, inactiveOnly, portal.accountOf])
 
   /** 本番：ポータルのアカウントのうち、まだメンバーにいない人を取り込む */
   const importFromPortal = async () => {
@@ -83,6 +109,12 @@ export function MembersView() {
         actions={
           canAdd && (
             <>
+            {rep && (
+              <Button size="lg" variant="outline" onClick={() => setBulkOpen(true)}>
+                <Users className="size-4" />
+                一括追加
+              </Button>
+            )}
             {live && rep && (
               <Button size="lg" variant="outline" onClick={importFromPortal} disabled={importing}>
                 <Download className="size-4" />
@@ -102,10 +134,37 @@ export function MembersView() {
           )
         }
       />
-      <div className="relative max-w-sm">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="氏名・メールで検索" aria-label="氏名・メールで検索" className="h-9 pl-8" />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative w-full max-w-sm">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="氏名・メールで検索" aria-label="氏名・メールで検索" className="h-9 pl-8" />
+        </div>
+        <NativeSelect aria-label="ポータルのロールで絞り込み" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="sm:w-48">
+          <option value="">すべてのロール</option>
+          {portal.roles.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+        </NativeSelect>
+        <button
+          type="button"
+          aria-pressed={inactiveOnly}
+          onClick={() => setInactiveOnly((v) => !v)}
+          className={cn(
+            "h-9 shrink-0 rounded-lg border px-3 text-xs font-medium",
+            inactiveOnly ? "border-primary bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-secondary",
+          )}
+        >
+          しばらくログインなし（{inactiveCount}）
+        </button>
       </div>
+      {inactiveOnly && (
+        <Callout tone="neutral">
+          {INACTIVE_DAYS}日以上ポータルにログインしていない（または一度もログインしていない）在籍中のメンバーです。退会した人がいれば、編集から「退会」にしてください（ポータルのアカウントも無効になります）。
+        </Callout>
+      )}
+      {portal.error && <Callout tone="danger">{portal.error}</Callout>}
       <Panel>
         {members.length === 0 ? (
           <EmptyState title="該当するメンバーがいません" />
@@ -130,6 +189,7 @@ export function MembersView() {
                       {m.email}
                       {(m.altEmails ?? []).length > 0 && `（ほか ${m.altEmails!.join("、")}）`} ／ 登録 {formatDate(m.joinedAt)}
                     </span>
+                    <PortalAccountLine member={m} />
                     <div className="flex flex-wrap gap-1">
                       {memberDepartmentIds(data, m.id).length === 0 ? (
                         <Tag tone="outline">所属未設定</Tag>
@@ -153,12 +213,41 @@ export function MembersView() {
         )}
       </Panel>
       {editing && <MemberDialog initial={editing} onClose={() => setEditing(null)} />}
+      {bulkOpen && <BulkAddDialog onClose={() => setBulkOpen(false)} />}
+    </div>
+  )
+}
+
+/** メンバーのポータルのアカウント（ロール・状態・最終ログイン） */
+function PortalAccountLine({ member }: { member: (ReturnType<typeof useStore>["data"]["members"])[number] }) {
+  const portal = usePortalAccounts()
+  if (!portal.ready) return null
+  const a = portal.accountOf(member)
+  if (!a) return <span className="text-xs text-muted-foreground">ポータル：アカウントなし</span>
+  return (
+    <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+      <span>ポータル：</span>
+      {a.roles.length === 0 ? (
+        <Tag tone="outline">ロールなし</Tag>
+      ) : (
+        a.roles.map((id) => (
+          <Tag key={id} tone="primary">
+            {portal.roles.find((r) => r.id === id)?.name ?? id}
+          </Tag>
+        ))
+      )}
+      {!a.active && <Tag tone="danger">無効</Tag>}
+      <span>／ 最終ログイン {a.lastLoginAt ? formatDate(a.lastLoginAt) : "なし"}</span>
     </div>
   )
 }
 
 function MemberDialog({ initial, onClose }: { initial: MemberInput; onClose: () => void }) {
-  const { data, actor, run, live } = useStore()
+  const { data, actor, run, live, syncPortalRoles } = useStore()
+  const portal = usePortalAccounts()
+  const current = initial.id ? data.members.find((m) => m.id === initial.id) : undefined
+  const initialRoles = (current && portal.accountOf(current)?.roles) ?? portal.defaultRoles
+  const [portalRoles, setPortalRoles] = useState<string[]>(initialRoles)
   const [form, setForm] = useState<MemberInput>(initial)
   const [touched, setTouched] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -176,7 +265,35 @@ function MemberDialog({ initial, onClose }: { initial: MemberInput; onClose: () 
     setTouched(true)
     if (Object.keys(errors).length) return
     setBusy(true)
-    const ok = await run("メンバーの保存", (d) => saveMember(d, actor.id, form), initial.id ? "メンバー情報を保存しました" : "メンバーを追加しました")
+    // ポータルのロールは、代表・全権管理者だけが変えられる
+    const rolesChanged = rep && (!initial.id || !sameSet(portalRoles, initialRoles))
+    const email = form.email.trim().toLowerCase()
+    let dataChanged = true
+    try {
+      saveMember(data, actor.id, form)
+    } catch (e) {
+      if (e instanceof CommandError && e.message === "変更はありません") dataChanged = false
+    }
+    if (!dataChanged) {
+      // メンバーの情報は同じで、ロールだけ変えた
+      if (rolesChanged) {
+        if (live) await syncPortalRoles({ [email]: portalRoles })
+        else {
+          portal.setDemoRoles(email, portalRoles)
+          toast.success("ポータルのロールを変更しました")
+        }
+      }
+      setBusy(false)
+      onClose()
+      return
+    }
+    const ok = await run(
+      "メンバーの保存",
+      (d) => saveMember(d, actor.id, form),
+      initial.id ? "メンバー情報を保存しました" : "メンバーを追加しました",
+      rolesChanged ? { portalRoles: { [email]: portalRoles } } : undefined,
+    )
+    if (ok && rolesChanged && !live) portal.setDemoRoles(email, portalRoles)
     setBusy(false)
     if (ok) onClose()
   }
@@ -185,7 +302,7 @@ function MemberDialog({ initial, onClose }: { initial: MemberInput; onClose: () 
 
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{initial.id ? "メンバーを編集" : "メンバーを追加"}</DialogTitle>
           <DialogDescription>
@@ -247,6 +364,35 @@ function MemberDialog({ initial, onClose }: { initial: MemberInput; onClose: () 
             </div>
             {show("departmentIds") && <p className="text-xs text-destructive" role="alert">{errors.departmentIds}</p>}
           </fieldset>
+          {rep && (
+            <fieldset className="flex flex-col gap-1.5">
+              <legend className="pb-1.5 text-sm font-medium">ポータルのロール（複数選択可）</legend>
+              <div className="flex flex-wrap gap-1.5">
+                {portal.roles.map((r) => {
+                  const on = portalRoles.includes(r.id)
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => setPortalRoles((v) => (on ? v.filter((x) => x !== r.id) : [...v, r.id]))}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs font-medium",
+                        on ? "border-primary bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-secondary",
+                      )}
+                    >
+                      {r.name}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {portalRoles.length === 0
+                  ? "ロールなし：ポータルでは公開範囲が「全員」のものだけ見られます。"
+                  : "ポータルでできる操作と見られる範囲は、選んだロールの合計になります。追加のメールアドレスのアカウントにも同じロールを付けます。"}
+              </p>
+            </fieldset>
+          )}
           <Field label="在籍状態" htmlFor="m-status" error={show("status")}>
             <NativeSelect id="m-status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as EmploymentStatus })}>
               <option value="active">在籍</option>
@@ -290,6 +436,94 @@ function MemberDialog({ initial, onClose }: { initial: MemberInput; onClose: () 
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** メンバーの一括追加（表計算ソフトから「名前・メールアドレス」を貼り付け）。ポータルのアカウントも作る */
+function BulkAddDialog({ onClose }: { onClose: () => void }) {
+  const { data, actor, run, live } = useStore()
+  const portal = usePortalAccounts()
+  const [text, setText] = useState("")
+  const [roles, setRoles] = useState<string[]>(portal.defaultRoles)
+  const [busy, setBusy] = useState(false)
+  const known = new Set(data.members.flatMap(memberEmails))
+  const rows = parseUserLines(text)
+  const seen = new Set<string>()
+  const targets = rows.filter((r) => {
+    if (!r.valid || known.has(r.email) || seen.has(r.email)) return false
+    seen.add(r.email)
+    return true
+  })
+  const invalid = rows.filter((r) => !r.valid).length
+  const existing = rows.filter((r) => r.valid && known.has(r.email)).length
+
+  const submit = async () => {
+    setBusy(true)
+    const portalRoles = Object.fromEntries(targets.map((t) => [t.email, roles]))
+    const ok = await run(
+      "メンバーの一括追加",
+      (d) => importMembers(d, actor.id, targets.map((t) => ({ name: t.name, email: t.email, active: true })), { source: "一括追加" }).data,
+      `${targets.length}人を追加しました。所属を設定してください`,
+      { portalRoles },
+    )
+    if (ok && !live) targets.forEach((t) => portal.setDemoRoles(t.email, roles))
+    setBusy(false)
+    if (ok) onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>メンバーを一括追加</DialogTitle>
+          <DialogDescription>表計算ソフトから「名前」「メールアドレス」の列をコピーして貼り付けます（1行に1人）。ポータルのアカウントも作られます。所属は追加したあとで設定してください。</DialogDescription>
+        </DialogHeader>
+        <Field label="名前・メールアドレス" htmlFor="bulk-text">
+          <textarea
+            id="bulk-text"
+            rows={6}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={"山田 太郎\tyamada@example.com\n佐藤 花子, sato@example.com"}
+            className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          />
+        </Field>
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="pb-1.5 text-sm font-medium">ポータルのロール</legend>
+          <div className="flex flex-wrap gap-1.5">
+            {portal.roles.map((r) => {
+              const on = roles.includes(r.id)
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setRoles((v) => (on ? v.filter((x) => x !== r.id) : [...v, r.id]))}
+                  className={cn("rounded-full border px-3 py-1 text-xs font-medium", on ? "border-primary bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-secondary")}
+                >
+                  {r.name}
+                </button>
+              )
+            })}
+          </div>
+        </fieldset>
+        {rows.length > 0 && (
+          <p className="text-sm" role="status">
+            追加：<strong>{targets.length}人</strong>
+            {existing > 0 && ` ／ 登録済みのため飛ばす：${existing}人`}
+            {invalid > 0 && ` ／ メールアドレスが正しくない行：${invalid}行`}
+          </p>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            キャンセル
+          </Button>
+          <Button onClick={() => void submit()} disabled={busy || targets.length === 0}>
+            {busy ? "追加中…" : `${targets.length}人を追加`}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

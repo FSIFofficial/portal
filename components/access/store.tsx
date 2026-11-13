@@ -3,7 +3,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 import { CommandError, commitChanges, ensureOperatorMember, simulateExternalChange } from "@/lib/access/commands"
-import { ACCESS_NOT_CONFIGURED, AccessApiError, LIVE_MODE, liveRepository, loadLive, readPortalSession, syncPortalAccounts, type LiveMe } from "@/lib/access/live"
+import {
+  ACCESS_NOT_CONFIGURED,
+  AccessApiError,
+  LIVE_MODE,
+  liveRepository,
+  loadLive,
+  readPortalSession,
+  syncPortalAccounts,
+  type LiveMe,
+  type PortalRolesByEmail,
+} from "@/lib/access/live"
 import { DEMO_USER_IDS, createEmptyData } from "@/lib/access/mock-data"
 import { localRepository, writeExternal, type AccessRepository } from "@/lib/access/repository"
 import { actorLevel, cellKey, findMember, parseCellKey, savedCell, sameCell, type ActorLevel } from "@/lib/access/rules"
@@ -15,6 +25,7 @@ export type ViewKey =
   | "departments"
   | "management"
   | "requests"
+  | "portalRoles"
   | "tools"
   | "history"
   | "me"
@@ -26,6 +37,7 @@ export const VIEW_ACCESS: Record<ViewKey, ActorLevel[]> = {
   departments: ["representative", "division_head"],
   management: ["representative", "division_head"],
   requests: ["representative", "division_head"],
+  portalRoles: ["representative"],
   tools: ["representative", "division_head"],
   history: ["representative", "division_head"],
   me: ["representative", "division_head", "member"],
@@ -78,8 +90,13 @@ interface StoreValue {
   resolveConflict: () => void
   dismissConflict: () => void
   lastSaveError: string | null
-  /** 独立した状態変更コマンドを実行・保存する */
-  run: (label: string, fn: (data: AppData) => AppData, success?: string) => Promise<boolean>
+  /**
+   * 独立した状態変更コマンドを実行・保存する。
+   * portalRoles を渡すと、保存のあとでポータルのアカウントのロールも変える（本番。キーはメンバーの主なメール）
+   */
+  run: (label: string, fn: (data: AppData) => AppData, success?: string, opts?: { portalRoles?: PortalRolesByEmail }) => Promise<boolean>
+  /** 権限管理のデータは変えず、ポータルのアカウントのロールだけ変える（本番） */
+  syncPortalRoles: (portalRoles: PortalRolesByEmail) => Promise<void>
   /** 未保存の下書きがあれば「保存／破棄／戻る」を確認してから実行する */
   guard: (label: string, proceed: () => void) => void
   pendingGuard: PendingGuard | null
@@ -99,6 +116,9 @@ export function useStore() {
 }
 
 const VIEW_KEYS = Object.keys(VIEW_ACCESS) as ViewKey[]
+
+/** ポータルのアカウントを書き換えたときに出すイベント（ポータルのアカウント一覧を読み直す） */
+export const PORTAL_UPDATED_EVENT = "access:portal-updated"
 const ACTOR_KEY = "fsif-access-manager:actor"
 
 export function AccessStoreProvider({ children, fallback, gate }: { children: ReactNode; fallback: ReactNode; gate: (g: GateState) => ReactNode }) {
@@ -183,18 +203,19 @@ export function AccessStoreProvider({ children, fallback, gate }: { children: Re
 
   /** 本番：メンバーの追加・退会などをポータルのアカウントに反映する（保存のあとに裏で行う） */
   const afterSave = useCallback(
-    (before: AppData, after: AppData) => {
+    async (before: AppData, after: AppData, portalRoles?: PortalRolesByEmail) => {
       if (!LIVE_MODE || !me) return
-      syncPortalAccounts(portalToken, before, after, me.email.toLowerCase()).then((r) => {
-        const done = [
-          r.added.length && `${r.added.length}件のアカウントを作成`,
-          r.activated.length && `${r.activated.length}件を有効化`,
-          r.deactivated.length && `${r.deactivated.length}件を無効化`,
-          r.renamed.length && `${r.renamed.length}件の名前を変更`,
-        ].filter(Boolean)
-        if (done.length) toast.success(`ポータル：${done.join("・")}しました`)
-        if (r.warnings.length) toast.warning(`ポータルのアカウントに反映できなかったものがあります`, { description: r.warnings.join(" ／ "), duration: 15000 })
-      })
+      const r = await syncPortalAccounts(portalToken, before, after, me.email.toLowerCase(), portalRoles)
+      const done = [
+        r.added.length && `${r.added.length}件のアカウントを作成`,
+        r.activated.length && `${r.activated.length}件を有効化`,
+        r.deactivated.length && `${r.deactivated.length}件を無効化`,
+        r.updated.length && `${r.updated.length}件の名前・ロールを変更`,
+      ].filter(Boolean)
+      if (done.length) toast.success(`ポータル：${done.join("・")}しました`)
+      if (r.warnings.length) toast.warning(`ポータルのアカウントに反映できなかったものがあります`, { description: r.warnings.join(" ／ "), duration: 15000 })
+      // ポータルのアカウント一覧を表示している画面に読み直してもらう
+      window.dispatchEvent(new Event(PORTAL_UPDATED_EVENT))
     },
     [me, portalToken],
   )
@@ -325,7 +346,7 @@ export function AccessStoreProvider({ children, fallback, gate }: { children: Re
         if (flags.failNextSave) setFlagsState((f) => ({ ...f, failNextSave: false }))
         if (result.ok) {
           setData(result.data)
-          afterSave(data, result.data)
+          void afterSave(data, result.data)
           setDraft({})
           setBulkKeys(new Set())
           toast.success(`${draftCount}件の変更を保存しました`)
@@ -363,7 +384,7 @@ export function AccessStoreProvider({ children, fallback, gate }: { children: Re
   }, [conflict])
 
   const run = useCallback(
-    async (label: string, fn: (d: AppData) => AppData, success?: string) => {
+    async (label: string, fn: (d: AppData) => AppData, success?: string, opts?: { portalRoles?: PortalRolesByEmail }) => {
       if (!data || busy.current) return false
       let next: AppData
       try {
@@ -382,12 +403,19 @@ export function AccessStoreProvider({ children, fallback, gate }: { children: Re
           return false
         }
         setData(result.data)
-        afterSave(data, result.data)
+        void afterSave(data, result.data, opts?.portalRoles)
         if (success) toast.success(success)
         return true
       } finally {
         busy.current = false
       }
+    },
+    [data, afterSave],
+  )
+
+  const syncPortalRoles = useCallback(
+    async (portalRoles: PortalRolesByEmail) => {
+      if (data) await afterSave(data, data, portalRoles)
     },
     [data, afterSave],
   )
@@ -464,6 +492,7 @@ export function AccessStoreProvider({ children, fallback, gate }: { children: Re
     dismissConflict: () => setConflict(null),
     lastSaveError,
     run,
+    syncPortalRoles,
     guard,
     pendingGuard,
     resolveGuard,

@@ -385,7 +385,7 @@ function TransferDialog({ roleId, onClose }: { roleId: string; onClose: () => vo
 
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{preview?.roleLabel ?? "役割"}を譲渡</DialogTitle>
           <DialogDescription>現在：{findMember(data, role.memberId)?.name}</DialogDescription>
@@ -570,7 +570,7 @@ function ScopeDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>管理範囲を追加</DialogTitle>
           <DialogDescription>事業部長が他部署のメンバーを操作できるようにします。</DialogDescription>
@@ -659,7 +659,7 @@ function RouteDialog({ onClose }: { onClose: () => void }) {
   )
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>申請先を追加</DialogTitle>
           <DialogDescription>条件を空欄にすると「すべて」が対象になります。</DialogDescription>

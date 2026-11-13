@@ -1000,8 +1000,17 @@ export interface ImportMemberInput {
   active: boolean
 }
 
-/** ポータルのアカウントのうち、まだメンバーにいない人を取り込む（所属は未設定） */
-export function importMembers(data: AppData, actorId: string, list: ImportMemberInput[]): { data: AppData; added: number } {
+/**
+ * まだメンバーにいない人をまとめて追加する（所属は未設定）。
+ * ポータルのアカウントからの取り込みと、一括追加（名前・メールの貼り付け）の両方で使う
+ */
+export function importMembers(
+  data: AppData,
+  actorId: string,
+  list: ImportMemberInput[],
+  opts: { source?: string } = {},
+): { data: AppData; added: number } {
+  const source = opts.source ?? "ポータルから取り込み"
   if (!hasFullAccess(data, actorId)) fail("メンバーを取り込めるのは代表のみです")
   const d = clone(data)
   const known = new Set(d.members.flatMap(memberEmails))
@@ -1014,10 +1023,10 @@ export function importMembers(data: AppData, actorId: string, list: ImportMember
     const id = newId("m")
     const name = u.name.trim() || email
     d.members.push({ id, name, email, status: u.active ? "active" : "withdrawn", joinedAt: at })
-    items.push({ memberId: id, label: "メンバー追加", before: "—", after: `${name}（ポータルから取り込み${u.active ? "" : "・ポータルで無効のため退会"}）` })
+    items.push({ memberId: id, label: "メンバー追加", before: "—", after: `${name}（${source}${u.active ? "" : "・ポータルで無効のため退会"}）` })
   }
-  if (items.length === 0) fail("取り込めるアカウントはありません（すべて登録済みです）")
-  audit(d, { actorId, source: "member", summary: `ポータルのアカウントから${items.length}人を取り込み`, memberIds: items.map((i) => i.memberId!), toolIds: [], items })
+  if (items.length === 0) fail("追加できる人はいません（すべて登録済みです）")
+  audit(d, { actorId, source: "bulk", summary: `${items.length}人を追加（${source}）`, memberIds: items.map((i) => i.memberId!), toolIds: [], items })
   d.version += 1
   return { data: d, added: items.length }
 }

@@ -24,6 +24,8 @@ import { ToolsView } from "./views/tools-view"
 import { HistoryView } from "./views/history-view"
 import { MyAccessView } from "./views/my-access-view"
 import { NotificationsView } from "./views/notifications-view"
+import { PortalRolesView } from "./views/portal-roles-view"
+import { PortalAccountsProvider } from "./portal-accounts"
 
 function LoadingScreen() {
   return (
@@ -176,6 +178,8 @@ function CurrentView() {
       return <MyAccessView />
     case "notifications":
       return <NotificationsView />
+    case "portalRoles":
+      return <PortalRolesView />
   }
 }
 
@@ -184,9 +188,11 @@ function Root() {
   if (actor.status === "withdrawn") return <WithdrawnScreen />
   return (
     <>
-      <AppShell>
-        <CurrentView />
-      </AppShell>
+      <PortalAccountsProvider>
+        <AppShell>
+          <CurrentView />
+        </AppShell>
+      </PortalAccountsProvider>
       <GuardDialog />
       <ConflictDialog />
     </>
