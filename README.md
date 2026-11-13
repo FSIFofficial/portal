@@ -129,7 +129,7 @@ X・Instagram・Discord の投稿を、企画から下書き・承認・予約�
   SNSアカウントごとの閲覧・作成・編集・承認は、広報管理の「管理者設定 > 権限」で調整します（新しく登録された人は全アカウントの閲覧・作成・編集ができ、レベル③以上は承認もできる状態から始まります）
 - **送信**：「予約を確定」した投稿は、GAS の時間トリガー（5分ごと）が予定時刻を過ぎたものから送信します（最大5分ほど遅れます）
   - X：本文と画像（4枚まで・各5MBまで）。アカウントごとに「Xと接続」でトークンを登録
-  - Discord：本文（2000文字まで）と画像。Bot がチャンネルに送信
+  - Discord：本文（2000文字まで）と画像。Bot がチャンネルに送信（GAS からは Discord の Bot API を直接呼べないため、小さな中継を通す。下の「Discord の中継」）
   - Instagram：自動送信は**未対応**（「手動投稿の記録」で公開URLを記録して管理）。予約の確定もできません
   - 画像テンプレートから作った画像は、保存のときに PNG に書き出して Google Drive に保存し、それを送ります
   - 同じ投稿を二重に送らないよう、送信できた時点で GAS に印を付けます。送信に失敗した投稿は「投稿失敗」になり、通知されます
@@ -159,7 +159,8 @@ X・Instagram・Discord の投稿を、企画から下書き・承認・予約�
    | `ACCESS_GAS_URL` | アクセス権限管理の GAS のウェブアプリ URL |
    | `ACCESS_TOOL_ID` / `ACCESS_TOOL_KEY` | アクセス権限管理の GAS で `issueToolKeys` を実行して出た、広報管理のツールIDとキー |
    | `X_API_KEY` / `X_API_SECRET` | X Developer Portal のアプリの API Key / API Key Secret |
-   | `DISCORD_BOT_TOKEN` | Discord Bot のトークン |
+   | `DISCORD_RELAY_URL` | Discord の中継の URL（下の「Discord の中継」） |
+   | `DISCORD_RELAY_SECRET` | 中継の合言葉（中継の `RELAY_SECRET` と同じ値） |
    | `SITE_URL` | （省略可）通知に載せるリンクの先。既定は `https://admin.fsif.jp` |
 3. アクセス権限管理の「ツール・同期」で広報管理の役割（`level1`・`level2`・`level3`・`admin`）を定義し、最初の管理者に `admin` を付与しておく
 4. 関数 `setup` を実行して権限を承認する（シート・画像フォルダ・5分ごとのトリガーが作られ、アクセス権限管理から利用者を取り込みます）
@@ -170,6 +171,18 @@ X・Instagram・Discord の投稿を、企画から下書き・承認・予約�
 7. **Discord**：Developer Portal で Bot を作り、サーバーに招待（権限：チャンネルを見る・メッセージを送信・ファイルを添付・メッセージ履歴を読む）→
    「管理者設定 > Discord」でサーバーIDを入れて「Discordからチャンネルを取得」→ 投稿に使うチャンネルを「投稿可能」に、「Discord通知」で通知先を選んで「テスト通知を送る」
 8. 必要なら「管理者設定 > 権限」で、アカウントごとの権限（閲覧・作成・編集・承認）を調整する
+
+### Discord の中継
+
+Discord は Bot の API を `DiscordBot (…)` という User-Agent で呼ぶことを求めていますが、GAS（UrlFetchApp）はこれを付けられないため、
+GAS から直接呼ぶと `403 internal network error`（40333）になります。そこで、User-Agent と Bot のトークンを付けて転送する小さな中継を置きます。
+中継のコードは GAS と一緒に管理者から受け取ります（`discord-relay/`。広報管理が使う4つの API だけを通し、合言葉が無い呼び出しは断ります）。
+
+- **Cloudflare Workers（おすすめ）**：Cloudflare のダッシュボード「Workers & Pages > Create > Worker」で作成 →「Edit code」に `cloudflare-worker.js` を貼って Deploy →
+  「Settings > Variables and Secrets」に `DISCORD_BOT_TOKEN`（Bot のトークン）と `RELAY_SECRET`（長いランダムな文字列）を Secret で追加 →
+  Worker の URL（`https://….workers.dev`）を GAS の `DISCORD_RELAY_URL` に、`RELAY_SECRET` と同じ値を `DISCORD_RELAY_SECRET` に入れる
+- **Vercel**：`vercel/` フォルダをプロジェクトとしてデプロイし、Environment Variables に同じ2つを設定 → `https://….vercel.app/api/discord` を `DISCORD_RELAY_URL` に。
+  Vercel は受け取れる本文が 4.5MB までなので、画像付きの投稿は合計 3MB 程度まで
 
 > X API の利用には X Developer Portal での契約（プラン）が必要です。投稿の数・指標の読み取りの上限はプランによって違います。
 > トークンは GAS のスクリプト プロパティにだけ保存され、画面やスプレッドシートには出ません。
