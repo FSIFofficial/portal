@@ -47,6 +47,8 @@ export interface DiscordChannel {
   postable: boolean
   /** 本番：DiscordのチャンネルID */
   discordId?: string
+  /** 本番：送信用の Webhook を設定済みか（URL 自体は GAS にだけ保存） */
+  webhook?: boolean
 }
 
 export interface User {

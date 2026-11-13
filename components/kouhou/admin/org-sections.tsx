@@ -9,7 +9,7 @@ import { PLATFORM_LABEL } from '@/lib/kouhou/domain/labels'
 import type { Platform } from '@/lib/kouhou/domain/types'
 import { Field, Input, Panel, Pill, Select, Switch } from '@/components/kouhou/kit/primitives'
 import { BrandDot } from '@/components/kouhou/domain/tags'
-import { CheckConnectionsButton, ConnectionPill, SyncDiscordButton, XConnectButton } from './live-connections'
+import { AddWebhookChannel, CheckConnectionsButton, ConnectionPill, WebhookButton, XConnectButton } from './live-connections'
 import { CODE_RE, useAdminEdit } from './use-admin'
 
 /** テキストは確定（フォーカスを外す）時に保存。失敗したら元の値に戻す */
@@ -233,7 +233,7 @@ export function AccountsSection() {
       </div>
       <p className="px-3 pb-3 text-xs text-muted-foreground">
         {s.live
-          ? 'Xは「Xと接続」でアカウントごとのトークンを登録します。Discordは下の「Discord」でサーバーIDを入れてチャンネルを取得すると接続済みになります。Instagramの自動送信は未対応です。追加直後は管理者以外に権限がありません。'
+          ? 'Xは「Xと接続」でアカウントごとのトークンを登録します。Discordは下の「Discord」でチャンネルごとに Webhook を設定すると接続済みになります。Instagramの自動送信は未対応です。追加直後は管理者以外に権限がありません。'
           : '接続状態はモックです。実際のSNS連携・認証は行いません。追加直後は管理者以外に権限がありません。'}
       </p>
     </Panel>
@@ -256,25 +256,6 @@ export function DiscordSection() {
                 <BrandDot brand={s.brands.find((b) => b.id === sv.brandId)} />
                 {sv.name}
               </h3>
-              {s.live && (
-                <div className="flex flex-wrap items-end gap-2">
-                  <Field label="DiscordのサーバーID" htmlFor={`guild-${sv.id}`} hint="Discordの開発者モードで、サーバー名を右クリック →「サーバーIDをコピー」">
-                    <CommitInput
-                      id={`guild-${sv.id}`}
-                      label={`${sv.name}のDiscordサーバーID`}
-                      value={sv.guildId ?? ''}
-                      className="font-mono"
-                      onCommit={(v) =>
-                        edit('サーバーIDを保存しました', (d) => {
-                          if (v && !/^\d{15,22}$/.test(v)) return 'サーバーIDは数字です'
-                          d.servers.find((x) => x.id === sv.id)!.guildId = v || undefined
-                        })
-                      }
-                    />
-                  </Field>
-                  <SyncDiscordButton server={sv} />
-                </div>
-              )}
               {chans.length ? (
                 <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
                   {chans.map((c) => (
@@ -282,9 +263,10 @@ export function DiscordSection() {
                       <span className="flex items-center gap-2">
                         #{c.name}
                         {s.settings.notifyChannelId === c.id && <Pill tone="info">通知用</Pill>}
-                        {s.live && (c.discordId ? <span className="font-mono text-xs text-muted-foreground">{c.discordId}</span> : <Pill tone="warning">Discord未連携</Pill>)}
+                        {s.live && (c.webhook ? <Pill tone="success">Webhook設定済み</Pill> : <Pill tone="warning">Webhook未設定</Pill>)}
                       </span>
-                      <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground">
+                        {s.live && <WebhookButton channel={c} />}
                         投稿可能
                         <Switch
                           label={`#${c.name}を投稿先にする`}
@@ -299,6 +281,7 @@ export function DiscordSection() {
               ) : (
                 <p className="text-sm text-muted-foreground">チャンネルがありません。</p>
               )}
+              {s.live && <AddWebhookChannel server={sv} />}
               {!s.live && <div className="flex gap-2">
                 <Input aria-label={`${sv.name}に追加するチャンネル名`} placeholder="チャンネル名" value={names[sv.id] ?? ''} onChange={(e) => setNames((n) => ({ ...n, [sv.id]: e.target.value }))} />
                 <Button
