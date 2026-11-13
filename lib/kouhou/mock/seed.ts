@@ -17,12 +17,20 @@ export const SEED_BRANDS = [
   { id: 'b-cb', name: 'Cosmo Base', code: 'CB', color: '#7a4cc2' },
 ]
 
-const accounts = [
+/** SNSアカウント：X・Discord は FSIF と Cosmo Base の2つずつ（Instagram の自動送信は未対応） */
+export const SEED_ACCOUNTS = [
   { id: 'acc-fsif-x', brandId: 'b-fsif', platform: 'x' as const, name: 'FSIF公式X', code: 'fsif_x', connection: 'connected_mock' as const, defaultApproverId: 'u-b' },
   { id: 'acc-fsif-ig', brandId: 'b-fsif', platform: 'instagram' as const, name: 'FSIF Instagram', code: 'fsif_ig', connection: 'connected_mock' as const, defaultApproverId: 'u-b' },
   { id: 'acc-cb-x', brandId: 'b-cb', platform: 'x' as const, name: 'Cosmo Base公式X', code: 'cb_x', connection: 'connected_mock' as const, defaultApproverId: 'u-b' },
   { id: 'acc-cb-ig', brandId: 'b-cb', platform: 'instagram' as const, name: 'Cosmo Base Instagram', code: 'cb_ig', connection: 'disconnected_mock' as const, defaultApproverId: 'u-a' },
+  { id: 'acc-fsif-dc', brandId: 'b-fsif', platform: 'discord' as const, name: 'FSIF Discord', code: 'fsif_dc', connection: 'connected_mock' as const, defaultApproverId: 'u-b', serverId: 'srv-fsif' },
   { id: 'acc-cb-dc', brandId: 'b-cb', platform: 'discord' as const, name: 'Cosmo Base Discord', code: 'cb_dc', connection: 'connected_mock' as const, defaultApproverId: 'u-b', serverId: 'srv-cb' },
+]
+const accounts = SEED_ACCOUNTS
+
+export const SEED_SERVERS = [
+  { id: 'srv-fsif', brandId: 'b-fsif', name: 'FSIF コミュニティ' },
+  { id: 'srv-cb', brandId: 'b-cb', name: 'Cosmo Base コミュニティ' },
 ]
 
 const users = [
@@ -294,8 +302,10 @@ export function createSeed(): AppState {
     currentUserId: 'u-a',
     brands: SEED_BRANDS,
     accounts,
-    servers: [{ id: 'srv-cb', brandId: 'b-cb', name: 'Cosmo Base コミュニティ' }],
+    servers: SEED_SERVERS,
     channels: [
+      { id: 'ch-fsif-news', serverId: 'srv-fsif', name: 'お知らせ', postable: true },
+      { id: 'ch-fsif-event', serverId: 'srv-fsif', name: 'イベント', postable: true },
       { id: 'ch-news', serverId: 'srv-cb', name: 'お知らせ', postable: true },
       { id: 'ch-tips', serverId: 'srv-cb', name: '宇宙知っトク', postable: true },
       { id: 'ch-event', serverId: 'srv-cb', name: 'イベント', postable: true },
