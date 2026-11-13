@@ -27,6 +27,7 @@ import type { EmploymentStatus } from "@/lib/access/types"
 import { Callout, EmptyState, Field, NativeSelect, PageHeader, Panel, StatusBadge, Tag } from "../shared"
 import { useStore } from "../store"
 import { usePortalAccounts } from "../portal-accounts"
+import { DeletionBadge, DeletionPanel, RequestDeletionButton } from "./deletion-panel"
 import { cn } from "@/lib/utils"
 import { parseUserLines } from "@/lib/user-lines"
 
@@ -165,11 +166,12 @@ export function MembersView() {
         </Callout>
       )}
       {portal.error && <Callout tone="danger">{portal.error}</Callout>}
+      <DeletionPanel />
       <Panel>
         {members.length === 0 ? (
           <EmptyState title="該当するメンバーがいません" />
         ) : (
-          <ul className="divide-y">
+          <ul className="divide-y" aria-label="メンバー一覧">
             {members.map((m) => {
               const perm = canManageTarget(data, actor.id, m.id, null, "edit_member")
               const roles = orgRoleLabels(data, m.id).filter((r) => r !== "メンバー")
@@ -179,6 +181,7 @@ export function MembersView() {
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-sm font-bold">{m.name}</span>
                       <StatusBadge status={m.status} />
+                      <DeletionBadge member={m} />
                       {roles.map((r) => (
                         <Tag key={r} tone="primary">
                           {r}
@@ -198,6 +201,7 @@ export function MembersView() {
                       )}
                     </div>
                   </div>
+                  <RequestDeletionButton member={m} />
                   {perm.ok ? (
                     <Button variant="outline" size="lg" onClick={() => openEdit(m.id)} className="self-start sm:self-center">
                       <Pencil className="size-4" />

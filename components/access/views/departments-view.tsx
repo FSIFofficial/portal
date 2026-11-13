@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { applyTemplate, previewTemplateApplication, removeDepartment, saveDepartment, type DepartmentInput, type TemplateRow } from "@/lib/access/commands"
-import { departmentDescendants, departmentHead, departmentPath, departmentTree, findMember, findTool, findToolRole, hasFullAccess } from "@/lib/access/rules"
+import { departmentAncestors, departmentDescendants, departmentHead, departmentPath, departmentTree, findDepartment, findMember, findTool, findToolRole, hasFullAccess } from "@/lib/access/rules"
 import type { TemplatePosition } from "@/lib/access/types"
 import { cn } from "@/lib/utils"
 import { Callout, EmptyState, Field, NativeSelect, PageHeader, Panel, Tag } from "../shared"
@@ -115,12 +115,44 @@ export function DepartmentsView() {
                 </button>
               ))}
             </div>
+            <InheritedTemplates departmentId={deptId} position={position} />
             <TemplateEditor key={`${deptId}-${position}-${data.version}`} departmentId={deptId} position={position} editable={rep} />
           </div>
         )}
       </div>
       {editing && <DepartmentDialog initial={editing} onClose={() => setEditing(null)} onSaved={(id) => id && setDeptId(id)} />}
     </div>
+  )
+}
+
+/** 上の部署から引き継ぐテンプレート（この部署の人にも付与される） */
+function InheritedTemplates({ departmentId, position }: { departmentId: string; position: TemplatePosition }) {
+  const { data } = useStore()
+  const ancestors = departmentAncestors(data, departmentId)
+  const rows = data.templates.filter((t) => t.position === position && ancestors.includes(t.departmentId))
+  if (ancestors.length === 0) return null
+  return (
+    <Panel className="flex flex-col gap-1.5 p-4">
+      <h3 className="text-sm font-bold">上の部署から引き継ぐもの</h3>
+      {rows.length === 0 ? (
+        <p className="text-xs text-muted-foreground">上の部署のテンプレートはありません。</p>
+      ) : (
+        <ul className="flex flex-col gap-1" aria-label="上の部署から引き継ぐテンプレート">
+          {rows.map((t) => {
+            const tool = findTool(data, t.toolId)
+            return (
+              <li key={`${t.departmentId}-${t.toolId}`} className="flex flex-wrap items-center gap-1.5 text-xs">
+                <Tag tone="outline">{findDepartment(data, t.departmentId)?.name}</Tag>
+                {tool?.name}：{findToolRole(tool, t.roleKey)?.label ?? t.roleKey}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        この部署の{position === "member" ? "メンバー" : "事業部長"}にも付与されます。同じツールをこの部署でも指定すると、上位の役割が使われます。変えるときは上の部署のテンプレートを編集します。
+      </p>
+    </Panel>
   )
 }
 

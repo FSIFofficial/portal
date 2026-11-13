@@ -32,6 +32,7 @@ import {
 } from "./rules"
 import type {
   AppData,
+  DeletionRequest,
   AppNotification,
   AuditLog,
   ChangeItem,
@@ -96,6 +97,7 @@ function addGrantsFromPreview(d: AppData, items: GrantPreviewItem[], at = nowIso
     roleKey: item.roleKey,
     source: item.position === "member" ? "department" : "position",
     departmentId: item.departmentId,
+    ...(item.templateDepartmentId ? { templateDepartmentId: item.templateDepartmentId } : {}),
     position: item.position,
     grantedAt: at,
     retainedAfterTransfer: false,
@@ -579,6 +581,14 @@ export function saveMember(data: AppData, actorId: string, input: MemberInput): 
     items.push({ memberId: id, label: "在籍状態", before: statusText(prevStatus), after: statusText(input.status) })
     m.status = input.status
     if (prevStatus === "withdrawn") {
+      // 退会から戻したら、完全削除の申請・予約は取り消す
+      for (const del of d.deletions ?? []) {
+        if (del.memberId === id && (del.status === "pending" || del.status === "scheduled")) {
+          const was = del.status === "scheduled" ? "削除予約" : "承認待ち"
+          cancelDeletionIn(d, del.id, actorId, "退会から戻したため")
+          items.push({ memberId: id, label: "完全削除", before: was, after: "取り消し（退会から戻したため）" })
+        }
+      }
       // 再加入：退会前の個別権限は復活させず、現在の所属設定から再付与する
       for (const g of d.grants) if (g.memberId === id) g.revoked = true
       d.overrides = d.overrides.filter((o) => o.memberId !== id)
@@ -633,17 +643,21 @@ export function previewTemplateApplication(data: AppData, departmentId: string, 
     ...temp.templates.filter((t) => !(t.departmentId === departmentId && t.position === position)),
     ...rows.filter((r) => r.roleKey).map((r) => ({ departmentId, position, toolId: r.toolId, roleKey: r.roleKey! })),
   ]
-  const targets =
-    position === "member"
-      ? temp.memberships.filter((ms) => ms.departmentId === departmentId).map((ms) => ms.memberId)
-      : temp.orgRoles.filter((r) => r.kind === "division_head" && r.departmentId === departmentId).map((r) => r.memberId)
-  const items = targets
-    .filter((id) => findMember(temp, id)?.status !== "withdrawn")
-    .flatMap((id) => applyDepartmentRoleGrants(temp, id, departmentId, position))
+  // 対象はこの部署と、配下の部署（テンプレートを引き継ぐ）の人
+  const items = subtreeGrantItems(temp, departmentDescendants(temp, departmentId), position)
   const removedRows = data.templates.filter(
     (t) => t.departmentId === departmentId && t.position === position && !rows.some((r) => r.toolId === t.toolId && r.roleKey),
   )
   return { temp, items, removedRows }
+}
+
+/** 部署（複数）に所属する人・事業部長に、テンプレート（親からの引き継ぎを含む）どおりの付与を足すときの一覧 */
+function subtreeGrantItems(data: AppData, departmentIds: string[], position: TemplatePosition): GrantPreviewItem[] {
+  const pairs =
+    position === "member"
+      ? data.memberships.filter((ms) => departmentIds.includes(ms.departmentId)).map((ms) => [ms.memberId, ms.departmentId] as const)
+      : data.orgRoles.filter((r) => r.kind === "division_head" && r.departmentId && departmentIds.includes(r.departmentId)).map((r) => [r.memberId, r.departmentId!] as const)
+  return pairs.filter(([id]) => findMember(data, id)?.status !== "withdrawn").flatMap(([id, dep]) => applyDepartmentRoleGrants(data, id, dep, position))
 }
 
 export function applyTemplate(data: AppData, actorId: string, departmentId: string, position: TemplatePosition, rows: TemplateRow[]): AppData {
@@ -910,10 +924,18 @@ export function saveDepartment(data: AppData, actorId: string, input: Department
     if (prev.name !== name) items.push({ label: "部署名", before: prev.name, after: name })
     if ((prev.parentId || null) !== parentId) items.push({ label: "親の部署", before: parentName(prev.parentId), after: parentName(parentId) })
     const before = prev.name
+    const parentChanged = (prev.parentId || null) !== parentId
     prev.name = name
     prev.description = input.description.trim()
     prev.parentId = parentId
-    audit(d, { actorId, source: "member", summary: `部署「${before}」を更新`, memberIds: [], toolIds: [], items })
+    // 親が変わったら、新しい上の部署のテンプレートを配下の人に足す（今の付与は消さない）
+    let granted: Grant[] = []
+    if (parentChanged) {
+      const subtree = departmentDescendants(d, prev.id)
+      granted = addGrantsFromPreview(d, [...subtreeGrantItems(d, subtree, "member"), ...subtreeGrantItems(d, subtree, "division_head")])
+      if (granted.length) items.push({ label: "引き継いだテンプレートで追加付与", before: "—", after: `${granted.length}件` })
+    }
+    audit(d, { actorId, source: "member", summary: `部署「${before}」を更新`, memberIds: [...new Set(granted.map((g) => g.memberId))], toolIds: [...new Set(granted.map((g) => g.toolId))], items })
   } else {
     d.departments.push({ id: newId("d"), name, description: input.description.trim(), parentId })
     audit(d, { actorId, source: "member", summary: `部署「${name}」を追加`, memberIds: [], toolIds: [], items: [{ label: "部署", before: "—", after: parentId ? `${parentName(parentId)} / ${name}` : name }] })
@@ -1118,6 +1140,144 @@ export function setOrgAccount(data: AppData, actorId: string, memberId: string, 
     toolIds: [],
     items: [{ memberId, label: "アカウントの種類", before: on ? "個人" : "団体垢", after: on ? "団体垢" : "個人" }],
   })
+  d.version += 1
+  return d
+}
+
+/* ---------- 完全削除（複数人の承認のあと90日で削除） ---------- */
+
+export const DELETION_DELAY_DAYS = 90
+export const DEFAULT_DELETION_APPROVALS = 2
+const DAY = 86400000
+
+export const deletionApprovalsRequired = (data: AppData) => data.settings?.deletionApprovals ?? DEFAULT_DELETION_APPROVALS
+const activeDeletion = (data: AppData, memberId: string) =>
+  (data.deletions ?? []).find((x) => x.memberId === memberId && (x.status === "pending" || x.status === "scheduled"))
+
+export function setDeletionApprovals(data: AppData, actorId: string, count: number): AppData {
+  if (!hasFullAccess(data, actorId)) fail("承認の人数を変えられるのは代表・全権管理者のみです")
+  if (!Number.isInteger(count) || count < 1 || count > 5) fail("承認の人数は1〜5人にしてください")
+  if (count === deletionApprovalsRequired(data)) fail("変更はありません")
+  const d = clone(data)
+  const before = deletionApprovalsRequired(d)
+  d.settings = { ...d.settings, deletionApprovals: count }
+  audit(d, { actorId, source: "member", summary: `完全削除に必要な承認を${count}人に変更`, memberIds: [], toolIds: [], items: [{ label: "必要な承認", before: `${before}人`, after: `${count}人` }] })
+  d.version += 1
+  return d
+}
+
+/** 完全削除を申請する（退会済みのメンバーだけ） */
+export function requestDeletion(data: AppData, actorId: string, memberId: string, reason: string): AppData {
+  if (!hasFullAccess(data, actorId)) fail("完全削除を申請できるのは代表・全権管理者のみです")
+  const m = findMember(data, memberId) ?? fail("メンバーが見つかりません")
+  if (m.status !== "withdrawn") fail("完全削除できるのは退会済みのメンバーだけです。先に退会にしてください")
+  if (activeDeletion(data, memberId)) fail("このメンバーは既に完全削除の申請中です")
+  if (!reason.trim()) fail("理由を入力してください")
+  const d = clone(data)
+  const req: DeletionRequest = { id: newId("del"), memberId, memberName: m.name, requestedBy: actorId, requestedAt: nowIso(), reason: reason.trim(), approvals: [], status: "pending" }
+  d.deletions = [req, ...(d.deletions ?? [])]
+  audit(d, { actorId, source: "member", summary: `${m.name} の完全削除を申請`, memberIds: [memberId], toolIds: [], items: [{ memberId, label: "完全削除", before: "—", after: `申請（承認 ${deletionApprovalsRequired(d)}人が必要）` }], reason: req.reason })
+  for (const r of d.orgRoles.filter((x) => x.kind === "representative" && x.memberId !== actorId)) {
+    notify(d, { recipientId: r.memberId, kind: "request_in", title: "完全削除の承認依頼", body: `${m.name} さんの完全削除が申請されました。「メンバー」で承認できます。`, actorId, reason: req.reason })
+  }
+  d.version += 1
+  return d
+}
+
+/** 承認する。必要な人数がそろったら、90日後の削除を予約する */
+export function approveDeletion(data: AppData, actorId: string, requestId: string): AppData {
+  if (!hasFullAccess(data, actorId)) fail("承認できるのは代表・全権管理者のみです")
+  const req = (data.deletions ?? []).find((x) => x.id === requestId) ?? fail("申請が見つかりません")
+  if (req.status !== "pending") fail("この申請は承認待ちではありません")
+  if (req.requestedBy === actorId) fail("自分の申請は承認できません。ほかの代表・全権管理者に承認してもらってください")
+  if (req.approvals.some((a) => a.by === actorId)) fail("既に承認しています")
+  const d = clone(data)
+  const r = d.deletions!.find((x) => x.id === requestId)!
+  const at = nowIso()
+  r.approvals.push({ by: actorId, at })
+  const need = deletionApprovalsRequired(d)
+  const done = r.approvals.length >= need
+  if (done) {
+    r.status = "scheduled"
+    r.approvedAt = at
+    r.executeAfter = new Date(Date.parse(at) + DELETION_DELAY_DAYS * DAY).toISOString()
+  }
+  audit(d, {
+    actorId,
+    source: "member",
+    summary: done ? `${r.memberName} の完全削除を承認（${DELETION_DELAY_DAYS}日後に削除）` : `${r.memberName} の完全削除を承認（${r.approvals.length}/${need}人）`,
+    memberIds: [r.memberId],
+    toolIds: [],
+    items: [{ memberId: r.memberId, label: "完全削除", before: `承認 ${r.approvals.length - 1}/${need}人`, after: done ? `${r.executeAfter!.slice(0, 10)} 以降に削除` : `承認 ${r.approvals.length}/${need}人` }],
+  })
+  if (done) notify(d, { recipientId: r.requestedBy, kind: "request_result", title: "完全削除の承認がそろいました", body: `${r.memberName} さんは ${DELETION_DELAY_DAYS}日後に完全削除されます（それまでは取り消せます）。`, actorId })
+  d.version += 1
+  return d
+}
+
+/** 申請・予約を取り消す（実行前ならいつでも） */
+export function cancelDeletion(data: AppData, actorId: string, requestId: string, reason: string): AppData {
+  if (!hasFullAccess(data, actorId)) fail("取り消せるのは代表・全権管理者のみです")
+  const req = (data.deletions ?? []).find((x) => x.id === requestId) ?? fail("申請が見つかりません")
+  if (req.status !== "pending" && req.status !== "scheduled") fail("この申請は取り消せません")
+  const d = clone(data)
+  cancelDeletionIn(d, req.id, actorId, reason.trim() || "取り消し")
+  audit(d, { actorId, source: "member", summary: `${req.memberName} の完全削除を取り消し`, memberIds: [req.memberId], toolIds: [], items: [{ memberId: req.memberId, label: "完全削除", before: req.status === "scheduled" ? "削除予約" : "承認待ち", after: "取り消し" }], reason: reason.trim() || undefined })
+  d.version += 1
+  return d
+}
+
+function cancelDeletionIn(d: AppData, requestId: string, actorId: string | null, reason: string) {
+  const r = (d.deletions ?? []).find((x) => x.id === requestId)
+  if (!r) return
+  r.status = "cancelled"
+  r.cancelledBy = actorId ?? undefined
+  r.cancelledAt = nowIso()
+  r.cancelReason = reason
+}
+
+/** 期限が来た削除予約 */
+export const dueDeletions = (data: AppData, now = Date.now()) =>
+  (data.deletions ?? []).filter((x) => x.status === "scheduled" && x.executeAfter && Date.parse(x.executeAfter) <= now)
+
+/**
+ * 完全削除を実行する（期限が来た予約だけ）。
+ * メンバー・所属・付与・手動設定・申請・通知などを消し、変更履歴の名前・メールは「削除済みメンバー」に置き換える。
+ * ポータルのアカウントの削除は、呼び出し側（画面）が先に行う。
+ */
+export function executeDeletion(data: AppData, actorId: string | null, requestId: string, now = Date.now()): AppData {
+  const req = (data.deletions ?? []).find((x) => x.id === requestId) ?? fail("申請が見つかりません")
+  if (req.status !== "scheduled" || !req.executeAfter || Date.parse(req.executeAfter) > now) fail("まだ削除の期限ではありません")
+  const m = findMember(data, req.memberId)
+  const d = clone(data)
+  const id = req.memberId
+  const LABEL = "削除済みメンバー"
+  if (m) {
+    const secrets = [m.name, ...memberEmails(m)].filter((x) => x && x.length >= 2).sort((a, b) => b.length - a.length)
+    const scrub = (text: string | undefined) => (text === undefined ? text : secrets.reduce((t, s) => t.split(s).join(LABEL), text))
+    d.members = d.members.filter((x) => x.id !== id)
+    d.memberships = d.memberships.filter((x) => x.memberId !== id)
+    d.grants = d.grants.filter((x) => x.memberId !== id)
+    d.overrides = d.overrides.filter((x) => x.memberId !== id)
+    d.orgRoles = d.orgRoles.filter((x) => x.memberId !== id)
+    d.scopes = d.scopes.filter((x) => x.grantedTo !== id)
+    d.routes = d.routes.filter((x) => x.approverId !== id).map((x) => (x.alternateId === id ? { ...x, alternateId: null } : x))
+    d.requests = d.requests.filter((x) => x.requesterId !== id && x.approverId !== id)
+    d.notifications = d.notifications.filter((x) => x.recipientId !== id).map((n) => ({ ...n, body: scrub(n.body)!, items: n.items.map((i) => ({ ...i, label: scrub(i.label)!, before: scrub(i.before)!, after: scrub(i.after)! })) }))
+    d.audit = d.audit.map((a) => ({
+      ...a,
+      summary: scrub(a.summary)!,
+      reason: scrub(a.reason),
+      memberIds: a.memberIds.filter((x) => x !== id),
+      items: a.items.map((i) => ({ ...i, memberId: i.memberId === id ? undefined : i.memberId, label: scrub(i.label)!, before: scrub(i.before)!, after: scrub(i.after)! })),
+    }))
+    d.deletions = d.deletions!.map((x) => (x.memberId === id ? { ...x, memberName: LABEL, reason: scrub(x.reason)! } : x))
+  }
+  const r = d.deletions!.find((x) => x.id === requestId)!
+  r.status = "executed"
+  r.executedAt = new Date(now).toISOString()
+  r.memberName = LABEL
+  audit(d, { actorId, source: "member", summary: "メンバー1人を完全削除", memberIds: [], toolIds: [], items: [{ label: "完全削除", before: "削除予約", after: "削除済み（記録の名前・メールも置き換え）" }] })
   d.version += 1
   return d
 }

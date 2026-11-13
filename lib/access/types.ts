@@ -102,6 +102,11 @@ export interface Grant {
   roleKey: string
   source: GrantSource
   departmentId?: string
+  /**
+   * 付与のもとになったテンプレートの部署（親の部署から引き継いだとき）。
+   * 無ければ departmentId の部署のテンプレート
+   */
+  templateDepartmentId?: string
   position?: TemplatePosition
   grantedAt: string
   /** 所属解除・異動後も保持されている付与 */
@@ -209,6 +214,37 @@ export interface PortalTool {
   demoRoleDefinition?: boolean
 }
 
+export type DeletionStatus = "pending" | "scheduled" | "executed" | "cancelled"
+
+/**
+ * メンバーの完全削除の申請。退会済みのメンバーだけが対象。
+ * 申請者以外の承認が必要な人数（settings.deletionApprovals）そろうと、その90日後に削除する。
+ */
+export interface DeletionRequest {
+  id: string
+  memberId: string
+  /** 一覧に出す名前（削除したあとは「削除済みメンバー」に置き換える） */
+  memberName: string
+  requestedBy: string
+  requestedAt: string
+  reason: string
+  approvals: { by: string; at: string }[]
+  status: DeletionStatus
+  /** 承認がそろった日時 */
+  approvedAt?: string
+  /** この日時を過ぎたら削除する（承認がそろってから90日） */
+  executeAfter?: string
+  executedAt?: string
+  cancelledBy?: string
+  cancelledAt?: string
+  cancelReason?: string
+}
+
+export interface AccessSettings {
+  /** 完全削除に必要な承認の人数（申請者を除く）。既定 2 */
+  deletionApprovals?: number
+}
+
 export interface SyncMeta {
   lastStatus: "success" | "error" | "never"
   lastAttemptAt: string | null
@@ -235,6 +271,9 @@ export interface AppData {
   /** モックのFSIFポータル側データ（正本の代わり） */
   portalCatalog: PortalTool[]
   sync: SyncMeta
+  /** 完全削除の申請（古いデータには無い） */
+  deletions?: DeletionRequest[]
+  settings?: AccessSettings
   /**
    * 代表と同じ管理操作ができるメンバー（本番：ログイン中のポータル全権管理者）。
    * 画面が読み込み時に付けるだけで、保存はしない。
