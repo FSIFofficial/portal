@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/kouhou/ui/button'
 import { useAppState } from '@/lib/kouhou/store/store'
 import { newId } from '@/lib/kouhou/domain/actions'
@@ -11,6 +11,8 @@ import { Field, Input, Panel, Pill, Select, Switch } from '@/components/kouhou/k
 import { BrandDot } from '@/components/kouhou/domain/tags'
 import { CheckConnectionsButton, ConnectionPill, SyncDiscordButton, XConnectButton } from './live-connections'
 import { CODE_RE, useAdminEdit } from './use-admin'
+import { postTypeInUse } from '@/lib/kouhou/domain/commands'
+import { toast } from '@/components/kouhou/kit/toast'
 
 /** テキストは確定（フォーカスを外す）時に保存。失敗したら元の値に戻す */
 function CommitInput({ value, onCommit, label, className, ...rest }: { value: string; onCommit: (v: string) => boolean | Promise<boolean>; label: string; className?: string } & Omit<React.ComponentProps<'input'>, 'value' | 'onChange'>) {
@@ -336,8 +338,19 @@ export function PostTypesSection() {
         <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
           {s.postTypes.map((t) => (
             <li key={t.id} className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-sm font-medium">{t.name}</span>
-              <span className="flex items-center gap-4 text-sm">
+              <CommitInput
+                label={`${t.name}の名前`}
+                value={t.name}
+                className="sm:max-w-64"
+                onCommit={(v) =>
+                  edit('種類名を変更しました', (d) => {
+                    if (!v) return '種類名を入力してください'
+                    if (d.postTypes.some((x) => x.id !== t.id && x.name === v)) return '同じ名前の種類があります'
+                    d.postTypes.find((x) => x.id === t.id)!.name = v
+                  })
+                }
+              />
+              <span className="flex flex-wrap items-center gap-4 text-sm">
                 <label className="flex items-center gap-2">
                   定期投稿扱い
                   <Switch label={`${t.name}を定期投稿扱いにする`} checked={t.routine} onChange={(v) => edit('投稿種類を更新しました', (d) => void (d.postTypes.find((x) => x.id === t.id)!.routine = v))} />
@@ -346,6 +359,27 @@ export function PostTypesSection() {
                   重要投稿扱い
                   <Switch label={`${t.name}を重要投稿扱いにする`} checked={t.important} onChange={(v) => edit('投稿種類を更新しました', (d) => void (d.postTypes.find((x) => x.id === t.id)!.important = v))} />
                 </label>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1 text-danger"
+                  disabled={s.postTypes.length <= 1}
+                  title={s.postTypes.length <= 1 ? '種類は1つ以上必要です' : undefined}
+                  onClick={() => {
+                    const inUse = postTypeInUse(s, t.id)
+                    if (inUse) return void toast(inUse, false)
+                    if (!window.confirm(`投稿の種類「${t.name}」を削除しますか？`)) return
+                    void edit(`「${t.name}」を削除しました`, (d) => {
+                      const msg = postTypeInUse(d, t.id)
+                      if (msg) return msg
+                      if (d.postTypes.length <= 1) return '種類は1つ以上必要です'
+                      d.postTypes = d.postTypes.filter((x) => x.id !== t.id)
+                    })
+                  }}
+                >
+                  <Trash2 className="size-3.5" aria-hidden />
+                  削除
+                </Button>
               </span>
             </li>
           ))}

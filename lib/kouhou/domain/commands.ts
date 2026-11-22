@@ -126,6 +126,11 @@ const SERVER_OWNED: Partial<Record<AdminCollection, string[]>> = {
 export function applyAdminPatch(s: AppState, patch: AdminPatch): Result {
   const user = getUser(s, s.currentUserId)
   if (!user?.isAdmin || user.status !== 'active') return { ok: false, message: '管理者設定を変更できるのは管理者のみです' }
+  // 使われている投稿の種類は削除できない（投稿・繰り返し予約が種類を失うため）
+  for (const id of patch.remove.postTypes ?? []) {
+    const msg = postTypeInUse(s, id)
+    if (msg) return { ok: false, message: msg }
+  }
   for (const c of ADMIN_COLLECTIONS) {
     const list = s[c] as unknown[]
     for (const k of patch.remove[c] ?? []) {
@@ -156,6 +161,16 @@ export function applyAdminPatch(s: AppState, patch: AdminPatch): Result {
   const self = s.users.find((u) => u.id === user.id)
   if (!self?.isAdmin || self.status !== 'active') return { ok: false, message: '自分自身の管理者権限・利用状態は変更できません' }
   return { ok: true }
+}
+
+/** 投稿の種類が使われていれば、削除できない理由を返す */
+export function postTypeInUse(s: AppState, typeId: string): string | null {
+  const t = s.postTypes.find((x) => x.id === typeId)
+  const posts = s.posts.filter((p) => p.typeId === typeId).length
+  const recs = s.recurrences.filter((r) => r.typeId === typeId).length
+  if (!posts && !recs) return null
+  const what = [posts ? `投稿 ${posts}件` : '', recs ? `繰り返し予約 ${recs}件` : ''].filter(Boolean).join('・')
+  return `「${t?.name ?? typeId}」は${what}で使われているため削除できません。名前を変えるか、使っている投稿の種類を変えてから削除してください`
 }
 
 /* ---------- コマンドの一覧 ---------- */

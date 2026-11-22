@@ -52,3 +52,22 @@ test('広報管理：デモで基準日時を進めると、予約済みの投�
   await page.getByRole('button', { name: /次の予約/ }).click()
   await expect(page.getByText(/基準日時を .* に進めました（公開 [1-9]\d*件/)).toBeVisible()
 })
+
+test('広報管理：投稿の種類は名前を変えられ、使われていなければ削除できる', async ({ page }) => {
+  await page.goto('./kouhou/admin/')
+  const types = page.locator('#types')
+  // 使われている種類は削除できない（確認ダイアログを出さずに理由を表示する）
+  await types.getByRole('listitem').filter({ has: page.getByLabel('イベント告知の名前') }).getByRole('button', { name: '削除' }).click()
+  await expect(page.getByText(/「イベント告知」は投稿 \d+件.*で使われているため削除できません/)).toBeVisible()
+  // 追加 → 名前を変更 → 削除
+  await types.getByLabel('新しい投稿種類名').fill('テスト種類')
+  await types.getByRole('button', { name: '追加' }).click()
+  const input = types.getByLabel('テスト種類の名前')
+  await input.fill('テスト種類2')
+  await input.press('Enter')
+  await expect(page.getByText('種類名を変更しました')).toBeVisible()
+  page.once('dialog', (d) => d.accept())
+  await types.getByRole('listitem').filter({ has: page.getByLabel('テスト種類2の名前') }).getByRole('button', { name: '削除' }).click()
+  await expect(page.getByText('「テスト種類2」を削除しました')).toBeVisible()
+  await expect(types.getByLabel('テスト種類2の名前')).toHaveCount(0)
+})
