@@ -91,6 +91,8 @@ function send<T extends CommandResponse>(action: string, payload: Record<string,
       adopt(r.state)
       return r.result
     } catch (e) {
+      // ログインが切れていたら、ログインし直す画面を出す（ログイン後はそのまま続けられる）
+      if (e instanceof KouhouApiError && e.code === 'UNAUTHENTICATED') setMeta({ status: { kind: 'error', code: e.code, message: e.message } })
       return { ok: false, message: e instanceof Error ? e.message : '保存に失敗しました' }
     } finally {
       setMeta({ pending: pending - 1 })

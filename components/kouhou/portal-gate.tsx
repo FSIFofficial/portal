@@ -10,6 +10,7 @@ import { DEMO_MODE } from '@/lib/config'
 import { portalHomeUrl } from '@/lib/kouhou/paths'
 import { KOUHOU_NOT_CONFIGURED } from '@/lib/kouhou/live'
 import { buttonVariants } from '@/components/kouhou/ui/button'
+import { GoogleSignIn } from './google-sign-in'
 
 const SESSION_KEY = 'fsif-portal-session'
 
@@ -53,11 +54,12 @@ export function PortalGate({ children }: { children: React.ReactNode }) {
         <div className="flex size-12 items-center justify-center rounded-full bg-accent text-primary">
           <LogIn className="size-6" aria-hidden />
         </div>
-        <h1 className="text-lg font-bold">ポータルにログインしてください</h1>
+        <h1 className="text-lg font-bold">ログインしてください</h1>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          広報管理は FSIF Portal と同じログインで使います。ポータルでログインしてから、もう一度開いてください。
+          広報管理は FSIF Portal と同じ Google アカウントで使います（ここでログインすると、ポータルもログイン済みになります）。
         </p>
-        <a href={portalHomeUrl()} className={buttonVariants({ size: 'lg' })}>
+        <GoogleSignIn onSignedIn={() => setState('ok')} />
+        <a href={portalHomeUrl()} className="text-xs text-muted-foreground underline underline-offset-2">
           ポータルを開く
         </a>
       </div>

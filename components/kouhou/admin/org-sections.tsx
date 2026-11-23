@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/kouhou/ui/button'
 import { useAppState } from '@/lib/kouhou/store/store'
 import { newId } from '@/lib/kouhou/domain/actions'
@@ -11,7 +11,7 @@ import { Field, Input, Panel, Pill, Select, Switch } from '@/components/kouhou/k
 import { BrandDot } from '@/components/kouhou/domain/tags'
 import { CheckConnectionsButton, ConnectionPill, SyncDiscordButton, XConnectButton } from './live-connections'
 import { CODE_RE, useAdminEdit } from './use-admin'
-import { postTypeInUse } from '@/lib/kouhou/domain/commands'
+import { accountInUse, brandInUse, channelInUse, postTypeInUse } from '@/lib/kouhou/domain/commands'
 import { toast } from '@/components/kouhou/kit/toast'
 
 /** テキストは確定（フォーカスを外す）時に保存。失敗したら元の値に戻す */
@@ -33,6 +33,29 @@ function CommitInput({ value, onCommit, label, className, ...rest }: { value: st
         if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) (e.target as HTMLInputElement).blur()
       }}
     />
+  )
+}
+
+/**
+ * 削除ボタン。使われていれば理由を出して止め、使われていなければ確認してから消す。
+ * inUse はブラウザ側の判定（サーバー側でも同じ判定をする）
+ */
+function DeleteButton({ label, inUse, onDelete }: { label: string; inUse: () => string | null; onDelete: () => void }) {
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="gap-1 text-danger"
+      aria-label={`${label}を削除`}
+      onClick={() => {
+        const msg = inUse()
+        if (msg) return void toast(msg, false)
+        if (window.confirm(`${label}を削除しますか？`)) onDelete()
+      }}
+    >
+      <Trash2 className="size-3.5" aria-hidden />
+      削除
+    </Button>
   )
 }
 
@@ -63,7 +86,7 @@ export function BrandsSection() {
       <div className="flex flex-col gap-3">
         <ul className="flex flex-col gap-2">
           {s.brands.map((b) => (
-            <li key={b.id} className="grid grid-cols-[auto_1fr_8rem] items-center gap-2">
+            <li key={b.id} className="grid grid-cols-[auto_1fr_8rem_auto] items-center gap-2">
               <input
                 type="color"
                 aria-label={`${b.name}の表示色`}
@@ -82,6 +105,20 @@ export function BrandsSection() {
                     if (!CODE_RE.test(c)) return '識別コードは英大文字・数字・ハイフン2〜12文字です'
                     if (d.brands.some((x) => x.code === c && x.id !== b.id)) return 'この識別コードは使用中です'
                     d.brands.find((x) => x.id === b.id)!.code = c
+                  })
+                }
+              />
+              <DeleteButton
+                label={`ブランド「${b.name}」`}
+                inUse={() => brandInUse(s, b.id)}
+                onDelete={() =>
+                  void edit(`ブランド「${b.name}」を削除しました`, (d) => {
+                    const msg = brandInUse(d, b.id)
+                    if (msg) return msg
+                    const servers = d.servers.filter((x) => x.brandId === b.id).map((x) => x.id)
+                    d.channels = d.channels.filter((c) => !servers.includes(c.serverId))
+                    d.servers = d.servers.filter((x) => x.brandId !== b.id)
+                    d.brands = d.brands.filter((x) => x.id !== b.id)
                   })
                 }
               />
@@ -141,7 +178,7 @@ export function AccountsSection() {
         <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-muted/60 text-xs text-muted-foreground">
             <tr>
-              {['ブランド', '媒体', '表示名', '識別コード', s.live ? '接続' : '接続（モック）', '標準承認者'].map((h) => (
+              {['ブランド', '媒体', '表示名', '識別コード', s.live ? '接続' : '接続（モック）', '標準承認者', ''].map((h) => (
                 <th key={h} scope="col" className="px-3 py-2 text-left font-medium">
                   {h}
                 </th>
@@ -196,6 +233,20 @@ export function AccountsSection() {
                         </option>
                       ))}
                     </Select>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <DeleteButton
+                      label={`アカウント「${a.name}」`}
+                      inUse={() => accountInUse(s, a.id)}
+                      onDelete={() =>
+                        void edit(`アカウント「${a.name}」を削除しました`, (d) => {
+                          const msg = accountInUse(d, a.id)
+                          if (msg) return msg
+                          d.accounts = d.accounts.filter((x) => x.id !== a.id)
+                          d.permissions = d.permissions.filter((p) => p.accountId !== a.id)
+                        })
+                      }
+                    />
                   </td>
                 </tr>
               )
@@ -277,27 +328,65 @@ export function DiscordSection() {
                   <SyncDiscordButton server={sv} />
                 </div>
               )}
+              {(sv.ignoredChannelIds?.length ?? 0) > 0 && (
+                <button
+                  type="button"
+                  className="w-fit text-xs text-muted-foreground underline underline-offset-2"
+                  onClick={() =>
+                    void edit('削除したチャンネルを戻せるようにしました。「Discordからチャンネルを取得」で再び取り込まれます', (d) => {
+                      d.servers.find((x) => x.id === sv.id)!.ignoredChannelIds = []
+                    })
+                  }
+                >
+                  削除したチャンネル（{sv.ignoredChannelIds!.length}件）を戻す
+                </button>
+              )}
               {chans.length ? (
-                <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
-                  {chans.map((c) => (
-                    <li key={c.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                      <span className="flex items-center gap-2">
-                        #{c.name}
-                        {s.settings.notifyChannelId === c.id && <Pill tone="info">通知用</Pill>}
-                        {s.live && (c.discordId ? <span className="font-mono text-xs text-muted-foreground">{c.discordId}</span> : <Pill tone="warning">Discord未連携</Pill>)}
-                      </span>
-                      <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                        投稿可能
-                        <Switch
-                          label={`#${c.name}を投稿先にする`}
-                          checked={c.postable}
-                          disabled={s.settings.notifyChannelId === c.id}
-                          onChange={(v) => edit(v ? '投稿可能にしました' : '投稿先から外しました', (d) => void (d.channels.find((x) => x.id === c.id)!.postable = v))}
-                        />
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <details className="group rounded-md border border-border">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden />
+                    <span className="font-medium">チャンネル</span>
+                    <span className="text-xs text-muted-foreground">
+                      全{chans.length}件・投稿可能 {chans.filter((c) => c.postable).length}件
+                    </span>
+                  </summary>
+                  <ul className="flex flex-col divide-y divide-border border-t border-border">
+                    {[...chans]
+                      .sort((a, b) => Number(b.postable) - Number(a.postable))
+                      .map((c) => (
+                        <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+                          <span className="flex items-center gap-2">
+                            #{c.name}
+                            {s.settings.notifyChannelId === c.id && <Pill tone="info">通知用</Pill>}
+                            {s.live && (c.discordId ? <span className="font-mono text-xs text-muted-foreground">{c.discordId}</span> : <Pill tone="warning">Discord未連携</Pill>)}
+                          </span>
+                          <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                            投稿可能
+                            <Switch
+                              label={`#${c.name}を投稿先にする`}
+                              checked={c.postable}
+                              disabled={s.settings.notifyChannelId === c.id}
+                              onChange={(v) => edit(v ? '投稿可能にしました' : '投稿先から外しました', (d) => void (d.channels.find((x) => x.id === c.id)!.postable = v))}
+                            />
+                            <DeleteButton
+                              label={`#${c.name}`}
+                              inUse={() => channelInUse(s, c.id)}
+                              onDelete={() =>
+                                void edit(`#${c.name} を削除しました`, (d) => {
+                                  const msg = channelInUse(d, c.id)
+                                  if (msg) return msg
+                                  d.channels = d.channels.filter((x) => x.id !== c.id)
+                                  // 「Discordからチャンネルを取得」で再び追加しないよう覚えておく
+                                  const srv = d.servers.find((x) => x.id === c.serverId)
+                                  if (srv && c.discordId) srv.ignoredChannelIds = [...new Set([...(srv.ignoredChannelIds ?? []), c.discordId])]
+                                })
+                              }
+                            />
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                </details>
               ) : (
                 <p className="text-sm text-muted-foreground">チャンネルがありません。</p>
               )}
@@ -322,7 +411,10 @@ export function DiscordSection() {
             </section>
           )
         })}
-        <p className="text-xs text-muted-foreground">通知先チャンネルは投稿先とは別に「Discord通知」で1つだけ設定します。通知用チャンネルは投稿先にできません。</p>
+        <p className="text-xs text-muted-foreground">
+          通知先チャンネルは投稿先とは別に「Discord通知」で1つだけ設定します。通知用チャンネルは投稿先にできません。
+          使わないチャンネルは削除できます（投稿・繰り返し予約で使っているチャンネルは削除できないので「投稿可能」をオフに）。削除したチャンネルは「Discordからチャンネルを取得」でも再び追加されません。
+        </p>
       </div>
     </Panel>
   )

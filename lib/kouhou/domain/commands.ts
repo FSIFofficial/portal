@@ -126,10 +126,18 @@ const SERVER_OWNED: Partial<Record<AdminCollection, string[]>> = {
 export function applyAdminPatch(s: AppState, patch: AdminPatch): Result {
   const user = getUser(s, s.currentUserId)
   if (!user?.isAdmin || user.status !== 'active') return { ok: false, message: '管理者設定を変更できるのは管理者のみです' }
-  // 使われている投稿の種類は削除できない（投稿・繰り返し予約が種類を失うため）
-  for (const id of patch.remove.postTypes ?? []) {
-    const msg = postTypeInUse(s, id)
-    if (msg) return { ok: false, message: msg }
+  // 使われているものは削除できない（投稿・繰り返し予約などが参照先を失うため）
+  const guards: [AdminCollection, (s: AppState, id: string) => string | null][] = [
+    ['postTypes', postTypeInUse],
+    ['brands', brandInUse],
+    ['accounts', accountInUse],
+    ['channels', channelInUse],
+  ]
+  for (const [c, inUse] of guards) {
+    for (const id of patch.remove[c] ?? []) {
+      const msg = inUse(s, id)
+      if (msg) return { ok: false, message: msg }
+    }
   }
   for (const c of ADMIN_COLLECTIONS) {
     const list = s[c] as unknown[]
@@ -171,6 +179,50 @@ export function postTypeInUse(s: AppState, typeId: string): string | null {
   if (!posts && !recs) return null
   const what = [posts ? `投稿 ${posts}件` : '', recs ? `繰り返し予約 ${recs}件` : ''].filter(Boolean).join('・')
   return `「${t?.name ?? typeId}」は${what}で使われているため削除できません。名前を変えるか、使っている投稿の種類を変えてから削除してください`
+}
+
+const usage = (parts: [string, number][]) =>
+  parts
+    .filter(([, n]) => n > 0)
+    .map(([label, n]) => `${label} ${n}件`)
+    .join('・')
+
+/** SNSアカウントが使われていれば、削除できない理由を返す */
+export function accountInUse(s: AppState, accountId: string): string | null {
+  const a = s.accounts.find((x) => x.id === accountId)
+  const what = usage([
+    ['投稿', s.posts.filter((p) => p.accountId === accountId).length],
+    ['繰り返し予約', s.recurrences.filter((r) => r.accountIds.includes(accountId)).length],
+  ])
+  return what ? `「${a?.name ?? accountId}」は${what}で使われているため削除できません` : null
+}
+
+/** Discord のチャンネルが使われていれば、削除できない理由を返す */
+export function channelInUse(s: AppState, channelId: string): string | null {
+  const c = s.channels.find((x) => x.id === channelId)
+  if (s.settings.notifyChannelId === channelId) return `#${c?.name ?? channelId} は通知先チャンネルのため削除できません（先に「Discord通知」で通知先を変えてください）`
+  const what = usage([
+    ['投稿', s.posts.filter((p) => p.channelId === channelId).length],
+    ['繰り返し予約', s.recurrences.filter((r) => r.channelId === channelId).length],
+  ])
+  return what ? `#${c?.name ?? channelId} は${what}で使われているため削除できません。使わないなら「投稿可能」をオフにしてください` : null
+}
+
+/** ブランドが使われていれば、削除できない理由を返す（Discord サーバーとそのチャンネルはブランドと一緒に消す） */
+export function brandInUse(s: AppState, brandId: string): string | null {
+  const b = s.brands.find((x) => x.id === brandId)
+  const servers = s.servers.filter((x) => x.brandId === brandId).map((x) => x.id)
+  if (s.channels.some((c) => servers.includes(c.serverId) && c.id === s.settings.notifyChannelId)) {
+    return `「${b?.name ?? brandId}」の Discord に通知先チャンネルがあるため削除できません`
+  }
+  const what = usage([
+    ['SNSアカウント', s.accounts.filter((a) => a.brandId === brandId).length],
+    ['投稿', s.posts.filter((p) => p.brandId === brandId).length],
+    ['企画', s.plans.filter((p) => p.brandId === brandId).length],
+    ['素材', s.assets.filter((a) => a.brandId === brandId).length],
+    ['イベント', s.events.filter((e) => e.brandId === brandId).length],
+  ])
+  return what ? `「${b?.name ?? brandId}」は${what}で使われているため削除できません` : null
 }
 
 /* ---------- コマンドの一覧 ---------- */
