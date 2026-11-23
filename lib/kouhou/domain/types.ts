@@ -38,6 +38,8 @@ export interface DiscordServer {
   name: string
   /** 本番：DiscordのサーバーID（ギルドID） */
   guildId?: string
+  /** 本番：削除したチャンネルの Discord ID（「Discordからチャンネルを取得」で再び追加しない） */
+  ignoredChannelIds?: string[]
 }
 
 export interface DiscordChannel {

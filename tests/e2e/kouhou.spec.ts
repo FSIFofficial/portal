@@ -71,3 +71,37 @@ test('広報管理：投稿の種類は名前を変えられ、使われてい�
   await expect(page.getByText('「テスト種類2」を削除しました')).toBeVisible()
   await expect(types.getByLabel('テスト種類2の名前')).toHaveCount(0)
 })
+
+test('広報管理：ブランド・アカウント・チャンネルを削除でき、使われていれば止まる。チャンネルは折りたためる', async ({ page }) => {
+  await page.goto('./kouhou/admin/')
+  // ブランド：使われているものは削除できない／追加したものは削除できる
+  await page.getByRole('button', { name: 'ブランド「FSIF」を削除' }).click()
+  await expect(page.getByText(/「FSIF」はSNSアカウント \d+件.*で使われているため削除できません/)).toBeVisible()
+  const brands = page.locator('#brands')
+  await brands.getByPlaceholder('ブランド名').fill('テストブランド')
+  await brands.getByPlaceholder('CODE').fill('TB')
+  await brands.getByRole('button', { name: '追加' }).click()
+  page.once('dialog', (d) => d.accept())
+  await page.getByRole('button', { name: 'ブランド「テストブランド」を削除' }).click()
+  await expect(page.getByText('ブランド「テストブランド」を削除しました')).toBeVisible()
+
+  // アカウント：投稿があるものは削除できない／投稿の無いものは削除できる
+  await page.getByRole('button', { name: 'アカウント「FSIF公式X」を削除' }).click()
+  await expect(page.getByText(/「FSIF公式X」は投稿 \d+件.*で使われているため削除できません/)).toBeVisible()
+  page.once('dialog', (d) => d.accept())
+  await page.getByRole('button', { name: 'アカウント「FSIF Discord」を削除' }).click()
+  await expect(page.getByText('アカウント「FSIF Discord」を削除しました')).toBeVisible()
+
+  // チャンネル：最初は折りたたまれていて、開くと操作できる
+  const discord = page.locator('#discord')
+  const fsif = discord.locator('section').filter({ hasText: 'FSIF コミュニティ' })
+  await expect(fsif.getByLabel('#イベントを投稿先にする')).toBeHidden()
+  await fsif.getByText(/全2件・投稿可能/).click()
+  page.once('dialog', (d) => d.accept())
+  await fsif.getByRole('button', { name: '#イベントを削除' }).click()
+  await expect(page.getByText('#イベント を削除しました')).toBeVisible()
+  const cb = discord.locator('section').filter({ hasText: 'Cosmo Base コミュニティ' })
+  await cb.getByText(/全\d+件・投稿可能/).click()
+  await cb.getByRole('button', { name: '#広報管理通知を削除' }).click()
+  await expect(page.getByText(/通知先チャンネルのため削除できません/)).toBeVisible()
+})

@@ -7,16 +7,18 @@ import { LIVE_MODE } from '@/lib/kouhou/live'
 import { reloadLive, useLiveMeta } from '@/lib/kouhou/store/store'
 import { portalHomeUrl } from '@/lib/kouhou/paths'
 import { Button, buttonVariants } from '@/components/kouhou/ui/button'
+import { GoogleSignIn } from './google-sign-in'
 
-function Screen({ icon, title, children, retry }: { icon: React.ReactNode; title: string; children: React.ReactNode; retry?: boolean }) {
+function Screen({ icon, title, children, retry, signIn }: { icon: React.ReactNode; title: string; children: React.ReactNode; retry?: boolean; signIn?: boolean }) {
   return (
     <main className="flex min-h-dvh items-center justify-center p-6">
       <div className="flex max-w-md flex-col items-center gap-3 text-center">
         <div className="flex size-12 items-center justify-center rounded-full bg-accent text-primary">{icon}</div>
         <h1 className="text-lg font-bold">{title}</h1>
         <div className="text-sm leading-relaxed text-muted-foreground">{children}</div>
+        {signIn && <GoogleSignIn onSignedIn={() => void reloadLive()} />}
         <div className="flex flex-wrap justify-center gap-2 pt-2">
-          <a href={portalHomeUrl()} className={buttonVariants({ size: 'lg', variant: retry ? 'outline' : 'default' })}>
+          <a href={portalHomeUrl()} className={signIn ? 'text-xs text-muted-foreground underline underline-offset-2' : buttonVariants({ size: 'lg', variant: retry ? 'outline' : 'default' })}>
             ポータルを開く
           </a>
           {retry && (
@@ -43,7 +45,8 @@ export function LiveGate({ children }: { children: React.ReactNode }) {
       )
     case 'unregistered':
       return (
-        <Screen icon={<UserX className="size-6" aria-hidden />} title="広報管理に登録されていません">
+        <Screen icon={<UserX className="size-6" aria-hidden />} title="広報管理に登録されていません" signIn>
+          <p className="mb-2">別の Google アカウントで使う場合は、下からログインし直してください。</p>
           <p>{status.reason ?? `${status.email} は広報管理の利用者に登録されていません。広報管理の管理者に、このメールアドレスの登録を依頼してください。`}</p>
         </Screen>
       )
@@ -55,8 +58,13 @@ export function LiveGate({ children }: { children: React.ReactNode }) {
       )
     case 'error':
       return (
-        <Screen icon={<TriangleAlert className="size-6" aria-hidden />} title={status.code === 'UNAUTHENTICATED' ? 'ポータルにログインしてください' : '読み込めませんでした'} retry={status.code !== 'UNAUTHENTICATED'}>
-          <p>{status.message}</p>
+        <Screen
+          icon={<TriangleAlert className="size-6" aria-hidden />}
+          title={status.code === 'UNAUTHENTICATED' ? 'ログインし直してください' : '読み込めませんでした'}
+          retry={status.code !== 'UNAUTHENTICATED'}
+          signIn={status.code === 'UNAUTHENTICATED'}
+        >
+          <p>{status.code === 'UNAUTHENTICATED' ? 'ログインの有効期限が切れました。ここでログインすると、そのまま続けられます。' : status.message}</p>
         </Screen>
       )
   }
