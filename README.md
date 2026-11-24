@@ -194,7 +194,8 @@ X・Instagram・Discord の投稿を、企画から下書き・承認・予約�
 
 1. GitHub で **Fine-grained personal access token** を作る（Resource owner：FSIFofficial、Repository access：`fsif` と `CosmoBase` だけ、
    Permissions：**Contents** と **Actions** を Read and write）→ GAS のスクリプト プロパティ `GITHUB_TOKEN` に入れる
-2. FSIF のニュースのスプレッドシートを、**広報管理の GAS を動かしている Google アカウントに編集者として共有**し、シートの ID（URL の `/d/` と `/edit` の間）を `FSIF_NEWS_SHEET_ID` に入れる
+2. FSIF のニュースのスプレッドシートを、**広報管理の GAS を動かしている Google アカウントに編集者として共有**し、シートの ID（URL の `/d/` と `/edit` の間）を `FSIF_NEWS_SHEET_ID` に入れる。
+   ニュースのタブは URL の `#gid=` の数字で選びます（既定は 0。違うときは `FSIF_NEWS_SHEET_GID` に入れる）。1行目に slug・date・title・body の列が無いタブには書きません
 3. GAS を貼り直したら一度エディタで関数を実行して、追加の権限（ほかのスプレッドシートの編集）を承認する
 4. 広報管理の「管理者設定 > SNSアカウント」で「接続を確認」→「FSIF ホームページ」「Cosmo Base ホームページ」が接続済みになれば完了
 
