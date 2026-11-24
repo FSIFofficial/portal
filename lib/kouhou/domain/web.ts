@@ -9,7 +9,7 @@
  *   （FSIF のシートは1つのまとまりに画像1枚の構造のため）。画像はエディタの「本文に入れる」ボタンで入れる
  *   Cosmo Base は HTML のタグもそのまま使える（改行は <br>、見出しは <h3> にする）
  */
-import type { AppState, Site, WebArticle } from './types'
+import type { AppState, Post, Site, WebArticle } from './types'
 
 export interface SiteConfig {
   label: string
@@ -226,6 +226,24 @@ export function siteRow(site: Site, a: WebArticle, body: string, date: string, t
     image: thumbnail,
     featured: a.featured ? 'true' : 'false',
   }
+}
+
+/**
+ * 注目記事は各サイトで1件だけ（FSIF はホームの大きいカード、Cosmo Base は一覧の上の大きいカードに出る。
+ * Cosmo Base は注目の記事を通常の一覧から外すので、2件あると片方が見えなくなる）。
+ * 注目の記事をサイトに出したら、同じサイトのほかの記事の注目を外す。外した記事の ID を返す
+ */
+export function clearOtherFeatured(s: AppState, post: Post): string[] {
+  if (!post.article?.featured) return []
+  const site = s.accounts.find((a) => a.id === post.accountId)?.site
+  const cleared: string[] = []
+  for (const p of s.posts) {
+    if (p.id === post.id || !p.article?.featured) continue
+    if (s.accounts.find((a) => a.id === p.accountId)?.site !== site) continue
+    p.article = { ...p.article, featured: false }
+    cleared.push(p.id)
+  }
+  return cleared
 }
 
 /** ホームページのアカウント（FSIF・Cosmo Base の2つ）。無ければ一度だけ足す（本番の既存データにも後から足せるように。消したら足し直さない） */

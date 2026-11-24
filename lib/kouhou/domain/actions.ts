@@ -26,7 +26,7 @@ import {
 import { compactDate, formatDateTime, isBefore, isValidDateTime, toMinutes } from './time'
 import { PLATFORM_CODE } from './labels'
 import { METRICS, STANDARD_SETTING, planCheckpoints, checkpointTime } from './analytics'
-import { checkBodyImages, validateArticle } from './web'
+import { checkBodyImages, clearOtherFeatured, validateArticle } from './web'
 
 export type Result = { ok: true; message?: string; id?: string; ids?: string[]; /** 本番：開いてもらうURL（Xの認可ページなど） */ url?: string } | { ok: false; message: string; conflict?: boolean }
 
@@ -784,6 +784,10 @@ export function runClock(s: AppState, next: JstDateTime, io: ClockIO): Result & 
       log(s, p, 'cancelled', 'サイトから記事を取り下げました', { actor: 'system' })
       notify(s, `【取り下げ】${p.title}`, p.id)
     } else {
+      for (const id of clearOtherFeatured(s, p)) {
+        const other = s.posts.find((x) => x.id === id)
+        if (other) log(s, other, 'saved', `注目を外しました（${p.id} が注目になったため）`, { actor: 'system' })
+      }
       log(s, p, 'published', `サイトの記事を修正しました（v${p.version}）`, { actor: 'system' })
       notify(s, `【記事を修正】${p.title}`, p.id)
     }
@@ -821,6 +825,10 @@ export function runClock(s: AppState, next: JstDateTime, io: ClockIO): Result & 
         if (author.publishSuccessCount === s.settings.promotionThreshold) notify(s, `【昇格検討】${author.name} の公開成功回数が${s.settings.promotionThreshold}回に達しました`, null)
       }
       log(s, p, 'published', s.live ? '公開しました' : '公開しました（デモ配信）', { actor: 'system' })
+      for (const id of clearOtherFeatured(s, p)) {
+        const other = s.posts.find((x) => x.id === id)
+        if (other) log(s, other, 'saved', `注目を外しました（${p.id} が注目になったため）`, { actor: 'system' })
+      }
       if (s.live) notify(s, `【公開】${p.title}`, p.id)
       published++
     } else if (!p.hold && (p.status === 'review' || p.status === 'draft' || p.status === 'rejected')) {
