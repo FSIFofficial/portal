@@ -102,8 +102,10 @@ export function ArticleFields({
           </Field>
         </div>
       )}
-      {cfg.extended && article.featured && (
-        <p className="text-xs text-muted-foreground">「注目記事」は、ホームの最新ニュースで大きく出る1件です。ほかの記事が注目になっている場合は、シートでそちらの featured を外してください。</p>
+      {article.featured && (
+        <p className="text-xs text-muted-foreground">
+          {cfg.extended ? '注目記事（ホームの最新ニュースで大きく出る記事）' : 'トップに大きく出す記事'}は1件だけです。この記事をサイトに出すと、ほかの記事の注目は自動で外れます。
+        </p>
       )}
       <div className="flex flex-wrap gap-6">
         <span className="flex items-center gap-2 text-sm">
