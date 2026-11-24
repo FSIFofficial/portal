@@ -138,4 +138,20 @@ test('広報管理：ホームページのニュース記事を作り、承認�
   await page.keyboard.press('Escape')
   await page.reload()
   await expect(page.getByText('公開済み').first()).toBeVisible()
+
+  // 公開後に直す：保存 → 内容を完了（自動承認）→ サイトの記事を修正する予定になる
+  await page.getByRole('tab', { name: '原稿' }).click()
+  await expect(page.getByText('公開中の記事です')).toBeVisible()
+  await page.getByLabel('記事のタイトル').fill('SBS2026に出展しました（修正）')
+  await page.getByRole('button', { name: /保存/ }).first().click()
+  await page.getByRole('tab', { name: /承認/ }).click()
+  await page.getByRole('button', { name: '内容を完了' }).click()
+  await expect(page.getByText(/サイトの記事を修正します/)).toBeVisible()
+
+  // 取り下げを申請できる
+  await page.getByRole('button', { name: '記事の取り下げを申請' }).click()
+  await page.getByRole('dialog').getByRole('textbox').fill('内容に誤りがあるため')
+  await page.getByRole('dialog').getByRole('button', { name: '取り下げを申請' }).click()
+  await expect(page.getByText('取り下げを申請しました。承認されるとサイトから取り下げます')).toBeVisible()
+  await expect(page.getByText('記事の取り下げ申請')).toBeVisible()
 })

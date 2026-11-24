@@ -54,11 +54,19 @@ export function isRoutine(s: AppState, post: Pick<Post, 'typeId'>) {
 
 const TERMINAL: PublishStatus[] = ['published', 'cancelled']
 
+/** 公開中のホームページの記事（公開後も修正・取り下げができる） */
+export function isLiveArticle(s: AppState, post: Post) {
+  return post.status === 'published' && post.mode !== 'manual' && getAccount(s, post.accountId)?.platform === 'web'
+}
+
 /** アカウント別の編集権限 + 最終編集者ロックの両方を満たして初めて編集可能 */
 export function canEditDraft(s: AppState, user: User | undefined, post: Post): Verdict {
   if (!activeUser(user)) return no('利用できないユーザーです')
   if (post.mode === 'manual') return no('手動記録の投稿は編集できません')
-  if (TERMINAL.includes(post.status)) return no('公開済み・取り消し済みの投稿は編集できません')
+  if (isLiveArticle(s, post)) {
+    if (post.pendingChange) return no('取り下げの申請が承認待ちです')
+    if (post.siteSync?.action === 'unpublish') return no('サイトから取り下げているところです')
+  } else if (TERMINAL.includes(post.status)) return no('公開済み・取り消し済みの投稿は編集できません')
   if (!permissionOf(s, user.id, post.accountId)?.edit) return no('このアカウントの編集権限がありません')
   if (post.lastEditorId !== user.id && !post.editOpen) return no('最終編集者が編集を許可すると変更できます')
   return OK
@@ -234,7 +242,8 @@ export function canSchedule(s: AppState, user: User | undefined, post: Post): Ve
 
 export function canRequestAfterSchedule(s: AppState, user: User | undefined, post: Post): Verdict {
   if (!activeUser(user)) return no('利用できないユーザーです')
-  if (!post.queued && post.status !== 'held') return no('予約後の投稿ではありません')
+  if (!post.queued && post.status !== 'held' && !isLiveArticle(s, post)) return no('予約後の投稿ではありません')
+  if (post.siteSync?.action === 'unpublish') return no('サイトから取り下げているところです')
   if (post.pendingChange) return no('変更・取り消しの申請が承認待ちです')
   const perm = permissionOf(s, user.id, post.accountId)
   if (!(post.authorId === user.id || perm?.edit || user.isAdmin)) return no('申請できる立場ではありません')

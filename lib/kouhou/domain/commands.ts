@@ -35,6 +35,7 @@ import {
   toggleEditOpen,
   toggleResolved,
   updateAnalyticsSetting,
+  retrySiteSync,
 } from './actions'
 import { canView, getUser } from './rules'
 import { createLiveSeed } from '../mock/live-seed'
@@ -259,6 +260,7 @@ export const COMMANDS: Record<string, (s: AppState, ...args: any[]) => Result> =
   registerUpload,
   setAssetRender,
   applyAdminPatch,
+  retrySiteSync,
 }
 
 /** 関数からコマンド名を引く（デモ専用の操作は null） */

@@ -14,6 +14,7 @@ import {
   rejectContent,
   rejectSchedule,
   requestCancel,
+  retrySiteSync,
   selectCandidate,
   type Result,
 } from '@/lib/kouhou/domain/actions'
@@ -29,6 +30,7 @@ import {
   canSelectCandidate,
   contentRequirement,
   contentRequirementLabel,
+  isLiveArticle,
   scheduleChecks,
 } from '@/lib/kouhou/domain/rules'
 import { isBefore, formatDateTime } from '@/lib/kouhou/domain/time'
@@ -288,9 +290,12 @@ function BookingCard({ post, open }: { post: Post; open: (k: DialogKind) => void
     <Panel title="予約">
       <div className="flex flex-col gap-4">
         {post.status === 'published' ? (
-          <p className="text-sm">
-            <span className="tabular">{formatDateTime(post.publishedAt)}</span> に公開済み{s.live ? '' : '（デモ）'}
-          </p>
+          <>
+            <p className="text-sm">
+              <span className="tabular">{formatDateTime(post.publishedAt)}</span> に公開済み{s.live ? '' : '（デモ）'}
+            </p>
+            {isLiveArticle(s, post) && <LiveArticleBox post={post} canRequest={after} onRequest={() => open('requestCancel')} />}
+          </>
         ) : post.status === 'cancelled' ? (
           <p className="text-sm text-muted-foreground">この投稿は取り消されました</p>
         ) : (
@@ -347,6 +352,43 @@ function BookingCard({ post, open }: { post: Post; open: (k: DialogKind) => void
   )
 }
 
+/** 公開中のホームページの記事：修正・取り下げの案内と、サイトへの反映の状態 */
+function LiveArticleBox({ post, canRequest, onRequest }: { post: Post; canRequest: { ok: boolean; reason?: string }; onRequest: () => void }) {
+  const s = useAppState()
+  const sync = post.siteSync
+  const fsif = s.accounts.find((a) => a.id === post.accountId)?.site === 'fsif'
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm">
+      {sync?.state === 'queued' && (
+        <Notice tone="info" title={sync.action === 'update' ? 'サイトの記事を修正しています' : 'サイトから取り下げています'}>
+          次の定期処理（5分ごと）で反映します{fsif ? '。FSIF のサイトは、そのあとのビルドで約10分後に変わります' : ''}。
+        </Notice>
+      )}
+      {sync?.state === 'error' && (
+        <Notice tone="danger" title={sync.action === 'update' ? 'サイトの記事の修正に失敗しました' : 'サイトからの取り下げに失敗しました'}>
+          <span className="flex flex-col gap-2">
+            <span>{sync.error}</span>
+            <Button size="sm" variant="outline" className="w-fit" onClick={() => toastResult(runAction(retrySiteSync, post.id))}>
+              もう一度反映する
+            </Button>
+          </span>
+        </Notice>
+      )}
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        公開中の記事です。「原稿」タブで直して保存し、内容の承認が済むとサイトの記事も修正されます（URL用のIDと公開日はそのまま）。サイトから消すときは取り下げを申請します（承認が必要）。
+      </p>
+      {!post.pendingChange && (
+        <div>
+          <ActionButton verdict={canRequest} variant="destructive" onClick={onRequest}>
+            <Trash2 className="size-4" aria-hidden />
+            記事の取り下げを申請
+          </ActionButton>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PendingChangeCard({ post, open }: { post: Post; open: (k: DialogKind) => void }) {
   const s = useAppState()
   const user = useCurrentUser()
@@ -364,7 +406,7 @@ function PendingChangeCard({ post, open }: { post: Post; open: (k: DialogKind) =
       title={
         <span className="flex items-center gap-1.5">
           <ShieldAlert className="size-4 text-warning" aria-hidden />
-          {pc.kind === 'cancel' ? '取り消し申請' : '予約後の変更申請'}
+          {pc.kind === 'cancel' ? (post.status === 'published' ? '記事の取り下げ申請' : '取り消し申請') : '予約後の変更申請'}
         </span>
       }
       className="border-warning/40"
@@ -435,9 +477,9 @@ export function ApprovalPanel({ post }: { post: Post }) {
       <ReasonDialog
         open={dialog === 'requestCancel'}
         onClose={() => setDialog(null)}
-        title="予約の取り消しを申請"
-        description="申請した時点で公開は保留されます。承認者が承認すると取り消しが確定します。"
-        confirmLabel="取り消しを申請"
+        title={post.status === 'published' ? '記事の取り下げを申請' : '予約の取り消しを申請'}
+        description={post.status === 'published' ? '承認者が承認すると、サイトから記事を取り下げます（記事の行を消します）。' : '申請した時点で公開は保留されます。承認者が承認すると取り消しが確定します。'}
+        confirmLabel={post.status === 'published' ? '取り下げを申請' : '取り消しを申請'}
         onConfirm={(r) => done(runAction(requestCancel, post.id, r))}
       />
       <ReasonDialog

@@ -38,15 +38,17 @@ export const SITES: Record<Site, SiteConfig> = {
   },
 }
 
+/** FSIF のシートの relatedArea・relatedTag に入れられる値（FSIF のサイトの仕様に合わせる） */
 export const FSIF_AREAS = [
   { value: 'community', label: 'コミュニティ' },
+  { value: 'working-group', label: 'ワーキンググループ' },
   { value: 'event', label: 'イベント' },
   { value: 'thinktank', label: 'シンクタンク' },
 ] as const
 
 export const FSIF_TAGS = [
   { value: 'cosmobase', label: 'Cosmo Base' },
-  { value: 'ohsumi', label: 'Ohsumi' },
+  { value: 'orbit', label: 'Orbit' },
 ] as const
 
 export function emptyArticle(site: Site, title = ''): WebArticle {

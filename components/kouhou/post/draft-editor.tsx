@@ -106,6 +106,11 @@ function EditForm({ post }: { post: Post }) {
           </span>
         </Notice>
       )}
+      {post.status === 'published' && !readOnly && (
+        <Notice tone="info" title="公開中の記事です">
+          直して保存し、「内容を完了」→ 内容の承認が済むと、サイトの記事も修正されます。URL用のIDと公開日は変えられません。
+        </Notice>
+      )}
       {post.queued && !readOnly && (
         <Notice tone="warning" title="予約済みの投稿です">
           保存すると「予約後の変更」として扱われ、再承認されるまで公開が保留されます。

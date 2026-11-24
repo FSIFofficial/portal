@@ -202,10 +202,19 @@ export interface Post {
   metrics: MetricPoint[]
   /** ホームページの記事の情報（投稿先がホームページのときだけ）。本文は body */
   article?: WebArticle | null
+  /** 公開済みのホームページの記事を、サイトに反映する予定（修正の更新・取り下げ）。次の定期処理で行う */
+  siteSync?: SiteSync | null
   /** 本番：送信先での投稿ID（XのポストID／DiscordのメッセージID）。分析の取得に使う */
   externalId?: string | null
   createdAt: JstDateTime
   updatedAt: JstDateTime
+}
+
+export interface SiteSync {
+  action: 'update' | 'unpublish'
+  state: 'queued' | 'error'
+  error?: string | null
+  at: JstDateTime
 }
 
 export interface WebLink {
@@ -225,8 +234,8 @@ export interface WebArticle {
   lead: string
   /** サムネイル画像の代替テキスト（画像は添付素材の1枚目） */
   thumbnailAlt: string
-  relatedArea: 'community' | 'event' | 'thinktank' | null
-  relatedTag: 'cosmobase' | 'ohsumi' | null
+  relatedArea: 'community' | 'working-group' | 'event' | 'thinktank' | null
+  relatedTag: 'cosmobase' | 'orbit' | null
   featured: boolean
   /** ホーム上部の「重要なお知らせ」に出す（FSIF） */
   important: boolean
