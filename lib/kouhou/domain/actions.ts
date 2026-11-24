@@ -25,7 +25,7 @@ import {
 import { compactDate, formatDateTime, isBefore, isValidDateTime, toMinutes } from './time'
 import { PLATFORM_CODE } from './labels'
 import { METRICS, STANDARD_SETTING, planCheckpoints, checkpointTime } from './analytics'
-import { validateArticle } from './web'
+import { checkBodyImages, validateArticle } from './web'
 
 export type Result = { ok: true; message?: string; id?: string; ids?: string[]; /** 本番：開いてもらうURL（Xの認可ページなど） */ url?: string } | { ok: false; message: string; conflict?: boolean }
 
@@ -124,6 +124,8 @@ function validateFields(s: AppState, f: DraftFields, units: UnitFields[]): strin
       if (err) return `${acc.name}：${err}`
       if (units.some((x) => x !== u && x.article?.slug === u.article?.slug && getAccount(s, x.accountId)?.site === acc.site)) return `${acc.name}：URL用のIDが重複しています`
       if (!u.body.trim() && !u.article?.lead.trim()) return `${acc.name}：本文を入力してください`
+      const imgErr = checkBodyImages(s, u.body, u.assetIds)
+      if (imgErr) return `${acc.name}：${imgErr}`
       continue
     }
     if (!u.body.trim() && !u.assetIds.length) return `${acc.name}：本文または素材を入力してください`
@@ -237,6 +239,8 @@ export function savePost(s: AppState, id: string, patch: EditPatch, baseVersion:
     const err = validateArticle(s, acc.site!, nextArticle, post.id)
     if (err) return fail(err)
     if (!nextBody.trim() && !nextArticle?.lead.trim()) return fail('本文を入力してください')
+    const imgErr = checkBodyImages(s, nextBody, nextAssets)
+    if (imgErr) return fail(imgErr)
   } else if (!nextBody.trim() && !nextAssets.length) return fail('本文または素材を入力してください')
   if (patch.title !== undefined && !patch.title.trim()) return fail('管理用タイトルを入力してください')
 

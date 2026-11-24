@@ -116,6 +116,13 @@ test('広報管理：ホームページのニュース記事を作り、承認�
   await page.getByLabel('記事のタイトル').fill('SBS2026に出展しました')
   await page.getByLabel('カテゴリ').selectOption('REPORT')
   await page.getByLabel('本文').fill('一段落目。\n\n## 展示の内容\nFSIFの活動を紹介しました。')
+  // 本文の途中に画像を入れる（添付してから「本文に入れる」）
+  await page.getByRole('button', { name: '素材を選ぶ' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: /観測会の様子/ }).click()
+  await page.getByRole('dialog').getByRole('button', { name: /1件を添付/ }).click()
+  await page.getByRole('button', { name: '「観測会の様子」を本文に入れる' }).click()
+  await expect(page.getByLabel('本文')).toHaveValue(/!\[観測会の様子\]\(as-photo-1\)/)
+  await expect(page.locator('figure img[alt="観測会の様子"]').last()).toBeVisible()
   // プレビューに見出しとURLが出る
   await expect(page.getByRole('heading', { name: '展示の内容' })).toBeVisible()
   await expect(page.getByText('https://www.fsif.jp/news/sbs2026-report/').last()).toBeVisible()

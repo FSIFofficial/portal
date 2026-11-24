@@ -387,4 +387,4 @@ export function isKnownFile(s: AppState, fileId: string) {
 }
 
 export { runClock, createLiveSeed }
-export { ensureSiteAccounts, siteRow, SITES } from './web'
+export { ensureSiteAccounts, siteRow, SITES, bodyImageIds } from './web'

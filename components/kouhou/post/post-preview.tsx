@@ -146,6 +146,18 @@ function WebPreview(p: PreviewProps) {
                     {para}
                   </p>
                 ))}
+                {s.image &&
+                  (() => {
+                    const img = p.s.assets.find((x) => x.id === s.image)
+                    return img ? (
+                      <figure className="flex flex-col gap-1">
+                        <AssetThumb s={p.s} asset={img} className="rounded-md" />
+                        {s.imageAlt && <figcaption className="text-[11px] text-muted-foreground">{s.imageAlt}</figcaption>}
+                      </figure>
+                    ) : (
+                      <p className="text-xs text-danger">画像が添付されていません（{s.image}）</p>
+                    )
+                  })()}
               </section>
             ))
           ) : (

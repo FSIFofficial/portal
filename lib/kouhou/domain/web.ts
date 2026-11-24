@@ -5,6 +5,8 @@
  *
  * 本文の書き方（両サイト共通）：
  *   空行で段落を分ける。「## 見出し」の行から新しいまとまり（見出し付き）になる。
+ *   「![代替テキスト](素材ID)」だけの行は画像（添付した素材）。そのまとまりの最後に入り、次の行からは新しいまとまりになる
+ *   （FSIF のシートは1つのまとまりに画像1枚の構造のため）。画像はエディタの「本文に入れる」ボタンで入れる
  *   Cosmo Base は HTML のタグもそのまま使える（改行は <br>、見出しは <h3> にする）
  */
 import type { AppState, Site, WebArticle } from './types'
@@ -93,7 +95,30 @@ export function validateArticle(s: AppState, site: Site, a: WebArticle | null | 
 export interface BodySection {
   heading?: string
   paragraphs: string[]
+  /** 画像（素材ID） */
+  image?: string
+  imageAlt?: string
 }
+
+const IMAGE_LINE = /^!\[([^\]]*)\]\(([\w-]+)\)$/
+
+/** 本文に入れた画像の素材ID（出てくる順、重複なし） */
+export function bodyImageIds(text: string): string[] {
+  return [...new Set(parseBody(text).flatMap((s) => (s.image ? [s.image] : [])))]
+}
+
+/** 本文の画像が、添付した画像の素材かを確かめる */
+export function checkBodyImages(s: AppState, text: string, assetIds: string[]): string | null {
+  for (const id of bodyImageIds(text)) {
+    const a = s.assets.find((x) => x.id === id)
+    if (!a || !assetIds.includes(id)) return `本文の画像（${id}）が添付されていません。素材に添付してから「本文に入れる」で入れてください`
+    if (a.kind === 'text' || a.kind === 'video') return `「${a.name}」は画像ではないため本文に入れられません`
+  }
+  return null
+}
+
+/** 本文に入れる1行 */
+export const imageLine = (assetId: string, alt: string) => `![${alt.replace(/[\[\]\n]/g, ' ').trim()}](${assetId})`
 
 /** 本文の文章を、見出し付きのまとまりに分ける */
 export function parseBody(text: string): BodySection[] {
@@ -106,12 +131,19 @@ export function parseBody(text: string): BodySection[] {
   }
   const flushSection = () => {
     flushPara()
-    if (cur.heading || cur.paragraphs.length) sections.push(cur)
+    if (cur.heading || cur.paragraphs.length || cur.image) sections.push(cur)
   }
   for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
     const line = raw.trimEnd()
     const h = /^##\s+(.+)$/.exec(line.trim())
-    if (h) {
+    const img = IMAGE_LINE.exec(line.trim())
+    if (img) {
+      flushPara()
+      cur.image = img[2]
+      if (img[1].trim()) cur.imageAlt = img[1].trim()
+      flushSection()
+      cur = { paragraphs: [] }
+    } else if (h) {
       flushSection()
       cur = { heading: h[1].trim(), paragraphs: [] }
     } else if (!line.trim()) {
@@ -124,23 +156,41 @@ export function parseBody(text: string): BodySection[] {
   return sections
 }
 
-/** FSIF のシートの body 列（JSON 文字列）。画像は付けない（サムネイルは別の列） */
-export function fsifBodyJson(text: string): string {
-  return JSON.stringify(parseBody(text).map((s) => (s.heading ? { heading: s.heading, paragraphs: s.paragraphs } : { paragraphs: s.paragraphs })))
+/** 素材ID → サイトでの画像のパス（GAS がリポジトリに置いた場所） */
+export type ImagePaths = Record<string, string>
+
+/** FSIF のシートの body 列（JSON 文字列） */
+export function fsifBodyJson(text: string, images: ImagePaths = {}): string {
+  return JSON.stringify(
+    parseBody(text).map((s) => ({
+      ...(s.heading ? { heading: s.heading } : {}),
+      paragraphs: s.paragraphs,
+      ...(s.image && images[s.image] ? { image: images[s.image], imageAlt: s.imageAlt ?? '' } : {}),
+    })),
+  )
 }
 
 /** Cosmo Base の既存の記事と同じ見出しの見た目 */
 const CB_H3 = "<h3 class='text-xl font-bold text-white mt-6 mb-2 border-l-4 border-[#83CBEB] pl-2'>"
 
 /** Cosmo Base の data/news.csv の content 列（HTML。改行は <br>、見出しは既存の記事と同じ <h3>） */
-export function cbContentHtml(text: string): string {
+export function cbContentHtml(text: string, images: ImagePaths = {}): string {
+  const attr = (v: string) => v.replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/</g, '&lt;')
   return parseBody(text)
-    .map((s) => [s.heading ? `${CB_H3}${s.heading}</h3>` : '', s.paragraphs.map((p) => p.replace(/\n/g, '<br>')).join('<br><br>')].filter(Boolean).join(''))
+    .map((s) =>
+      [
+        s.heading ? `${CB_H3}${s.heading}</h3>` : '',
+        s.paragraphs.map((p) => p.replace(/\n/g, '<br>')).join('<br><br>'),
+        s.image && images[s.image] ? `<img src='${attr(images[s.image])}' alt='${attr(s.imageAlt ?? '')}' class='w-full rounded-lg my-4'>` : '',
+      ]
+        .filter(Boolean)
+        .join(''),
+    )
     .join('<br><br>')
 }
 
 /** 公開したときのシート・CSV の1行（列名 → 値）。date は公開日（日本時間の YYYY-MM-DD） */
-export function siteRow(site: Site, a: WebArticle, body: string, date: string, thumbnail: string): Record<string, string> {
+export function siteRow(site: Site, a: WebArticle, body: string, date: string, thumbnail: string, images: ImagePaths = {}): Record<string, string> {
   if (site === 'fsif') {
     return {
       slug: a.slug,
@@ -155,7 +205,7 @@ export function siteRow(site: Site, a: WebArticle, body: string, date: string, t
       featured: a.featured ? 'TRUE' : 'FALSE',
       important: a.important ? 'TRUE' : 'FALSE',
       lead: a.lead.trim(),
-      body: fsifBodyJson(body),
+      body: fsifBodyJson(body, images),
       externalUrlLabel: a.externalUrl?.label ?? '',
       externalUrlHref: a.externalUrl?.href ?? '',
       relatedLinkLabel: a.relatedLink?.label ?? '',
@@ -170,7 +220,7 @@ export function siteRow(site: Site, a: WebArticle, body: string, date: string, t
     date,
     category: a.category.trim(),
     excerpt: a.excerpt.trim().replace(/\n/g, '<br>'),
-    content: cbContentHtml(body),
+    content: cbContentHtml(body, images),
     image: thumbnail,
     featured: a.featured ? 'true' : 'false',
   }
