@@ -19,7 +19,7 @@ export function ManualPostScreen() {
   const user = useCurrentUser()
   const { brand } = useUi()
   const router = useRouter()
-  const accounts = useMemo(() => s.accounts.filter((a) => canCreate(s, user, a.id).ok && (brand === 'all' || a.brandId === brand)), [s, user, brand])
+  const accounts = useMemo(() => s.accounts.filter((a) => a.platform !== 'web' && canCreate(s, user, a.id).ok && (brand === 'all' || a.brandId === brand)), [s, user, brand])
 
   const [input, setInput] = useState<ManualInput>(() => ({
     title: '',

@@ -266,7 +266,7 @@ export function AccountsSection() {
         </Field>
         <Field label="媒体" htmlFor="na-pf">
           <Select id="na-pf" value={platform} onChange={(e) => setPlatform(e.target.value as Platform)}>
-            {(Object.keys(PLATFORM_LABEL) as Platform[]).map((p) => (
+            {(Object.keys(PLATFORM_LABEL) as Platform[]).filter((p) => p !== 'web').map((p) => (
               <option key={p} value={p}>
                 {PLATFORM_LABEL[p]}
               </option>

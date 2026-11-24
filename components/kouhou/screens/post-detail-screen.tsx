@@ -86,7 +86,7 @@ export function PostDetailScreen({ id }: { id: string }) {
               システム外で公開した投稿の記録です。編集・予約はできません。
             </Notice>
           </Panel>
-          {account && <PostPreview s={s} account={account} channelId={post.channelId} body={post.body} assetIds={post.assetIds} />}
+          {account && <PostPreview s={s} account={account} channelId={post.channelId} body={post.body} assetIds={post.assetIds} article={post.article} />}
         </div>
       ) : (
         <>

@@ -21,10 +21,12 @@ import {
   getUser,
   isStopped,
   approversFor,
+  isLiveArticle,
 } from './rules'
 import { compactDate, formatDateTime, isBefore, isValidDateTime, toMinutes } from './time'
 import { PLATFORM_CODE } from './labels'
 import { METRICS, STANDARD_SETTING, planCheckpoints, checkpointTime } from './analytics'
+import { checkBodyImages, validateArticle } from './web'
 
 export type Result = { ok: true; message?: string; id?: string; ids?: string[]; /** 本番：開いてもらうURL（Xの認可ページなど） */ url?: string } | { ok: false; message: string; conflict?: boolean }
 
@@ -84,6 +86,12 @@ function touch(s: AppState, post: Post) {
   post.status = deriveStatus(post)
 }
 
+/** 公開中のホームページの記事を、次の定期処理でサイトに反映する予定にする */
+function queueSiteSync(s: AppState, post: Post, action: 'update' | 'unpublish') {
+  post.siteSync = { action, state: 'queued', at: s.now }
+  log(s, post, 'scheduled', action === 'update' ? 'サイトの記事を修正する予定（数分で反映）' : 'サイトから取り下げる予定（数分で反映）')
+}
+
 export function makePostId(s: AppState, accountId: string, initialDate: JstDateTime | null) {
   const acc = getAccount(s, accountId)!
   const brand = s.brands.find((b) => b.id === acc.brandId)!
@@ -108,6 +116,8 @@ export interface UnitFields {
   channelId: string | null
   body: string
   assetIds: string[]
+  /** 投稿先がホームページのときの記事の情報 */
+  article?: import('./types').WebArticle | null
 }
 
 function validateFields(s: AppState, f: DraftFields, units: UnitFields[]): string | null {
@@ -116,6 +126,15 @@ function validateFields(s: AppState, f: DraftFields, units: UnitFields[]): strin
   for (const u of units) {
     const acc = getAccount(s, u.accountId)
     if (!acc) return '投稿先が見つかりません'
+    if (acc.platform === 'web') {
+      const err = validateArticle(s, acc.site!, u.article)
+      if (err) return `${acc.name}：${err}`
+      if (units.some((x) => x !== u && x.article?.slug === u.article?.slug && getAccount(s, x.accountId)?.site === acc.site)) return `${acc.name}：URL用のIDが重複しています`
+      if (!u.body.trim() && !u.article?.lead.trim()) return `${acc.name}：本文を入力してください`
+      const imgErr = checkBodyImages(s, u.body, u.assetIds)
+      if (imgErr) return `${acc.name}：${imgErr}`
+      continue
+    }
     if (!u.body.trim() && !u.assetIds.length) return `${acc.name}：本文または素材を入力してください`
     if (acc.platform === 'discord' && !u.channelId) return `${acc.name}：チャンネルを選択してください`
   }
@@ -147,6 +166,7 @@ export function createPosts(s: AppState, f: DraftFields, units: UnitFields[]): R
       importantManual: f.importantManual,
       body: u.body,
       assetIds: u.assetIds,
+      ...(acc.platform === 'web' ? { article: structuredClone(u.article!) } : {}),
       planId: f.planId,
       authorId: user!.id,
       assigneeId: f.assigneeId || user!.id,
@@ -187,6 +207,7 @@ export interface EditPatch extends Partial<DraftFields> {
   body?: string
   assetIds?: string[]
   channelId?: string | null
+  article?: import('./types').WebArticle | null
 }
 
 /** 他ユーザーの保存を再現（デモの競合再現用） */
@@ -214,12 +235,24 @@ export function savePost(s: AppState, id: string, patch: EditPatch, baseVersion:
   }
   if (post.version !== baseVersion) return fail('他のユーザーが更新しました。最新版を確認してください', true)
 
+  if (isLiveArticle(s, post)) {
+    if (patch.scheduledAt !== undefined && patch.scheduledAt !== post.scheduledAt) return fail('公開済みの記事は日時を変えられません')
+    if (patch.article && post.article && patch.article.slug !== post.article.slug) return fail('公開済みの記事のURL用IDは変えられません（URLが変わるため）')
+  }
   const nextSchedule = patch.scheduledAt !== undefined ? patch.scheduledAt : post.scheduledAt
   if (nextSchedule && !isValidDateTime(nextSchedule)) return fail('予定日時の形式が正しくありません')
   if (nextSchedule && nextSchedule !== post.scheduledAt && !isBefore(s.now, nextSchedule)) return fail('過去の日時は設定できません')
   const nextBody = patch.body ?? post.body
   const nextAssets = patch.assetIds ?? post.assetIds
-  if (!nextBody.trim() && !nextAssets.length) return fail('本文または素材を入力してください')
+  const acc = getAccount(s, post.accountId)
+  const nextArticle = patch.article !== undefined ? patch.article : post.article
+  if (acc?.platform === 'web') {
+    const err = validateArticle(s, acc.site!, nextArticle, post.id)
+    if (err) return fail(err)
+    if (!nextBody.trim() && !nextArticle?.lead.trim()) return fail('本文を入力してください')
+    const imgErr = checkBodyImages(s, nextBody, nextAssets)
+    if (imgErr) return fail(imgErr)
+  } else if (!nextBody.trim() && !nextAssets.length) return fail('本文または素材を入力してください')
   if (patch.title !== undefined && !patch.title.trim()) return fail('管理用タイトルを入力してください')
 
   const contentChanged =
@@ -227,7 +260,8 @@ export function savePost(s: AppState, id: string, patch: EditPatch, baseVersion:
     JSON.stringify(nextAssets) !== JSON.stringify(post.assetIds) ||
     (patch.typeId !== undefined && patch.typeId !== post.typeId) ||
     (patch.importantManual !== undefined && patch.importantManual !== post.importantManual) ||
-    (patch.channelId !== undefined && patch.channelId !== post.channelId)
+    (patch.channelId !== undefined && patch.channelId !== post.channelId) ||
+    (patch.article !== undefined && JSON.stringify(patch.article) !== JSON.stringify(post.article ?? null))
   const scheduleChanged = nextSchedule !== post.scheduledAt
   const wasQueued = post.queued
 
@@ -247,6 +281,10 @@ export function savePost(s: AppState, id: string, patch: EditPatch, baseVersion:
     if (patch.typeId !== undefined) post.typeId = patch.typeId
     if (patch.importantManual !== undefined) post.importantManual = patch.importantManual
     if (patch.channelId !== undefined) post.channelId = patch.channelId
+    if (patch.article !== undefined && acc?.platform === 'web') {
+      if (JSON.stringify(patch.article) !== JSON.stringify(post.article ?? null)) log(s, post, 'body_changed', '記事の情報を変更')
+      post.article = structuredClone(patch.article)
+    }
     if (!post.contentEditorsSinceApproval.includes(user.id)) post.contentEditorsSinceApproval.push(user.id)
     if (wasQueued || post.hold?.kind === 'pending_change') {
       post.content = { state: 'pending', requestedAt: s.now }
@@ -314,6 +352,11 @@ export function completeContent(s: AppState, id: string): Result {
     post.content = { state: 'auto_approved', decidedBy: user.id, decidedAt: s.now, decidedVersion: post.version }
     post.contentEditorsSinceApproval = []
     log(s, post, 'content_auto_approved', `内容 v${post.version} を自動承認（種類・レベルによる）`)
+    if (isLiveArticle(s, post)) {
+      queueSiteSync(s, post, 'update')
+      touch(s, post)
+      return ok(demoNote(s, '内容を完了し、自動承認されました。サイトの記事を修正します（数分で反映）', '（デモ）'))
+    }
     touch(s, post)
     return ok('内容を完了し、自動承認されました')
   }
@@ -340,6 +383,11 @@ export function approveContent(s: AppState, id: string): Result {
   post.content = { state: 'approved', decidedBy: user!.id, decidedAt: s.now, decidedVersion: post.version }
   post.contentEditorsSinceApproval = []
   log(s, post, 'content_approved', `内容 v${post.version} を承認`)
+  if (isLiveArticle(s, post)) {
+    queueSiteSync(s, post, 'update')
+    touch(s, post)
+    return ok(demoNote(s, '内容を承認しました。サイトの記事を修正します（数分で反映）', '（デモ）'))
+  }
   resolvePendingEditIfDone(s, post)
   touch(s, post)
   return ok('内容を承認しました（日時承認は別途必要です）')
@@ -449,6 +497,13 @@ export function requestCancel(s: AppState, id: string, reason: string): Result {
   const v = canRequestAfterSchedule(s, user, post)
   if (!v.ok) return fail(v.reason!)
   if (!reason.trim()) return fail('取り消し理由を入力してください')
+  if (isLiveArticle(s, post)) {
+    post.pendingChange = { kind: 'cancel', requestedBy: user!.id, requestedAt: s.now, reason: reason.trim(), fromVersion: post.version }
+    log(s, post, 'cancel_requested', `記事の取り下げを申請：${reason.trim()}`)
+    notify(s, `【取り下げ申請】${post.title}`, post.id)
+    touch(s, post)
+    return ok('取り下げを申請しました。承認されるとサイトから取り下げます')
+  }
   post.queued = false
   post.delivery = 'none'
   post.pendingChange = { kind: 'cancel', requestedBy: user!.id, requestedAt: s.now, reason: reason.trim(), fromVersion: post.version }
@@ -466,6 +521,12 @@ export function approveCancel(s: AppState, id: string): Result {
   const v = canApprovePendingChange(s, user, post)
   if (!v.ok) return fail(v.reason!)
   if (post.pendingChange?.kind !== 'cancel') return fail('取り消し申請ではありません')
+  if (isLiveArticle(s, post)) {
+    post.pendingChange = null
+    queueSiteSync(s, post, 'unpublish')
+    touch(s, post)
+    return ok(demoNote(s, '取り下げを承認しました。サイトから取り下げます（数分で反映）', '（デモ）'))
+  }
   post.pendingChange = null
   post.hold = null
   post.queued = false
@@ -482,6 +543,12 @@ export function rejectCancel(s: AppState, id: string, reason: string): Result {
   const v = canApprovePendingChange(s, user, post)
   if (!v.ok) return fail(v.reason!)
   if (!reason.trim()) return fail('理由を入力してください')
+  if (isLiveArticle(s, post)) {
+    post.pendingChange = null
+    log(s, post, 'change_rejected', `取り下げ申請を却下：${reason.trim()}`)
+    touch(s, post)
+    return ok('取り下げ申請を却下しました。記事は公開されたままです')
+  }
   post.pendingChange = null
   post.hold = { kind: 'reschedule', reason: '取り消し申請は却下されました。予約を確定し直してください', at: s.now }
   log(s, post, 'change_rejected', `取り消し申請を却下：${reason.trim()}`)
@@ -510,6 +577,7 @@ export function recordManual(s: AppState, input: ManualInput): Result {
   if (isBefore(s.now, input.publishedAt)) return fail('実公開日時は基準日時以前にしてください')
   if (!/^https?:\/\/\S+$/.test(input.publicUrl)) return fail('公開URLを http(s):// から入力してください')
   const acc = getAccount(s, input.accountId)!
+  if (acc.platform === 'web') return fail('ホームページの記事は手動記録できません。新規投稿から作成してください')
   if (acc.platform === 'discord' && !input.channelId) return fail('チャンネルを選択してください')
   const post: Post = {
     id: makePostId(s, input.accountId, input.publishedAt),
@@ -655,11 +723,14 @@ export interface ClockIO {
   deliver(s: AppState, post: Post): DeliverResult
   /** 取得時刻を過ぎた計測点がある投稿の指標をまとめて取る */
   fetchMetrics(s: AppState, posts: Post[]): MetricsResult
+  /** 公開中のホームページの記事の修正・取り下げをサイトに反映する */
+  syncSite?(s: AppState, post: Post): { ok: true } | { ok: false; error: string }
   /** 1回の処理で送信する上限（GAS の実行時間の制限に収めるため） */
   maxDeliveries?: number
 }
 
 const mockIO: ClockIO = {
+  syncSite: () => ({ ok: true }),
   deliver(s, p) {
     if (s.demo.failNextDelivery) {
       s.demo.failNextDelivery = false
@@ -690,6 +761,34 @@ export function runClock(s: AppState, next: JstDateTime, io: ClockIO): Result & 
   let held = 0
   let attempts = 0
   const limit = io.maxDeliveries ?? Infinity
+  // 公開中のホームページの記事の修正・取り下げ
+  for (const p of s.posts) {
+    if (p.siteSync?.state !== 'queued' || !io.syncSite || attempts >= limit) continue
+    attempts++
+    const action = p.siteSync.action
+    let r: { ok: true } | { ok: false; error: string }
+    try {
+      r = io.syncSite(s, p)
+    } catch (e) {
+      r = { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+    if (!r.ok) {
+      p.siteSync = { ...p.siteSync, state: 'error', error: r.error }
+      log(s, p, 'failed', `${action === 'update' ? 'サイトの記事の修正' : 'サイトからの取り下げ'}に失敗：${r.error}`, { actor: 'system' })
+      notify(s, `【反映の失敗】${p.title}：${r.error}`, p.id)
+      continue
+    }
+    p.siteSync = null
+    if (action === 'unpublish') {
+      p.status = 'cancelled'
+      log(s, p, 'cancelled', 'サイトから記事を取り下げました', { actor: 'system' })
+      notify(s, `【取り下げ】${p.title}`, p.id)
+    } else {
+      log(s, p, 'published', `サイトの記事を修正しました（v${p.version}）`, { actor: 'system' })
+      notify(s, `【記事を修正】${p.title}`, p.id)
+    }
+    p.updatedAt = next
+  }
   for (const p of [...s.posts].sort((a, b) => (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? ''))) {
     if (!p.scheduledAt || isBefore(next, p.scheduledAt)) continue
     if (p.queued) {
@@ -714,7 +813,7 @@ export function runClock(s: AppState, next: JstDateTime, io: ClockIO): Result & 
       p.delivery = s.live ? 'sent' : 'sent_mock'
       p.publicUrl = r.url
       p.externalId = r.externalId
-      p.metrics = makeMetrics(s, p, next)
+      p.metrics = getAccount(s, p.accountId)?.platform === 'web' ? [] : makeMetrics(s, p, next)
       p.updatedAt = next
       const author = getUser(s, p.authorId)
       if (author) {
@@ -766,6 +865,19 @@ export function setNow(s: AppState, next: JstDateTime): Result {
   return ok(`基準日時を ${formatDateTime(next)} に進めました（公開 ${r.published}件・保留 ${r.held}件）`)
 }
 
+/** サイトへの反映（修正・取り下げ）に失敗したものを、もう一度行う */
+export function retrySiteSync(s: AppState, id: string): Result {
+  const user = me(s)
+  const post = findPost(s, id)
+  if (!post || !user) return fail('投稿が見つかりません')
+  if (post.siteSync?.state !== 'error') return fail('やり直す反映はありません')
+  if (!user.isAdmin && !s.permissions.find((p) => p.userId === user.id && p.accountId === post.accountId)?.edit) return fail('このアカウントの編集権限がありません')
+  post.siteSync = { ...post.siteSync, state: 'queued', error: null, at: s.now }
+  log(s, post, 'scheduled', 'サイトへの反映をやり直す予定')
+  touch(s, post)
+  return ok('もう一度反映します（数分で反映）')
+}
+
 export function failEarliestQueued(s: AppState): Result {
   const target = s.posts.filter((p) => p.queued).sort((a, b) => (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? ''))[0]
   if (!target) return fail('予約済みの投稿がありません')
@@ -799,6 +911,7 @@ export function generateFromRecurrence(s: AppState, recId: string, dates: JstDat
   const user = me(s)
   const rec = s.recurrences.find((r) => r.id === recId)
   if (!rec) return fail('設定が見つかりません')
+  if (rec.accountIds.some((a) => getAccount(s, a)?.platform === 'web')) return fail('ホームページは繰り返し予約に使えません。投稿先から外してください')
   for (const a of rec.accountIds) {
     const v = canCreate(s, user, a)
     if (!v.ok) return fail(v.reason!)

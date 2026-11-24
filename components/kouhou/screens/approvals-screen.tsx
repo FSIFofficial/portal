@@ -171,7 +171,7 @@ function RequestDetail({ s, post, kind }: { s: AppState; post: Post; kind: Kind 
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Panel title="投稿先プレビュー（参考）">
-          {acc && <PostPreview s={s} account={acc} channelId={post.channelId} body={post.body} assetIds={post.assetIds} />}
+          {acc && <PostPreview s={s} account={acc} channelId={post.channelId} body={post.body} assetIds={post.assetIds} article={post.article} />}
         </Panel>
         <ApprovalPanel post={post} />
       </div>

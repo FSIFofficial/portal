@@ -35,6 +35,7 @@ import {
   toggleEditOpen,
   toggleResolved,
   updateAnalyticsSetting,
+  retrySiteSync,
 } from './actions'
 import { canView, getUser } from './rules'
 import { createLiveSeed } from '../mock/live-seed'
@@ -164,7 +165,7 @@ export function applyAdminPatch(s: AppState, patch: AdminPatch): Result {
   if (s.settings.usersManagedBy === 'access' && (patch.upsert.users?.length || patch.remove.users?.length)) {
     return { ok: false, message: '利用者はアクセス権限管理（/access/）で管理しています。追加・レベル・管理者の変更はそちらで行ってください' }
   }
-  if (patch.settings) s.settings = { ...patch.settings, usersManagedBy: s.settings.usersManagedBy ?? null }
+  if (patch.settings) s.settings = { ...patch.settings, usersManagedBy: s.settings.usersManagedBy ?? null, sitesAdded: s.settings.sitesAdded }
   // 自分の管理者権限は外せない（誰も管理できなくなるのを防ぐ）
   const self = s.users.find((u) => u.id === user.id)
   if (!self?.isAdmin || self.status !== 'active') return { ok: false, message: '自分自身の管理者権限・利用状態は変更できません' }
@@ -259,6 +260,7 @@ export const COMMANDS: Record<string, (s: AppState, ...args: any[]) => Result> =
   registerUpload,
   setAssetRender,
   applyAdminPatch,
+  retrySiteSync,
 }
 
 /** 関数からコマンド名を引く（デモ専用の操作は null） */
@@ -387,3 +389,4 @@ export function isKnownFile(s: AppState, fileId: string) {
 }
 
 export { runClock, createLiveSeed }
+export { ensureSiteAccounts, siteRow, SITES, bodyImageIds } from './web'

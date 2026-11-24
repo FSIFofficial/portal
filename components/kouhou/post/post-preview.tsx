@@ -1,7 +1,8 @@
 'use client'
 
 import { Hash, Heart, MessageCircle, Repeat2, Bookmark } from 'lucide-react'
-import type { Account, AppState } from '@/lib/kouhou/domain/types'
+import type { Account, AppState, WebArticle } from '@/lib/kouhou/domain/types'
+import { SITES, parseBody } from '@/lib/kouhou/domain/web'
 import { PLATFORM_LABEL } from '@/lib/kouhou/domain/labels'
 import { AssetThumb } from '@/components/kouhou/domain/asset-thumb'
 import { cn } from '@/lib/utils'
@@ -12,6 +13,7 @@ interface PreviewProps {
   channelId: string | null
   body: string
   assetIds: string[]
+  article?: WebArticle | null
 }
 
 function useParts({ s, account, assetIds }: PreviewProps) {
@@ -115,8 +117,61 @@ function DiscordPreview(p: PreviewProps) {
   )
 }
 
+function WebPreview(p: PreviewProps) {
+  const { assets } = useParts(p)
+  const a = p.article
+  const site = p.account.site ? SITES[p.account.site] : null
+  const thumb = assets.find((x) => x.kind === 'image' || x.kind === 'logo' || x.kind === 'background')
+  const sections = parseBody(p.body)
+  return (
+    <article className="flex flex-col">
+      {thumb ? <AssetThumb s={p.s} asset={thumb} className="aspect-video" /> : <div className="flex aspect-video items-center justify-center bg-muted text-xs text-muted-foreground">サムネイルなし</div>}
+      <div className="flex flex-col gap-2 p-3">
+        <p className="flex flex-wrap items-center gap-2 text-xs">
+          {a?.category && <span className="rounded bg-primary px-1.5 py-0.5 font-bold text-primary-foreground">{a.category}</span>}
+          <span className="text-muted-foreground">公開日（公開した日）</span>
+          {a?.featured && <span className="text-muted-foreground">・注目</span>}
+          {a?.important && <span className="text-muted-foreground">・重要なお知らせ</span>}
+        </p>
+        <h3 className="text-base font-bold leading-snug">{a?.title || '（タイトル未入力）'}</h3>
+        {a?.excerpt && <p className="text-xs leading-relaxed text-muted-foreground">{a.excerpt}</p>}
+        <div className="flex flex-col gap-2 border-t pt-2 text-sm leading-relaxed">
+          {a?.lead && <p className="font-medium">{a.lead}</p>}
+          {sections.length ? (
+            sections.map((s, i) => (
+              <section key={i} className="flex flex-col gap-1.5">
+                {s.heading && <h4 className="font-bold">{s.heading}</h4>}
+                {s.paragraphs.map((para, j) => (
+                  <p key={j} className="break-words whitespace-pre-wrap">
+                    {para}
+                  </p>
+                ))}
+                {s.image &&
+                  (() => {
+                    const img = p.s.assets.find((x) => x.id === s.image)
+                    return img ? (
+                      <figure className="flex flex-col gap-1">
+                        <AssetThumb s={p.s} asset={img} className="rounded-md" />
+                        {s.imageAlt && <figcaption className="text-[11px] text-muted-foreground">{s.imageAlt}</figcaption>}
+                      </figure>
+                    ) : (
+                      <p className="text-xs text-danger">画像が添付されていません（{s.image}）</p>
+                    )
+                  })()}
+              </section>
+            ))
+          ) : (
+            <p className="text-muted-foreground">（本文なし）</p>
+          )}
+        </div>
+        {site && a?.slug && <p className="break-all font-mono text-[11px] text-muted-foreground">{site.articleUrl(a.slug)}</p>}
+      </div>
+    </article>
+  )
+}
+
 export function PostPreview(p: PreviewProps) {
-  const Comp = p.account.platform === 'x' ? XPreview : p.account.platform === 'instagram' ? InstagramPreview : DiscordPreview
+  const Comp = p.account.platform === 'x' ? XPreview : p.account.platform === 'instagram' ? InstagramPreview : p.account.platform === 'web' ? WebPreview : DiscordPreview
   const hasVideo = p.assetIds.some((id) => p.s.assets.find((a) => a.id === id)?.kind === 'video')
   return (
     <figure className="flex flex-col gap-2">
