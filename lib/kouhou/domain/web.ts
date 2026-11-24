@@ -176,14 +176,16 @@ export function siteRow(site: Site, a: WebArticle, body: string, date: string, t
   }
 }
 
-/** ホームページのアカウント（FSIF・Cosmo Base の2つ）。無ければ足す（本番の既存データにも後から足せるように） */
+/** ホームページのアカウント（FSIF・Cosmo Base の2つ）。無ければ一度だけ足す（本番の既存データにも後から足せるように。消したら足し直さない） */
 export const SITE_ACCOUNTS: { id: string; brandId: string; site: Site; name: string; code: string }[] = [
   { id: 'acc-fsif-web', brandId: 'b-fsif', site: 'fsif', name: 'FSIF ホームページ', code: 'fsif_web' },
   { id: 'acc-cb-web', brandId: 'b-cb', site: 'cb', name: 'Cosmo Base ホームページ', code: 'cb_web' },
 ]
 
 export function ensureSiteAccounts(s: AppState): boolean {
-  let changed = false
+  if (s.settings.sitesAdded) return false
+  s.settings.sitesAdded = true
+  let changed = true
   for (const def of SITE_ACCOUNTS) {
     if (s.accounts.some((a) => a.site === def.site)) continue
     if (!s.brands.some((b) => b.id === def.brandId)) continue

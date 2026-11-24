@@ -385,6 +385,8 @@ export interface Settings {
   promotionThreshold: number
   /** 本番：'access' のとき、利用者（誰が使えるか・レベル・管理者）は FSIF Access Manager（/access/）で管理する */
   usersManagedBy?: 'access' | null
+  /** ホームページのアカウントを一度足したら true（管理者が消したアカウントを足し直さない） */
+  sitesAdded?: boolean
 }
 
 export interface DemoFlags {
