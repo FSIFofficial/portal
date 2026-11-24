@@ -25,6 +25,7 @@ import {
 import { compactDate, formatDateTime, isBefore, isValidDateTime, toMinutes } from './time'
 import { PLATFORM_CODE } from './labels'
 import { METRICS, STANDARD_SETTING, planCheckpoints, checkpointTime } from './analytics'
+import { validateArticle } from './web'
 
 export type Result = { ok: true; message?: string; id?: string; ids?: string[]; /** 本番：開いてもらうURL（Xの認可ページなど） */ url?: string } | { ok: false; message: string; conflict?: boolean }
 
@@ -108,6 +109,8 @@ export interface UnitFields {
   channelId: string | null
   body: string
   assetIds: string[]
+  /** 投稿先がホームページのときの記事の情報 */
+  article?: import('./types').WebArticle | null
 }
 
 function validateFields(s: AppState, f: DraftFields, units: UnitFields[]): string | null {
@@ -116,6 +119,13 @@ function validateFields(s: AppState, f: DraftFields, units: UnitFields[]): strin
   for (const u of units) {
     const acc = getAccount(s, u.accountId)
     if (!acc) return '投稿先が見つかりません'
+    if (acc.platform === 'web') {
+      const err = validateArticle(s, acc.site!, u.article)
+      if (err) return `${acc.name}：${err}`
+      if (units.some((x) => x !== u && x.article?.slug === u.article?.slug && getAccount(s, x.accountId)?.site === acc.site)) return `${acc.name}：URL用のIDが重複しています`
+      if (!u.body.trim() && !u.article?.lead.trim()) return `${acc.name}：本文を入力してください`
+      continue
+    }
     if (!u.body.trim() && !u.assetIds.length) return `${acc.name}：本文または素材を入力してください`
     if (acc.platform === 'discord' && !u.channelId) return `${acc.name}：チャンネルを選択してください`
   }
@@ -147,6 +157,7 @@ export function createPosts(s: AppState, f: DraftFields, units: UnitFields[]): R
       importantManual: f.importantManual,
       body: u.body,
       assetIds: u.assetIds,
+      ...(acc.platform === 'web' ? { article: structuredClone(u.article!) } : {}),
       planId: f.planId,
       authorId: user!.id,
       assigneeId: f.assigneeId || user!.id,
@@ -187,6 +198,7 @@ export interface EditPatch extends Partial<DraftFields> {
   body?: string
   assetIds?: string[]
   channelId?: string | null
+  article?: import('./types').WebArticle | null
 }
 
 /** 他ユーザーの保存を再現（デモの競合再現用） */
@@ -219,7 +231,13 @@ export function savePost(s: AppState, id: string, patch: EditPatch, baseVersion:
   if (nextSchedule && nextSchedule !== post.scheduledAt && !isBefore(s.now, nextSchedule)) return fail('過去の日時は設定できません')
   const nextBody = patch.body ?? post.body
   const nextAssets = patch.assetIds ?? post.assetIds
-  if (!nextBody.trim() && !nextAssets.length) return fail('本文または素材を入力してください')
+  const acc = getAccount(s, post.accountId)
+  const nextArticle = patch.article !== undefined ? patch.article : post.article
+  if (acc?.platform === 'web') {
+    const err = validateArticle(s, acc.site!, nextArticle, post.id)
+    if (err) return fail(err)
+    if (!nextBody.trim() && !nextArticle?.lead.trim()) return fail('本文を入力してください')
+  } else if (!nextBody.trim() && !nextAssets.length) return fail('本文または素材を入力してください')
   if (patch.title !== undefined && !patch.title.trim()) return fail('管理用タイトルを入力してください')
 
   const contentChanged =
@@ -227,7 +245,8 @@ export function savePost(s: AppState, id: string, patch: EditPatch, baseVersion:
     JSON.stringify(nextAssets) !== JSON.stringify(post.assetIds) ||
     (patch.typeId !== undefined && patch.typeId !== post.typeId) ||
     (patch.importantManual !== undefined && patch.importantManual !== post.importantManual) ||
-    (patch.channelId !== undefined && patch.channelId !== post.channelId)
+    (patch.channelId !== undefined && patch.channelId !== post.channelId) ||
+    (patch.article !== undefined && JSON.stringify(patch.article) !== JSON.stringify(post.article ?? null))
   const scheduleChanged = nextSchedule !== post.scheduledAt
   const wasQueued = post.queued
 
@@ -247,6 +266,10 @@ export function savePost(s: AppState, id: string, patch: EditPatch, baseVersion:
     if (patch.typeId !== undefined) post.typeId = patch.typeId
     if (patch.importantManual !== undefined) post.importantManual = patch.importantManual
     if (patch.channelId !== undefined) post.channelId = patch.channelId
+    if (patch.article !== undefined && acc?.platform === 'web') {
+      if (JSON.stringify(patch.article) !== JSON.stringify(post.article ?? null)) log(s, post, 'body_changed', '記事の情報を変更')
+      post.article = structuredClone(patch.article)
+    }
     if (!post.contentEditorsSinceApproval.includes(user.id)) post.contentEditorsSinceApproval.push(user.id)
     if (wasQueued || post.hold?.kind === 'pending_change') {
       post.content = { state: 'pending', requestedAt: s.now }
@@ -510,6 +533,7 @@ export function recordManual(s: AppState, input: ManualInput): Result {
   if (isBefore(s.now, input.publishedAt)) return fail('実公開日時は基準日時以前にしてください')
   if (!/^https?:\/\/\S+$/.test(input.publicUrl)) return fail('公開URLを http(s):// から入力してください')
   const acc = getAccount(s, input.accountId)!
+  if (acc.platform === 'web') return fail('ホームページの記事は手動記録できません。新規投稿から作成してください')
   if (acc.platform === 'discord' && !input.channelId) return fail('チャンネルを選択してください')
   const post: Post = {
     id: makePostId(s, input.accountId, input.publishedAt),
@@ -714,7 +738,7 @@ export function runClock(s: AppState, next: JstDateTime, io: ClockIO): Result & 
       p.delivery = s.live ? 'sent' : 'sent_mock'
       p.publicUrl = r.url
       p.externalId = r.externalId
-      p.metrics = makeMetrics(s, p, next)
+      p.metrics = getAccount(s, p.accountId)?.platform === 'web' ? [] : makeMetrics(s, p, next)
       p.updatedAt = next
       const author = getUser(s, p.authorId)
       if (author) {
@@ -799,6 +823,7 @@ export function generateFromRecurrence(s: AppState, recId: string, dates: JstDat
   const user = me(s)
   const rec = s.recurrences.find((r) => r.id === recId)
   if (!rec) return fail('設定が見つかりません')
+  if (rec.accountIds.some((a) => getAccount(s, a)?.platform === 'web')) return fail('ホームページは繰り返し予約に使えません。投稿先から外してください')
   for (const a of rec.accountIds) {
     const v = canCreate(s, user, a)
     if (!v.ok) return fail(v.reason!)

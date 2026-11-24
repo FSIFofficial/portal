@@ -4,6 +4,7 @@
  * SNSアカウントは X・Discord を FSIF と Cosmo Base の2つずつ用意し（未接続。管理者設定で接続する）、投稿・企画などは空から始める。管理者は GAS のスクリプトプロパティ KOUHOU_ADMIN_EMAILS の人。
  */
 import type { Account, AppState, JstDateTime, User } from '../domain/types'
+import { ensureSiteAccounts } from '../domain/web'
 import { SEED_ACCOUNTS, SEED_ASSETS, SEED_BRANDS, SEED_POST_TYPES, SEED_SERVERS } from './seed'
 
 export function createLiveSeed(admins: { email: string; name: string }[], now: JstDateTime): AppState {
@@ -22,7 +23,7 @@ export function createLiveSeed(admins: { email: string; name: string }[], now: J
     connection: 'disconnected' as const,
     defaultApproverId: null,
   }))
-  return {
+  const state: AppState = {
     now,
     currentUserId: null,
     brands: structuredClone(SEED_BRANDS),
@@ -53,4 +54,7 @@ export function createLiveSeed(admins: { email: string; name: string }[], now: J
     seq: 100,
     live: true,
   }
+  // FSIF・Cosmo Base のホームページ（ニュース）
+  ensureSiteAccounts(state)
+  return state
 }

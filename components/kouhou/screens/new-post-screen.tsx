@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Copy, Save } from 'lucide-react'
 import type { DraftFields, UnitFields } from '@/lib/kouhou/domain/actions'
+import { emptyArticle } from '@/lib/kouhou/domain/web'
 import { createPosts } from '@/lib/kouhou/domain/actions'
 import { canCreate } from '@/lib/kouhou/domain/rules'
 import { isValidDateTime } from '@/lib/kouhou/domain/time'
@@ -49,7 +50,9 @@ export function NewPostScreen({ initialAt, initialPlanId }: { initialAt?: string
       return
     }
     const base = units.find((u) => u.accountId === active) ?? units[0]
-    setUnits([...units, { accountId: id, channelId: null, body: base?.body ?? '', assetIds: base ? [...base.assetIds] : [] }])
+    const acc = s.accounts.find((a) => a.id === id)
+    const article = acc?.platform === 'web' && acc.site ? emptyArticle(acc.site, fields.title) : undefined
+    setUnits([...units, { accountId: id, channelId: null, body: base?.body ?? '', assetIds: base ? [...base.assetIds] : [], ...(article ? { article } : {}) }])
     if (!units.length) setActive(id)
   }
 

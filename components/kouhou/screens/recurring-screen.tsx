@@ -36,7 +36,7 @@ export function RecurringScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(recs[0]?.id ?? null)
   const [creating, setCreating] = useState(false)
   const selected = s.recurrences.find((r) => r.id === selectedId)
-  const creatableAccounts = s.accounts.filter((a) => canCreate(s, user, a.id).ok)
+  const creatableAccounts = s.accounts.filter((a) => a.platform !== 'web' && canCreate(s, user, a.id).ok)
 
   const blank: RecurrenceInput = {
     name: '',
@@ -141,7 +141,7 @@ function RecurrenceEditor({ s, initial, existing, onSaved, onCancel }: { s: AppS
   const input: RecurrenceInput = { ...f, endDate: endMode === 'date' ? f.endDate : null, count: endMode === 'count' ? f.count : null }
   const dates = useMemo(() => occurrences(input), [input.weekdays, input.time, input.startDate, input.endDate, input.count]) // eslint-disable-line react-hooks/exhaustive-deps
   const future = dates.filter((d) => isBefore(s.now, d))
-  const accounts = s.accounts.filter((a) => canCreate(s, user, a.id).ok || f.accountIds.includes(a.id))
+  const accounts = s.accounts.filter((a) => (a.platform !== 'web' && canCreate(s, user, a.id).ok) || f.accountIds.includes(a.id))
   const hasDiscord = f.accountIds.some((a) => getAccount(s, a)?.platform === 'discord')
   const type = s.postTypes.find((t) => t.id === f.typeId)
   const generated = existing ? s.posts.filter((p) => existing.generatedPostIds.includes(p.id)) : []

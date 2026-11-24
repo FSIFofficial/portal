@@ -28,7 +28,7 @@ function fieldsOf(p: Post): DraftFields {
 }
 
 function unitOf(p: Post): UnitFields {
-  return { accountId: p.accountId, channelId: p.channelId, body: p.body, assetIds: [...p.assetIds] }
+  return { accountId: p.accountId, channelId: p.channelId, body: p.body, assetIds: [...p.assetIds], ...(p.article ? { article: structuredClone(p.article) } : {}) }
 }
 
 function diffPatch(p: Post, f: DraftFields, u: UnitFields): EditPatch {
@@ -40,6 +40,7 @@ function diffPatch(p: Post, f: DraftFields, u: UnitFields): EditPatch {
   if (u.body !== p.body) patch.body = u.body
   if (JSON.stringify(u.assetIds) !== JSON.stringify(p.assetIds)) patch.assetIds = u.assetIds
   if (u.channelId !== p.channelId) patch.channelId = u.channelId
+  if (u.article && JSON.stringify(u.article) !== JSON.stringify(p.article ?? null)) patch.article = u.article
   return patch
 }
 

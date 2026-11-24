@@ -11,6 +11,7 @@ import type {
 import { BASE_NOW, addHours, compactDate } from '@/lib/kouhou/domain/time'
 import { STANDARD_SETTING, METRICS } from '@/lib/kouhou/domain/analytics'
 import { PLATFORM_CODE } from '@/lib/kouhou/domain/labels'
+import { ensureSiteAccounts } from '@/lib/kouhou/domain/web'
 
 export const SEED_BRANDS = [
   { id: 'b-fsif', name: 'FSIF', code: 'FSIF', color: '#1f63d6' },
@@ -296,6 +297,12 @@ export const SEED_ASSETS: Asset[] = [
 ]
 
 export function createSeed(): AppState {
+  const state = createBaseSeed()
+  ensureSiteAccounts(state)
+  return state
+}
+
+function createBaseSeed(): AppState {
   const posts = buildPosts()
   return {
     now: BASE_NOW,

@@ -5,7 +5,9 @@
 export type JstDateTime = string
 export type JstDate = string
 
-export type Platform = 'x' | 'instagram' | 'discord'
+export type Platform = 'x' | 'instagram' | 'discord' | 'web'
+/** ホームページ（platform が 'web' のアカウント） */
+export type Site = 'fsif' | 'cb'
 export type Level = 1 | 2 | 3
 
 export interface Brand {
@@ -30,6 +32,8 @@ export interface Account {
   defaultApproverId: string | null
   /** Discordの場合のみ */
   serverId?: string
+  /** ホームページの場合のみ：どのサイトか */
+  site?: Site
 }
 
 export interface DiscordServer {
@@ -196,10 +200,39 @@ export interface Post {
   deliveryError: string | null
   analytics: AnalyticsSetting
   metrics: MetricPoint[]
+  /** ホームページの記事の情報（投稿先がホームページのときだけ）。本文は body */
+  article?: WebArticle | null
   /** 本番：送信先での投稿ID（XのポストID／DiscordのメッセージID）。分析の取得に使う */
   externalId?: string | null
   createdAt: JstDateTime
   updatedAt: JstDateTime
+}
+
+export interface WebLink {
+  label: string
+  href: string
+}
+
+/** ホームページのニュース記事の情報（列の意味は lib/kouhou/domain/web.ts） */
+export interface WebArticle {
+  /** URL 用の ID（FSIF は slug、Cosmo Base は id） */
+  slug: string
+  title: string
+  category: string
+  /** 一覧のカードに出る要約 */
+  excerpt: string
+  /** 記事の冒頭のリード文（FSIF） */
+  lead: string
+  /** サムネイル画像の代替テキスト（画像は添付素材の1枚目） */
+  thumbnailAlt: string
+  relatedArea: 'community' | 'event' | 'thinktank' | null
+  relatedTag: 'cosmobase' | 'ohsumi' | null
+  featured: boolean
+  /** ホーム上部の「重要なお知らせ」に出す（FSIF） */
+  important: boolean
+  externalUrl: WebLink | null
+  relatedLink: WebLink | null
+  pdf: WebLink | null
 }
 
 export type CommentTarget = 'post' | 'plan' | 'asset'

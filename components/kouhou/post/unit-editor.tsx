@@ -6,6 +6,8 @@ import { useAppState } from '@/lib/kouhou/store/store'
 import { Field, Select, Textarea } from '@/components/kouhou/kit/primitives'
 import { AssetPicker, AssetStrip } from './asset-picker'
 import { PostPreview } from './post-preview'
+import { ArticleFields } from './article-fields'
+import { emptyArticle } from '@/lib/kouhou/domain/web'
 
 export function UnitEditor({
   account,
@@ -41,8 +43,21 @@ export function UnitEditor({
             </Select>
           </Field>
         )}
-        <Field label="本文" htmlFor={bodyId} hint={<span className="tabular">{[...unit.body].length}文字</span>}>
-          <Textarea id={bodyId} value={unit.body} onChange={(e) => onChange({ body: e.target.value })} disabled={disabled} className="min-h-44" placeholder="投稿する本文を入力" />
+        {account.platform === 'web' && account.site && (
+          <ArticleFields site={account.site} article={unit.article ?? emptyArticle(account.site)} onChange={(a) => onChange({ article: a })} disabled={disabled} idPrefix={`${idPrefix}-art`} />
+        )}
+        <Field
+          label="本文"
+          htmlFor={bodyId}
+          hint={
+            account.platform === 'web' ? (
+              <span>空行で段落を分けます。「## 見出し」と書いた行から見出し付きのまとまりになります{account.site === 'cb' ? '（HTMLのタグも使えます）' : ''}。</span>
+            ) : (
+              <span className="tabular">{[...unit.body].length}文字</span>
+            )
+          }
+        >
+          <Textarea id={bodyId} value={unit.body} onChange={(e) => onChange({ body: e.target.value })} disabled={disabled} className={account.platform === 'web' ? 'min-h-72' : 'min-h-44'} placeholder={account.platform === 'web' ? '記事の本文を入力' : '投稿する本文を入力'} />
         </Field>
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2">
@@ -62,7 +77,7 @@ export function UnitEditor({
           )}
         </div>
       </div>
-      <PostPreview s={s} account={account} channelId={unit.channelId} body={unit.body} assetIds={unit.assetIds} />
+      <PostPreview s={s} account={account} channelId={unit.channelId} body={unit.body} assetIds={unit.assetIds} article={unit.article} />
     </div>
   )
 }

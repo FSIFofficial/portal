@@ -6,9 +6,10 @@ export const PLATFORM_LABEL: Record<Platform, string> = {
   x: 'X',
   instagram: 'Instagram',
   discord: 'Discord',
+  web: 'ホームページ',
 }
 
-export const PLATFORM_CODE: Record<Platform, string> = { x: 'X', instagram: 'IG', discord: 'DC' }
+export const PLATFORM_CODE: Record<Platform, string> = { x: 'X', instagram: 'IG', discord: 'DC', web: 'WEB' }
 
 export const STATUS_META: Record<PublishStatus, { label: string; tone: Tone }> = {
   draft: { label: '下書き', tone: 'neutral' },

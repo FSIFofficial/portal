@@ -24,6 +24,8 @@ export const METRICS: Record<Platform, MetricDef[]> = {
     { key: 'reactions', label: 'リアクション' },
     { key: 'replies', label: '返信' },
   ],
+  // ホームページは分析値を取らない
+  web: [],
 }
 
 export const ALL_METRIC_KEYS = ['impressions', 'likes', 'replies', 'shares', 'saves', 'reactions']
