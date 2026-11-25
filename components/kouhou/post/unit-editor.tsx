@@ -26,7 +26,7 @@ export function UnitEditor({
   idPrefix: string
 }) {
   const s = useAppState()
-  const channels = account.platform === 'discord' ? s.channels.filter((c) => c.serverId === account.serverId) : []
+  const channels = account.platform === 'discord' ? s.channels.filter((c) => c.serverId === account.serverId && (c.kind ?? 'text') === 'text') : []
   const server = s.servers.find((sv) => sv.id === account.serverId)
   const bodyId = `${idPrefix}-body`
   const bodyRef = useRef<HTMLTextAreaElement>(null)

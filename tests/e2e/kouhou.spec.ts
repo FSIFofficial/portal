@@ -11,7 +11,7 @@ test('広報管理：各画面を開け、投稿詳細を直接開いても表�
   await expect(page.getByRole('heading', { name: 'カレンダー' })).toBeVisible()
 
   const nav = page.getByRole('navigation', { name: 'メイン' })
-  for (const name of ['ダッシュボード', '投稿一覧', '承認待ち', '企画スペース', '繰り返し予約', '素材・テンプレート', '投稿分析', '管理者設定']) {
+  for (const name of ['ダッシュボード', '投稿一覧', '承認待ち', 'イベント', '企画スペース', '繰り返し予約', '素材・テンプレート', '投稿分析', '管理者設定']) {
     await nav.getByRole('link', { name }).click()
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
   }
@@ -154,4 +154,44 @@ test('広報管理：ホームページのニュース記事を作り、承認�
   await page.getByRole('dialog').getByRole('button', { name: '取り下げを申請' }).click()
   await expect(page.getByText('取り下げを申請しました。承認されるとサイトから取り下げます')).toBeVisible()
   await expect(page.getByText('記事の取り下げ申請')).toBeVisible()
+})
+
+test('広報管理：イベントを追加・編集・削除でき、Discord のイベントにも登録できる', async ({ page }) => {
+  await page.goto('./kouhou/events/')
+  await expect(page.getByRole('heading', { level: 1, name: 'イベント' })).toBeVisible()
+  // デモの「公開ミーティング」は Discord に登録済み
+  await expect(page.getByRole('listitem', { name: 'Cosmo Base 公開ミーティング' }).getByText(/Discord：.*登録済み/)).toBeVisible()
+
+  await page.getByRole('button', { name: 'イベントを追加' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('イベント名').fill('星空観察オンライン')
+  await dialog.getByLabel('ブランド').selectOption({ label: 'Cosmo Base' })
+  await dialog.getByLabel('開始').fill('2026-11-20T20:00')
+  await dialog.getByRole('switch', { name: 'Discordのイベントにも登録' }).click()
+  // 場所を指定するときは場所と終了日時が必要
+  await dialog.getByRole('button', { name: '保存' }).click()
+  await expect(page.getByText('場所を入力してください')).toBeVisible()
+  await dialog.getByRole('radio', { name: 'ボイス・ステージ' }).click()
+  await dialog.getByLabel('チャンネル').selectOption({ label: '🔊ラウンジ（ボイス）' })
+  await dialog.getByRole('button', { name: '保存' }).click()
+  await expect(dialog).toBeHidden()
+  const row = page.getByRole('listitem', { name: '星空観察オンライン' })
+  await expect(row.getByText('Discord：登録待ち')).toBeVisible()
+  await expect(row.getByText(/ラウンジ/)).toBeVisible()
+
+  // カレンダーにも出る
+  await page.goto('./kouhou/calendar/')
+  await expect(page.getByText('星空観察オンライン').first()).toBeVisible()
+  await page.goto('./kouhou/events/')
+
+  // 編集
+  await row.getByRole('button', { name: '編集' }).click()
+  await dialog.getByLabel('イベント名').fill('星空観察オンライン（拡大版）')
+  await dialog.getByRole('button', { name: '保存' }).click()
+  await expect(page.getByRole('listitem', { name: '星空観察オンライン（拡大版）' })).toBeVisible()
+
+  // 削除
+  page.once('dialog', (d) => d.accept())
+  await page.getByRole('button', { name: '星空観察オンライン（拡大版）を削除' }).click()
+  await expect(page.getByRole('listitem', { name: '星空観察オンライン（拡大版）' })).toBeHidden()
 })

@@ -53,6 +53,8 @@ export interface DiscordChannel {
   postable: boolean
   /** 本番：DiscordのチャンネルID */
   discordId?: string
+  /** チャンネルの種類（未設定はテキスト）。ボイス・ステージは投稿先にはならず、Discord のイベントの場所に使う */
+  kind?: 'text' | 'voice' | 'stage'
 }
 
 export interface User {
@@ -313,7 +315,36 @@ export interface CalendarEvent {
   id: string
   title: string
   brandId: string
+  /** 開始日時 */
   at: JstDateTime
+  /** 終了日時（Discord の場所指定のイベントでは必須） */
+  endAt?: JstDateTime | null
+  description?: string
+  /** 場所（会場・URL など） */
+  location?: string
+  /** Discord のサーバーのイベントにも登録するとき */
+  discord?: EventDiscord | null
+  /** 削除済み（Discord のイベントを消し終えたら一覧からも消える） */
+  deleted?: boolean
+  updatedBy?: string
+  updatedAt?: JstDateTime
+}
+
+/** Discord のイベント（サーバーの「イベント」）として登録する設定と状態 */
+export interface EventDiscord {
+  serverId: string
+  /** external：場所を文字で書く（会場・URL）／channel：ボイス・ステージチャンネルで開く */
+  place: 'external' | 'channel'
+  /** place が channel のときのチャンネル（DiscordChannel.id） */
+  channelId: string | null
+  /** 表紙の画像（素材ID） */
+  imageAssetId: string | null
+  /** 本番：Discord のイベントID */
+  externalId?: string | null
+  /** 本番：Discord のイベントのURL */
+  url?: string | null
+  /** 次の定期処理で Discord に反映する予定（作成・更新・削除） */
+  sync?: { action: 'upsert' | 'delete'; state: 'queued' | 'error'; error?: string | null; at: JstDateTime } | null
 }
 
 export type AssetKind = 'image' | 'video' | 'logo' | 'background' | 'text'

@@ -38,6 +38,7 @@ import {
   retrySiteSync,
 } from './actions'
 import { canView, getUser } from './rules'
+import { saveEvent, deleteEvent, retryEventSync } from './events'
 import { createLiveSeed } from '../mock/live-seed'
 
 /* ---------- アップロードした画像 ---------- */
@@ -205,6 +206,7 @@ export function channelInUse(s: AppState, channelId: string): string | null {
   const what = usage([
     ['投稿', s.posts.filter((p) => p.channelId === channelId).length],
     ['繰り返し予約', s.recurrences.filter((r) => r.channelId === channelId).length],
+    ['イベント', s.events.filter((e) => !e.deleted && e.discord?.channelId === channelId).length],
   ])
   return what ? `#${c?.name ?? channelId} は${what}で使われているため削除できません。使わないなら「投稿可能」をオフにしてください` : null
 }
@@ -221,7 +223,7 @@ export function brandInUse(s: AppState, brandId: string): string | null {
     ['投稿', s.posts.filter((p) => p.brandId === brandId).length],
     ['企画', s.plans.filter((p) => p.brandId === brandId).length],
     ['素材', s.assets.filter((a) => a.brandId === brandId).length],
-    ['イベント', s.events.filter((e) => e.brandId === brandId).length],
+    ['イベント', s.events.filter((e) => e.brandId === brandId && !e.deleted).length],
   ])
   return what ? `「${b?.name ?? brandId}」は${what}で使われているため削除できません` : null
 }
@@ -261,6 +263,9 @@ export const COMMANDS: Record<string, (s: AppState, ...args: any[]) => Result> =
   setAssetRender,
   applyAdminPatch,
   retrySiteSync,
+  saveEvent,
+  deleteEvent,
+  retryEventSync,
 }
 
 /** 関数からコマンド名を引く（デモ専用の操作は null） */

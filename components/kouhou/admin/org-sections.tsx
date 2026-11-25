@@ -356,18 +356,20 @@ export function DiscordSection() {
                       .map((c) => (
                         <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
                           <span className="flex items-center gap-2">
-                            #{c.name}
+                            {c.kind === 'voice' || c.kind === 'stage' ? '🔊' : '#'}{c.name}
+                            {c.kind === 'voice' && <Pill tone="muted">ボイス（イベントの場所用）</Pill>}
+                            {c.kind === 'stage' && <Pill tone="muted">ステージ（イベントの場所用）</Pill>}
                             {s.settings.notifyChannelId === c.id && <Pill tone="info">通知用</Pill>}
                             {s.live && (c.discordId ? <span className="font-mono text-xs text-muted-foreground">{c.discordId}</span> : <Pill tone="warning">Discord未連携</Pill>)}
                           </span>
                           <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                            投稿可能
+                            {(c.kind ?? 'text') === 'text' && <>投稿可能
                             <Switch
                               label={`#${c.name}を投稿先にする`}
                               checked={c.postable}
                               disabled={s.settings.notifyChannelId === c.id}
                               onChange={(v) => edit(v ? '投稿可能にしました' : '投稿先から外しました', (d) => void (d.channels.find((x) => x.id === c.id)!.postable = v))}
-                            />
+                            /></>}
                             <DeleteButton
                               label={`#${c.name}`}
                               inUse={() => channelInUse(s, c.id)}

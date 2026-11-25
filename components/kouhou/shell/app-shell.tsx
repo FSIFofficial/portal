@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   BarChart3,
-  CalendarDays,
+  CalendarClock, CalendarDays,
   ClipboardCheck,
   FlaskConical,
   Images,
@@ -36,6 +36,7 @@ const NAV = [
   { href: '/kouhou/calendar', label: 'カレンダー', icon: CalendarDays },
   { href: '/kouhou/posts', label: '投稿一覧', icon: List },
   { href: '/kouhou/approvals', label: '承認待ち', icon: ClipboardCheck, badge: true },
+  { href: '/kouhou/events', label: 'イベント', icon: CalendarClock },
   { href: '/kouhou/plans', label: '企画スペース', icon: Lightbulb },
   { href: '/kouhou/recurring', label: '繰り返し予約', icon: Repeat },
   { href: '/kouhou/assets', label: '素材・テンプレート', icon: Images },
