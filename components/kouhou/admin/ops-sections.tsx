@@ -42,7 +42,7 @@ export function NotifySection() {
               }
             >
               {!s.settings.notifyChannelId && <option value="">未設定</option>}
-              {s.channels.map((c) => (
+              {s.channels.filter((c) => (c.kind ?? 'text') === 'text').map((c) => (
                 <option key={c.id} value={c.id}>
                   #{c.name}（{s.servers.find((sv) => sv.id === c.serverId)?.name}）
                 </option>

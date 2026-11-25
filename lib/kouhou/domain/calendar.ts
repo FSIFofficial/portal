@@ -63,6 +63,7 @@ export function buildEntries(s: AppState, posts: Post[], brand: string, f: Calen
   const postOnlyFilter = activeFilterCount(f) > 0
   if (f.kinds.event && !postOnlyFilter) {
     for (const e of s.events) {
+      if (e.deleted) continue
       if (brand !== 'all' && e.brandId !== brand) continue
       out.push({ key: `e-${e.id}`, kind: 'event', at: e.at, title: e.title, brandId: e.brandId })
     }

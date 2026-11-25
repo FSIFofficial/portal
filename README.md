@@ -153,6 +153,10 @@ X・Instagram・Discord の投稿を、企画から下書き・承認・予約�
     反映に失敗したときは投稿の画面に理由が出て、「もう一度反映する」でやり直せます
   - FSIF の relatedArea は community / working-group / event / thinktank、relatedTag は cosmobase / orbit から選びます
   - 注目記事（FSIF の featured、Cosmo Base のトップに大きく出す記事）は各サイト1件だけ。注目の記事をサイトに出すと、シート・CSV のほかの記事の注目は自動で外れます
+- **イベント**：「イベント」画面でイベント（イベント名・ブランド・開始／終了・場所・説明）を追加・編集・削除でき、カレンダーに表示されます
+  - 「Discordのイベントにも登録」をオンにすると、次の定期処理（5分以内）で Discord のサーバーの「イベント」に作成します。編集すると Discord のイベントも更新し、削除する（または登録を外す）と Discord からも消します
+  - 開く場所は「場所を指定」（「場所」に入れた会場・URL。終了日時が必要）か「ボイス・ステージ」（「Discordからチャンネルを取得」で取り込んだボイス・ステージチャンネル）。表紙の画像は素材から選べます
+  - Discord のイベントはこれからの日時のものだけ登録できます。Discord で手で消されていたら、次の編集で作り直します。反映に失敗したときはイベントの一覧に理由が出て、「やり直す」で再実行できます
 - **分析**：X は X API の `public_metrics`（表示回数・いいね・返信・リポスト＋引用）、Discord はリアクション数・スレッドの返信数を、取得予定時刻を過ぎた最初の定期処理で取得します
   （X の指標の取得には、投稿の読み取りができる X API のプランが必要です。取れなかった計測点は「取得失敗」になります）
 - **通知**：承認依頼・保留・投稿失敗・公開などを、「管理者設定 > Discord通知」で選んだチャンネルに Bot が送ります（メンションは `<@&ロールID>` など）
@@ -196,7 +200,7 @@ X・Instagram・Discord の投稿を、企画から下書き・承認・予約�
 6. **X**：Developer Portal でアプリの「User authentication settings」を設定（App permissions：**Read and write**、Type of App：Web App、Callback URI と Website URL：`https://admin.fsif.jp/kouhou/`）→
    広報管理の「管理者設定 > SNSアカウント」で各 X アカウントの「Xと接続」→「認可ページを用意する」→ 開いたページで**そのアカウントでログインして**認証 → 表示された PIN を入力。
    1つの X アプリで FSIF・Cosmo Base の両方を接続できます（Developer Portal の「Access Token」の発行は、アプリを作ったアカウント本人の分しか作れないため）
-7. **Discord**：Developer Portal で Bot を作り、サーバーに招待（権限：チャンネルを見る・メッセージを送信・ファイルを添付・メッセージ履歴を読む）→
+7. **Discord**：Developer Portal で Bot を作り、サーバーに招待（権限：チャンネルを見る・メッセージを送信・ファイルを添付・メッセージ履歴を読む・**イベントの管理**（Discord のイベントに登録する場合））→
    「管理者設定 > Discord」でサーバーIDを入れて「Discordからチャンネルを取得」→ 投稿に使うチャンネルを「投稿可能」に、「Discord通知」で通知先を選んで「テスト通知を送る」
 8. 必要なら「管理者設定 > 権限」で、アカウントごとの権限（閲覧・作成・編集・承認）を調整する
 
@@ -213,13 +217,14 @@ X・Instagram・Discord の投稿を、企画から下書き・承認・予約�
 
 Discord は Bot の API を `DiscordBot (…)` という User-Agent で呼ぶことを求めていますが、GAS（UrlFetchApp）はこれを付けられないため、
 GAS から直接呼ぶと `403 internal network error`（40333）になります。そこで、User-Agent と Bot のトークンを付けて転送する小さな中継を置きます。
-中継のコードは GAS と一緒に管理者から受け取ります（`discord-relay/`。広報管理が使う4つの API だけを通し、合言葉が無い呼び出しは断ります）。
+中継のコードは GAS と一緒に管理者から受け取ります（`discord-relay/`。広報管理が使う API（メッセージの送信・取得、サーバーとチャンネルの取得、イベントの作成・更新・削除）だけを通し、合言葉が無い呼び出しは断ります）。
 
 - **Cloudflare Workers（おすすめ）**：Cloudflare のダッシュボード「Workers & Pages > Create > Worker」で作成 →「Edit code」に `cloudflare-worker.js` を貼って Deploy →
   「Settings > Variables and Secrets」に `DISCORD_BOT_TOKEN`（Bot のトークン）と `RELAY_SECRET`（長いランダムな文字列）を Secret で追加 →
   Worker の URL（`https://….workers.dev`）を GAS の `DISCORD_RELAY_URL` に、`RELAY_SECRET` と同じ値を `DISCORD_RELAY_SECRET` に入れる
 - **Vercel**：`vercel/` フォルダをプロジェクトとしてデプロイし、Environment Variables に同じ2つを設定 → `https://….vercel.app/api/discord` を `DISCORD_RELAY_URL` に。
   Vercel は受け取れる本文が 4.5MB までなので、画像付きの投稿は合計 3MB 程度まで
+- 中継のコードを更新したとき（イベントの登録に対応した版など）は、Worker の「Edit code」に貼り直して Deploy し直します（Secret はそのまま）
 
 > X API の利用には X Developer Portal での契約（プラン）が必要です。投稿の数・指標の読み取りの上限はプランによって違います。
 > トークンは GAS のスクリプト プロパティにだけ保存され、画面やスプレッドシートには出ません。

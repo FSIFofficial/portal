@@ -3,7 +3,7 @@
  * デモではブラウザ内で、本番では同じ関数を GAS（scripts/build-kouhou-gas.mjs で書き出したもの）でも実行し、
  * サーバー側の結果を正とする。s.now・s.currentUserId はサーバーが現在時刻とログイン中の利用者に置き換える。
  */
-import type { AppState, HistoryKind, JstDateTime, Post, User } from './types'
+import type { AppState, CalendarEvent, HistoryKind, JstDateTime, Post, User } from './types'
 import {
   canApproveContent,
   canApprovePendingChange,
@@ -27,6 +27,7 @@ import { compactDate, formatDateTime, isBefore, isValidDateTime, toMinutes } fro
 import { PLATFORM_CODE } from './labels'
 import { METRICS, STANDARD_SETTING, planCheckpoints, checkpointTime } from './analytics'
 import { checkBodyImages, clearOtherFeatured, validateArticle } from './web'
+import { runEventSync, type EventSyncResult } from './events'
 
 export type Result = { ok: true; message?: string; id?: string; ids?: string[]; /** 本番：開いてもらうURL（Xの認可ページなど） */ url?: string } | { ok: false; message: string; conflict?: boolean }
 
@@ -725,12 +726,15 @@ export interface ClockIO {
   fetchMetrics(s: AppState, posts: Post[]): MetricsResult
   /** 公開中のホームページの記事の修正・取り下げをサイトに反映する */
   syncSite?(s: AppState, post: Post): { ok: true } | { ok: false; error: string }
+  /** イベントを Discord のサーバーのイベントに作成・更新・削除する */
+  syncEvent?(s: AppState, ev: CalendarEvent): EventSyncResult
   /** 1回の処理で送信する上限（GAS の実行時間の制限に収めるため） */
   maxDeliveries?: number
 }
 
 const mockIO: ClockIO = {
   syncSite: () => ({ ok: true }),
+  syncEvent: (_s, ev) => (ev.discord?.sync?.action === 'delete' ? { ok: true } : { ok: true, externalId: ev.discord?.externalId ?? `mock-${ev.id}` }),
   deliver(s, p) {
     if (s.demo.failNextDelivery) {
       s.demo.failNextDelivery = false
@@ -792,6 +796,20 @@ export function runClock(s: AppState, next: JstDateTime, io: ClockIO): Result & 
       notify(s, `【記事を修正】${p.title}`, p.id)
     }
     p.updatedAt = next
+  }
+  // Discord のイベントへの反映
+  if (io.syncEvent) {
+    const sync = io.syncEvent
+    const r = runEventSync(
+      s,
+      (st, ev) => {
+        const res = sync(st, ev)
+        if (!res.ok) notify(s, `【Discordのイベントの反映に失敗】${ev.title}：${res.error}`, null)
+        return res
+      },
+      Math.max(0, Math.min(10, limit - attempts)),
+    )
+    attempts += r.done + r.failed
   }
   for (const p of [...s.posts].sort((a, b) => (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? ''))) {
     if (!p.scheduledAt || isBefore(next, p.scheduledAt)) continue

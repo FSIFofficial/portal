@@ -189,7 +189,7 @@ function RecurrenceEditor({ s, initial, existing, onSaved, onCancel }: { s: AppS
               <Field label="Discordチャンネル" htmlFor="rc-ch">
                 <Select id="rc-ch" value={f.channelId ?? ''} onChange={(e) => set({ channelId: e.target.value || null })}>
                   <option value="">選択してください</option>
-                  {s.channels.filter((c) => c.postable).map((c) => <option key={c.id} value={c.id}>#{c.name}</option>)}
+                  {s.channels.filter((c) => c.postable && (c.kind ?? 'text') === 'text').map((c) => <option key={c.id} value={c.id}>#{c.name}</option>)}
                 </Select>
               </Field>
             )}
