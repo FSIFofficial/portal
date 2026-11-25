@@ -2,6 +2,7 @@
 
 import { ExternalLink, GripVertical, Star } from 'lucide-react'
 import { api } from '@/lib/api'
+import { openToolWithTicket, TICKET_ENABLED } from '@/lib/access/ticket'
 import { isNew, type Tool } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth, useTrack } from './auth-provider'
@@ -51,7 +52,7 @@ export function ToolCard({ tool, docCount, onDocs, onMissingUrl, dragHandle, res
   restricted?: boolean
 }) {
   const track = useTrack()
-  const { data } = useAuth()
+  const { data, token } = useAuth()
   const disabled = tool.status !== '稼働中'
   const openButtonClass = 'flex items-center gap-1.5 rounded-lg bg-[var(--brand)] px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-[var(--brand-dark)]'
   return (
@@ -80,7 +81,18 @@ export function ToolCard({ tool, docCount, onDocs, onMissingUrl, dragHandle, res
           {disabled ? (
             <span className="rounded-lg bg-[#dfe5eb] px-3 py-2 text-[12px] font-semibold text-[#4f5f70]">{tool.status}</span>
           ) : tool.url ? (
-            <a href={tool.url} target="_blank" rel="noopener noreferrer" onClick={() => track('tool', tool.id)} className={openButtonClass}>開く<ExternalLink size={13} /></a>
+            <a
+              href={tool.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                track('tool', tool.id)
+                // Access Manager につながったツールは、ポータルのログインを引き継いで開く（Ctrl などを押しながらのときは普通のリンク）
+                if (!TICKET_ENABLED || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+                if (openToolWithTicket(tool.url, token, tool.id)) e.preventDefault()
+              }}
+              className={openButtonClass}
+            >開く<ExternalLink size={13} /></a>
           ) : (
             <button onClick={onMissingUrl} className={openButtonClass}>開く<ExternalLink size={13} /></button>
           )}
