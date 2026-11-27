@@ -148,7 +148,7 @@ export function NewPostScreen({ initialAt, initialPlanId }: { initialAt?: string
                 </Button>
               </div>
             )}
-            <UnitEditor key={activeUnit.accountId} idPrefix={`u-${activeUnit.accountId}`} account={activeAccount} unit={activeUnit} onChange={(p) => patchUnit(activeUnit.accountId, p)} />
+            <UnitEditor key={activeUnit.accountId} idPrefix={`u-${activeUnit.accountId}`} account={activeAccount} unit={activeUnit} onChange={(p) => patchUnit(activeUnit.accountId, p)} uploadGroup={fields.title} />
           </div>
         )}
       </Panel>

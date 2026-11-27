@@ -11,6 +11,7 @@ import { emptyArticle, imageLine } from '@/lib/kouhou/domain/web'
 import { useRef } from 'react'
 import { ImagePlus } from 'lucide-react'
 import { Button } from '@/components/kouhou/ui/button'
+import { UploadZone, imageFilesOf, useImageUploader } from '@/components/kouhou/assets/upload-zone'
 
 export function UnitEditor({
   account,
@@ -18,18 +19,33 @@ export function UnitEditor({
   onChange,
   disabled,
   idPrefix,
+  uploadGroup,
 }: {
   account: Account
   unit: UnitFields
   onChange: (patch: Partial<UnitFields>) => void
   disabled?: boolean
   idPrefix: string
+  /** この画面でアップロードした画像のグループ（投稿のタイトルなど） */
+  uploadGroup?: string
 }) {
   const s = useAppState()
   const channels = account.platform === 'discord' ? s.channels.filter((c) => c.serverId === account.serverId && (c.kind ?? 'text') === 'text') : []
   const server = s.servers.find((sv) => sv.id === account.serverId)
   const bodyId = `${idPrefix}-body`
   const bodyRef = useRef<HTMLTextAreaElement>(null)
+  // アップロードが終わるまでに添付が変わっても消さないよう、最新の添付を見て足す
+  const latest = useRef(unit.assetIds)
+  latest.current = unit.assetIds
+  const group = uploadGroup?.trim() || '投稿用'
+  const uploader = useImageUploader(
+    () => ({ kind: 'image', brandId: account.brandId, purpose: group }),
+    (id) => {
+      if (latest.current.includes(id)) return
+      latest.current = [...latest.current, id]
+      onChange({ assetIds: latest.current })
+    },
+  )
   const images = unit.assetIds.map((id) => s.assets.find((a) => a.id === id)).filter((a): a is NonNullable<typeof a> => !!a && a.kind !== 'text' && a.kind !== 'video')
   /** 本文のカーソルの位置（無ければ末尾）に、画像の行を前後に空行を付けて入れる */
   const insertImage = (assetId: string, alt: string) => {
@@ -70,7 +86,19 @@ export function UnitEditor({
             )
           }
         >
-          <Textarea ref={bodyRef} id={bodyId} value={unit.body} onChange={(e) => onChange({ body: e.target.value })} disabled={disabled} className={account.platform === 'web' ? 'min-h-72' : 'min-h-44'} placeholder={account.platform === 'web' ? '記事の本文を入力' : '投稿する本文を入力'} />
+          <Textarea
+            ref={bodyRef}
+            id={bodyId}
+            value={unit.body}
+            onChange={(e) => onChange({ body: e.target.value })}
+            onPaste={(e) => {
+              // 画像を本文に貼り付けたら、アップロードして添付する
+              const files = imageFilesOf(e.clipboardData)
+              if (disabled || !files.length) return
+              e.preventDefault()
+              uploader.add(files)
+            }}
+            disabled={disabled} className={account.platform === 'web' ? 'min-h-72' : 'min-h-44'} placeholder={account.platform === 'web' ? '記事の本文を入力' : '投稿する本文を入力'} />
         </Field>
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2">
@@ -81,8 +109,17 @@ export function UnitEditor({
               onChange={(ids) => onChange({ assetIds: ids })}
               onInsertText={(t) => onChange({ body: unit.body ? `${unit.body}\n${t}` : t })}
               disabled={disabled}
+              uploadGroup={group}
             />
           </div>
+          {!disabled && (
+            <UploadZone
+              uploader={uploader}
+              compact
+              label="画像をドロップ、またはクリックしてアップロード"
+              hint={`そのまま添付されます（複数可）。本文に画像を貼り付けても添付できます。素材のグループ「${group}」に入ります`}
+            />
+          )}
           {unit.assetIds.length ? (
             <AssetStrip assetIds={unit.assetIds} onRemove={(id) => onChange({ assetIds: unit.assetIds.filter((x) => x !== id) })} disabled={disabled} />
           ) : (

@@ -134,7 +134,7 @@ function EditForm({ post }: { post: Post }) {
         <DraftFieldsForm value={fields} onChange={(p) => setFields((f) => ({ ...f, ...p }))} brandIds={[post.brandId]} disabled={readOnly} />
       </Panel>
       <Panel title={`投稿内容：${account.name}`}>
-        <UnitEditor idPrefix={`e-${post.id}`} account={account} unit={unit} onChange={(p) => setUnit((u) => ({ ...u, ...p }))} disabled={readOnly} />
+        <UnitEditor idPrefix={`e-${post.id}`} account={account} unit={unit} onChange={(p) => setUnit((u) => ({ ...u, ...p }))} disabled={readOnly} uploadGroup={post.title} />
       </Panel>
 
       {!readOnly && (

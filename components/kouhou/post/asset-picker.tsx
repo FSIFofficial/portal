@@ -5,7 +5,8 @@ import { Check, FileText, ImagePlus, X } from 'lucide-react'
 import type { AssetKind } from '@/lib/kouhou/domain/types'
 import { useAppState } from '@/lib/kouhou/store/store'
 import { Button } from '@/components/kouhou/ui/button'
-import { Dialog, Segmented } from '@/components/kouhou/kit/primitives'
+import { Dialog, Input, Segmented, Select } from '@/components/kouhou/kit/primitives'
+import { UploadZone, useImageUploader } from '@/components/kouhou/assets/upload-zone'
 import { AssetThumb } from '@/components/kouhou/domain/asset-thumb'
 import { cn } from '@/lib/utils'
 
@@ -46,25 +47,43 @@ export function AssetPicker({
   onChange,
   onInsertText,
   disabled,
+  uploadGroup = '投稿用',
 }: {
   brandId: string
   selected: string[]
   onChange: (ids: string[]) => void
   onInsertText: (text: string) => void
   disabled?: boolean
+  /** ここでアップロードした画像のグループ */
+  uploadGroup?: string
 }) {
   const s = useAppState()
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
+  const [brand, setBrand] = useState<string>('all')
+  const [group, setGroup] = useState('')
+  const [q, setQ] = useState('')
   const [draft, setDraft] = useState<string[]>(selected)
-
-  const kindsFor: Record<Filter, AssetKind[]> = { all: ['image', 'video', 'logo', 'text'], image: ['image', 'video', 'logo'], template: ['image'], text: ['text'] }
-  const list = s.assets.filter(
-    (a) => a.brandId === brandId && a.kind !== 'background' && kindsFor[filter].includes(a.kind) && (filter !== 'template' || !!a.edit),
+  const uploader = useImageUploader(
+    () => ({ kind: 'image', brandId, purpose: group || uploadGroup }),
+    (id) => setDraft((d) => (d.includes(id) ? d : [...d, id])),
   )
+
+  // グループ・ブランドを分けた後でも、どの画像も選べる（このブランドの素材を先に並べる）
+  const kindsFor: Record<Filter, AssetKind[]> = { all: ['image', 'video', 'logo', 'background', 'text'], image: ['image', 'video', 'logo', 'background'], template: ['image'], text: ['text'] }
+  const pool = s.assets.filter((a) => kindsFor[filter].includes(a.kind) && (filter !== 'template' || !!a.edit) && (brand === 'all' || a.brandId === brand))
+  const groups = [...new Set(pool.map((a) => a.purpose))].sort((a, b) => a.localeCompare(b, 'ja'))
+  const needle = q.trim().toLowerCase()
+  const list = pool
+    .filter((a) => !group || a.purpose === group)
+    .filter((a) => !needle || [a.name, a.purpose].some((t) => t.toLowerCase().includes(needle)))
+    .sort((a, b) => Number(b.brandId === brandId) - Number(a.brandId === brandId) || Number(draft.includes(b.id)) - Number(draft.includes(a.id)) || b.updatedAt.localeCompare(a.updatedAt))
 
   const openPicker = () => {
     setDraft(selected)
+    setGroup('')
+    setQ('')
+    uploader.clear()
     setOpen(true)
   }
 
@@ -78,42 +97,66 @@ export function AssetPicker({
         open={open}
         onClose={() => setOpen(false)}
         title="素材を選ぶ"
-        description="このブランドの素材・テンプレート編集済み画像から選べます。テキスト素材は本文に挿入します。"
-        size="lg"
+        description="グループやブランドで絞り込めます。新しい画像はここからアップロードすると、そのまま選ばれます。テキスト素材は本文に挿入します。"
+        size="xl"
         footer={
           <>
             <Button variant="outline" onClick={() => setOpen(false)}>
               キャンセル
             </Button>
             <Button
+              disabled={uploader.busy}
               onClick={() => {
                 onChange(draft)
                 setOpen(false)
               }}
             >
-              {draft.length}件を添付
+              {uploader.busy ? 'アップロード中…' : `${draft.length}件を添付`}
             </Button>
           </>
         }
       >
         <div className="flex flex-col gap-4">
-          <Segmented
-            label="素材の種類"
-            size="sm"
-            value={filter}
-            onChange={setFilter}
-            items={[
-              { value: 'all', label: 'すべて' },
-              { value: 'image', label: '画像・動画' },
-              { value: 'template', label: 'テンプレート' },
-              { value: 'text', label: 'テキスト' },
-            ]}
-          />
+          <UploadZone uploader={uploader} compact label="新しい画像をアップロード（ドロップ・クリック・貼り付け）" hint={`グループ「${group || uploadGroup}」に入ります`} />
+          <div className="flex flex-col gap-2">
+            <Segmented
+              label="素材の種類"
+              size="sm"
+              value={filter}
+              onChange={setFilter}
+              items={[
+                { value: 'all', label: 'すべて' },
+                { value: 'image', label: '画像・動画' },
+                { value: 'template', label: 'テンプレート' },
+                { value: 'text', label: 'テキスト' },
+              ]}
+            />
+            <div className="grid gap-2 sm:grid-cols-3">
+              <Input aria-label="素材名・グループで検索" placeholder="素材名・グループで検索" value={q} onChange={(e) => setQ(e.target.value)} />
+              <Select aria-label="グループで絞り込み" value={group} onChange={(e) => setGroup(e.target.value)}>
+                <option value="">すべてのグループ</option>
+                {groups.map((g) => (
+                  <option key={g} value={g}>
+                    {g}（{pool.filter((a) => a.purpose === g).length}）
+                  </option>
+                ))}
+              </Select>
+              <Select aria-label="ブランドで絞り込み" value={brand} onChange={(e) => setBrand(e.target.value)}>
+                <option value="all">すべてのブランド</option>
+                {s.brands.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
           {list.length === 0 ? (
             <p className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">該当する素材はありません</p>
           ) : (
             <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
               {list.map((a) => {
+                const other = a.brandId !== brandId ? s.brands.find((b) => b.id === a.brandId)?.name : null
                 if (a.kind === 'text') {
                   return (
                     <li key={a.id} className="flex flex-col gap-2 rounded-md border p-2">
@@ -139,6 +182,7 @@ export function AssetPicker({
                     <button
                       type="button"
                       aria-pressed={on}
+                      aria-label={a.name}
                       onClick={() => setDraft((d) => (on ? d.filter((x) => x !== a.id) : [...d, a.id]))}
                       className={cn('flex w-full flex-col gap-1.5 rounded-md border p-2 text-left transition-colors hover:bg-muted', on && 'border-primary ring-2 ring-primary/30')}
                     >
@@ -151,7 +195,10 @@ export function AssetPicker({
                         )}
                       </span>
                       <span className="truncate text-xs font-medium">{a.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">{a.edit ? 'テンプレート編集' : a.purpose}</span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {a.edit ? 'テンプレート編集' : a.purpose}
+                        {other ? `・${other}` : ''}
+                      </span>
                     </button>
                   </li>
                 )
