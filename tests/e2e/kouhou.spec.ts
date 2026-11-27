@@ -195,3 +195,55 @@ test('広報管理：イベントを追加・編集・削除でき、Discord の
   await page.getByRole('button', { name: '星空観察オンライン（拡大版）を削除' }).click()
   await expect(page.getByRole('listitem', { name: '星空観察オンライン（拡大版）' })).toBeHidden()
 })
+
+/** 試験用の小さな PNG（1×1） */
+function pngFile(name: string) {
+  const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+  return { name, mimeType: 'image/png', buffer: Buffer.from(b64, 'base64') }
+}
+
+test('広報管理：投稿画面で画像をアップロードして添付でき、グループ分けした後も選べる', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(String(e)))
+  await page.goto('./kouhou/posts/new/')
+  await page.getByLabel(/Cosmo Base公式X/).check()
+  await page.getByLabel('管理用タイトル').fill('冬の観測会')
+  // 投稿画面のアップロード場所に2枚まとめて入れると、そのまま添付される
+  await page.locator('input[type=file]').first().setInputFiles([pngFile('星空1.png'), pngFile('星空2.png')])
+  const attached = page.getByRole('list', { name: '添付素材' })
+  await expect(attached.getByText('星空1')).toBeVisible()
+  await expect(attached.getByText('星空2')).toBeVisible()
+
+  // 素材の画面：投稿のタイトルのグループに入っている。別のグループ・ブランドに移す
+  await page.goto('./kouhou/assets/')
+  await page.getByLabel('グループで絞り込み').selectOption({ label: '冬の観測会（2）' })
+  await page.getByRole('button', { name: '選んでグループ分け' }).click()
+  await page.getByRole('button', { name: '表示中をすべて選ぶ' }).click()
+  await page.getByLabel('移すグループ').fill('観測会の写真')
+  await page.getByLabel('ブランド', { exact: true }).selectOption({ label: 'FSIF' })
+  await page.getByRole('button', { name: '移す', exact: true }).click()
+  await expect(page.getByText('2件をグループ「観測会の写真」・FSIFに移しました')).toBeVisible()
+
+  // 名前を変える
+  await page.getByRole('button', { name: 'グループ分けを終える' }).click()
+  await page.getByRole('button', { name: /星空1/ }).click()
+  await page.getByLabel('素材名').fill('冬の星空')
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(page.getByText('素材を更新しました')).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  // 別ブランド・別グループに移した後でも、Cosmo Base の投稿から選べる
+  await page.goto('./kouhou/posts/new/')
+  await page.getByLabel(/Cosmo Base公式X/).check()
+  await page.getByRole('button', { name: '素材を選ぶ' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('グループで絞り込み').selectOption({ label: '観測会の写真（2）' })
+  await dialog.getByRole('button', { name: '冬の星空' }).click()
+  // 選ぶ画面からもアップロードでき、アップロードした画像は選ばれた状態になる
+  await dialog.locator('input[type=file]').setInputFiles(pngFile('追加の写真.png'))
+  await expect(dialog.getByRole('button', { name: '追加の写真' })).toHaveAttribute('aria-pressed', 'true')
+  await dialog.getByRole('button', { name: '2件を添付' }).click()
+  await expect(attached.getByText('冬の星空')).toBeVisible()
+  await expect(attached.getByText('追加の写真')).toBeVisible()
+  expect(errors).toEqual([])
+})

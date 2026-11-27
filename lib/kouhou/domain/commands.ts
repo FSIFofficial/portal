@@ -39,6 +39,7 @@ import {
 } from './actions'
 import { canView, getUser } from './rules'
 import { saveEvent, deleteEvent, retryEventSync } from './events'
+import { updateAsset, groupAssets, deleteAsset, groupName } from './assets'
 import { createLiveSeed } from '../mock/live-seed'
 
 /* ---------- アップロードした画像 ---------- */
@@ -47,8 +48,12 @@ export interface UploadInput {
   name: string
   kind: Extract<AssetKind, 'image' | 'logo' | 'background'>
   brandId: string
+  /** グループ（用途） */
   purpose: string
-  fileId: string
+  /** 本番：GAS が Drive に保存したファイルのID */
+  fileId?: string
+  /** デモ：ブラウザ内に置く縮小した画像（data URL） */
+  dataUrl?: string
 }
 
 /** Drive に保存した画像を素材として登録する（ファイルの保存自体は GAS の upload が行う） */
@@ -57,23 +62,24 @@ export function registerUpload(s: AppState, input: UploadInput): Result {
   if (!user || user.status !== 'active') return { ok: false, message: '登録できません' }
   if (!input.name.trim()) return { ok: false, message: '素材名を入力してください' }
   if (!s.brands.some((b) => b.id === input.brandId)) return { ok: false, message: 'ブランドを選択してください' }
-  if (!/^[\w-]{10,}$/.test(input.fileId)) return { ok: false, message: 'ファイルが正しくありません' }
+  const fileId = input.fileId ?? ''
+  if (s.live ? !/^[\w-]{10,}$/.test(fileId) : !/^data:image\//.test(input.dataUrl ?? '')) return { ok: false, message: 'ファイルが正しくありません' }
   const id = newId(s, 'as')
   s.assets.push({
     id,
     kind: input.kind,
     name: input.name.trim(),
     brandId: input.brandId,
-    purpose: input.purpose.trim() || 'その他',
-    src: `drive:${input.fileId}`,
+    purpose: groupName(input.purpose),
+    src: s.live ? `drive:${fileId}` : input.dataUrl!,
     text: null,
     edit: null,
     sourceAssetId: null,
     updatedBy: user.id,
     updatedAt: s.now,
-    fileId: input.fileId,
+    fileId: s.live ? fileId : null,
   })
-  return { ok: true, message: '素材を追加しました', id }
+  return { ok: true, message: `「${input.name.trim()}」を追加しました`, id }
 }
 
 /** テンプレートから書き出した画像（PNG）を素材に結び付ける。送信にはこの画像が使われる */
@@ -266,6 +272,9 @@ export const COMMANDS: Record<string, (s: AppState, ...args: any[]) => Result> =
   saveEvent,
   deleteEvent,
   retryEventSync,
+  updateAsset,
+  groupAssets,
+  deleteAsset,
 }
 
 /** 関数からコマンド名を引く（デモ専用の操作は null） */
